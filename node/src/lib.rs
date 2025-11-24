@@ -4,5 +4,11 @@
 /// - Storage layer
 /// - Replication mechanism
 trait Node {
-    fn init(config: Config);
+    fn init(
+        config: Config, 
+        network: NetworkLayer,
+        membership: MembershipLayer,
+        replication: ReplicationLayer,
+        storage: StorageLayer
+    );
 }
