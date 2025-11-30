@@ -1,9 +1,22 @@
 use protocol::Protocol;
+use config::NodeConfig;
 
-/// The node is the main component of the replication engine
-trait Node {
-    fn init(
-        config: Config, 
-        protocol: Vec<Protocol>
-    );
+struct Node {
+    config: NodeConfig,
+    protocols: Vec<Protocol>,
+}
+
+impl Node {
+    fn new(config: NodeConfig, protocols: Vec<Protocol>) -> Self {
+        Self {
+            config,
+            protocols
+        }
+    }
+
+    fn init(&self) {
+        for protocol in self.protocols.iter() {
+            protocol.init();
+        }
+    }
 }
