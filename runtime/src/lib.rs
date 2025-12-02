@@ -3,19 +3,20 @@ use tokio;
 pub type Task = dyn Fn() -> Result<(), Box<dyn std::error::Error>> + Sync + Send;
 
 trait Runtime {
-    fn new(main: Box<Task>) -> Self;
+    fn new(main: Option<Box<Task>>) -> Self;
     fn init(&mut self);
     fn is_init(&self) -> bool;
     fn add_task(&self, task: Box<Task>);
 }
 
+#[derive(Default)]
 pub struct TokioRuntime {
     init: bool,
-    main: Box<Task>,
+    main: Option<Box<Task>>,
 }
 
 impl Runtime for TokioRuntime {
-    fn new(main: Box<Task>) -> Self {
+    fn new(main: Option<Box<Task>>) -> Self {
         Self {
             main,
             init: false,
@@ -28,9 +29,12 @@ impl Runtime for TokioRuntime {
                 rt.block_on(async {
                     self.init = true;
 
-                    (self.main)().unwrap_or_else(|_| {
-                        self.init = false;
-                    });
+                    if let Some(main) = &self.main {
+                        (main)().unwrap_or_else(|e| {
+                            eprintln!("Main task failed: {}", e);
+                            self.init = false;
+                        });
+                    }
                 });
             }
             Err(e) => {
