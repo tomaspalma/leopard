@@ -1,4 +1,4 @@
-trait NodeConfig {
+pub trait NodeConfig {
     pub fn runner() -> Runtime;
 }
 

@@ -57,6 +57,9 @@ dependencies = [
 [[package]]
 name = "node"
 version = "0.1.0"
+dependencies = [
+ "protocol",
+]
 
 [[package]]
 name = "parking_lot"
@@ -129,11 +132,15 @@ version = "0.1.0"
 [[package]]
 name = "replication-engine"
 version = "0.1.0"
+dependencies = [
+ "runtime",
+]
 
 [[package]]
 name = "runtime"
 version = "0.1.0"
 dependencies = [
+ "node",
  "tokio",
 ]
 

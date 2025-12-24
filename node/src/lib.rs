@@ -3,11 +3,11 @@ use config::NodeConfig;
 
 struct Node {
     config: NodeConfig,
-    protocols: Vec<Protocol>,
+    protocols: Vec<Box<dyn Protocol>>,
 }
 
 impl Node {
-    fn new(config: NodeConfig, protocols: Vec<Protocol>) -> Self {
+    fn new(config: NodeConfig, protocols: Vec<Box<dyn Protocol>>) -> Self {
         Self {
             config,
             protocols
