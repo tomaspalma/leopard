@@ -1,4 +1,6 @@
 use crate::Runtime;
+use crate::builder::runner::RunnerBuilder;
+
 use node::Node;
 
 pub struct NodeRunner {
@@ -28,6 +30,10 @@ impl Runner {
             runtime,
             nodeRunner: NodeRunner::new(),
         }
+    }
+
+    pub fn builder() -> RunnerBuilder {
+        RunnerBuilder::new()
     }
 
     pub fn node() -> Node {

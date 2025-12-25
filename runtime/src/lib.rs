@@ -1,5 +1,6 @@
 use tokio;
 
+pub mod builder;
 pub mod runner;
 
 pub type Task = dyn Fn() -> Result<(), Box<dyn std::error::Error>> + Sync + Send;

@@ -10,6 +10,7 @@ pub struct Node {
 
 impl Node {
     pub fn new() -> Self {
+        println!("Creating node");
         Self {
             config: Box::new(DefaultNodeConfig {}),
             protocols: vec![],

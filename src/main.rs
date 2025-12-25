@@ -1,5 +1,6 @@
 use runtime::{TokioRuntime, runner::Runner};
 
 fn main() {
-    println!("Hello, world!");
+    let _ = Runner::builder()
+        .node();
 }
