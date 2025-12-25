@@ -1,11 +1,5 @@
-use runtime::Runner;
-use runtime::TokioRuntime;
+use runtime::{TokioRuntime, runner::Runner};
 
 fn main() {
     println!("Hello, world!");
-
-    Runner::new(TokioRuntime)
-        .node()
-            .protocol()
-            .protocol()
 }

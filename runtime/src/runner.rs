@@ -18,19 +18,19 @@ impl NodeRunner {
 }
 
 pub struct Runner {
-    pub runtime: Runtime,
+    pub runtime: Box<dyn Runtime>,
     pub nodeRunner: NodeRunner,
 }
 
 impl Runner {
-    pub fn new(runtime: Runtime) -> Self {
+    pub fn new(runtime: Box<dyn Runtime>) -> Self {
         Runner { 
             runtime,
-            nodeRunner: Some(NodeRunner::new()),
+            nodeRunner: NodeRunner::new(),
         }
     }
 
-    pub fn node() {
+    pub fn node() -> Node {
         NodeRunner::node()
     }
 }

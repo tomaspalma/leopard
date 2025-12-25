@@ -4,8 +4,7 @@ pub mod runner;
 
 pub type Task = dyn Fn() -> Result<(), Box<dyn std::error::Error>> + Sync + Send;
 
-trait Runtime {
-    fn new(main: Option<Box<Task>>) -> Self;
+pub trait Runtime {
     fn init(&mut self);
     fn is_init(&self) -> bool;
     fn add_task(&self, task: Box<Task>);
@@ -17,14 +16,16 @@ pub struct TokioRuntime {
     main: Option<Box<Task>>,
 }
 
-impl Runtime for TokioRuntime {
-    fn new(main: Option<Box<Task>>) -> Self {
+impl TokioRuntime {
+    pub fn new(main: Option<Box<Task>>) -> Self {
         Self {
             main,
-            init: false,
-        } 
+            init: false
+        }
     }
+}
 
+impl Runtime for TokioRuntime {
     fn init(&mut self) {
         match tokio::runtime::Runtime::new() {
             Ok(rt) => {

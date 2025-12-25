@@ -1,13 +1,22 @@
-use protocol::Protocol;
-use config::NodeConfig;
+mod config;
 
-struct Node {
-    config: NodeConfig,
+use protocol::Protocol;
+use config::{NodeConfig, DefaultNodeConfig};
+
+pub struct Node {
+    config: Box<dyn NodeConfig>,
     protocols: Vec<Box<dyn Protocol>>,
 }
 
 impl Node {
-    fn new(config: NodeConfig, protocols: Vec<Box<dyn Protocol>>) -> Self {
+    pub fn new() -> Self {
+        Self {
+            config: Box::new(DefaultNodeConfig {}),
+            protocols: vec![],
+        }
+    }
+
+    pub fn new_with(config: Box<dyn NodeConfig>, protocols: Vec<Box<dyn Protocol>>) -> Self {
         Self {
             config,
             protocols
