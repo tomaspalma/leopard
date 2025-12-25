@@ -24,7 +24,11 @@ impl Node {
         }
     }
 
-    fn init(&self) {
+    pub fn add_protocol(&mut self, protocol: Box<dyn Protocol>) {
+        self.protocols.push(protocol);
+    }
+
+    pub fn init(&self) {
         for protocol in self.protocols.iter() {
             protocol.init();
         }
