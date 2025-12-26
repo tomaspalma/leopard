@@ -1,4 +1,6 @@
 mod config;
+pub mod state;
+pub mod connection;
 
 use protocol::Protocol;
 use config::{NodeConfig, DefaultNodeConfig};
@@ -10,7 +12,6 @@ pub struct Node {
 
 impl Node {
     pub fn new() -> Self {
-        println!("Creating node");
         Self {
             config: Box::new(DefaultNodeConfig {}),
             protocols: vec![],

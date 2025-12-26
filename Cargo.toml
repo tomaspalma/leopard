@@ -16,3 +16,5 @@ members = [
 
 [dependencies]
 runtime = { path = "./runtime" }
+node = { path = "./node" }
+replication = { path = "./replication" }

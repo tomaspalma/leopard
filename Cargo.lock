@@ -128,11 +128,17 @@ dependencies = [
 [[package]]
 name = "replication"
 version = "0.1.0"
+dependencies = [
+ "node",
+ "protocol",
+]
 
 [[package]]
 name = "replication-engine"
 version = "0.1.0"
 dependencies = [
+ "node",
+ "replication",
  "runtime",
 ]
 
