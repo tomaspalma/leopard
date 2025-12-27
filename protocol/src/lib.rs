@@ -1,3 +1,3 @@
 pub trait Protocol {
-    fn init(&self);
+    fn init(&mut self);
 }

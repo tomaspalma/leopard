@@ -8,7 +8,10 @@ pub trait NodeSocketTask {
 
 pub trait NodeSocket {
     fn add_task(&mut self, port: NodePort, task: Box<dyn NodeSocketTask>);
-
+    fn bind(&self);
+    fn send(&self);
+    fn receive(&self);
+    fn disconnect(&self);
 }
 
 pub struct DefaultNodeSocket {
@@ -27,6 +30,23 @@ impl DefaultNodeSocket {
 
 impl NodeSocket for DefaultNodeSocket {
     fn add_task(&mut self, port: NodePort, task: Box<dyn NodeSocketTask>) {
+        println!("Adding task to socket");
         self.tasks.push(task);
+    }
+
+    fn bind(&self) {
+
+    }
+
+    fn send(&self) {
+
+    }
+
+    fn receive(&self) {
+
+    }
+
+    fn disconnect(&self) {
+
     }
 }

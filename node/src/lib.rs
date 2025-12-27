@@ -29,8 +29,8 @@ impl Node {
         self.protocols.push(protocol);
     }
 
-    pub fn init(&self) {
-        for protocol in self.protocols.iter() {
+    pub fn init(&mut self) {
+        for protocol in self.protocols.iter_mut() {
             protocol.init();
         }
     }

@@ -18,3 +18,4 @@ members = [
 runtime = { path = "./runtime" }
 node = { path = "./node" }
 replication = { path = "./replication" }
+log = "0.4.29"

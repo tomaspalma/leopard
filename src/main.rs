@@ -1,6 +1,6 @@
 use replication::protocol::HintedHandoffReplicationProtocol;
 use runtime::{Runtime, TokioRuntime, runner::Runner};
-use node::{Node, state::DefaultNodeState};
+use node::{Node, state::DefaultNodeState, connection::port::NodePort};
 
 fn main() {
     let mut runtime = TokioRuntime::new(
@@ -9,19 +9,18 @@ fn main() {
 
             let node_state = DefaultNodeState::new();
 
-            node.add_protocol(Box::new(HintedHandoffReplicationProtocol::new(Box::new(node_state))));
+            node.add_protocol(Box::new(HintedHandoffReplicationProtocol::new(
+                        Box::new(node_state), NodePort::new(9000)
+                        )
+                    )
+                );
 
-            println!("Hello, world!");
+            node.init();
+
             Ok(())
         }))
     );
 
     runtime.init();
-
-    // This is a small example of the final result of instantiating a system, using a custom DSL
-    // with the builder pattern.
-    // let _ = Runner::builder()
-    //     .node()
-    //         .protocol();
 }
 
