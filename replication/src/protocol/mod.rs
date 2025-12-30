@@ -10,14 +10,14 @@ pub struct HintedHandoffReplicationProtocolConfig {
 pub trait ReplicationProtocol : Protocol {}
 
 pub struct HintedHandoffReplicationProtocol {
-    state: Box<dyn NodeState>,
+    state: Box<dyn NodeState + Send + Sync>,
     port: NodePort
 }
 
 impl ReplicationProtocol for HintedHandoffReplicationProtocol {}
 
 impl HintedHandoffReplicationProtocol {
-    pub fn new(state: Box<dyn NodeState>, port: NodePort) -> Self {
+    pub fn new(state: Box<dyn NodeState + Send + Sync>, port: NodePort) -> Self {
         Self {
             state,
             port

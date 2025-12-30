@@ -1,9 +1,12 @@
+use std::future::Future;
+use std::pin::Pin;
+
 use tokio;
 
 pub mod builder;
 pub mod runner;
 
-pub type Task = dyn Fn() -> Result<(), Box<dyn std::error::Error>> + Sync + Send;
+pub type Task = dyn Fn() -> Pin<Box<dyn Future<Output = Result<(), String>> + Send>> + Send + Sync;
 
 pub trait Runtime {
     fn init(&mut self);
@@ -34,7 +37,7 @@ impl Runtime for TokioRuntime {
                     self.init = true;
 
                     if let Some(main) = &self.main {
-                        (main)().unwrap_or_else(|e| {
+                        (main)().await.unwrap_or_else(|e| {
                             eprintln!("Main task failed: {}", e);
                             self.init = false;
                         });
@@ -53,7 +56,7 @@ impl Runtime for TokioRuntime {
         }
 
         tokio::spawn(async move {
-            (task)().unwrap_or_else(|e| {
+            (task)().await.unwrap_or_else(|e| {
                 eprintln!("Task failed: {}", e);
             });
         }); 

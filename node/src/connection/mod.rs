@@ -1,22 +1,25 @@
 pub mod port;
 
+use iroh::{Endpoint};
+use async_trait::async_trait;
 use crate::connection::port::NodePort;
 
 pub trait NodeSocketTask {
     fn run(&self);
 }
 
+#[async_trait]
 pub trait NodeSocket {
-    fn add_task(&mut self, port: NodePort, task: Box<dyn NodeSocketTask>);
-    fn bind(&self);
-    fn send(&self);
-    fn receive(&self);
-    fn disconnect(&self);
+    fn add_task(&mut self, port: NodePort, task: Box<dyn NodeSocketTask + Send + Sync>);
+    async fn bind(&self);
+    async fn send(&self);
+    async fn receive(&self);
+    async fn disconnect(&self);
 }
 
 pub struct DefaultNodeSocket {
     port: NodePort,
-    tasks: Vec<Box<dyn NodeSocketTask>>
+    tasks: Vec<Box<dyn NodeSocketTask + Send + Sync>>
 }
 
 impl DefaultNodeSocket {
@@ -28,25 +31,27 @@ impl DefaultNodeSocket {
     }
 }
 
+#[async_trait]
 impl NodeSocket for DefaultNodeSocket {
-    fn add_task(&mut self, port: NodePort, task: Box<dyn NodeSocketTask>) {
+    fn add_task(&mut self, port: NodePort, task: Box<dyn NodeSocketTask + Send + Sync>) {
         println!("Adding task to socket");
         self.tasks.push(task);
     }
 
-    fn bind(&self) {
+    async fn bind(&self) {
+        println!("Binding socket");
+        let endpoint = Endpoint::bind().await.unwrap(); 
+    }
+
+    async fn send(&self) {
 
     }
 
-    fn send(&self) {
+    async fn receive(&self) {
 
     }
 
-    fn receive(&self) {
-
-    }
-
-    fn disconnect(&self) {
+    async fn disconnect(&self) {
 
     }
 }

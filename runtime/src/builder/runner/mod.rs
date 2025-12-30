@@ -11,9 +11,9 @@ impl Builder<Box<dyn Runtime>> for RunnerBuilder {
         let mut runtime = TokioRuntime::new(None);
 
         for node in self.nodes.iter() {
-            runtime.add_task(Box::new(move || {
-                Ok(())
-            }));
+            // runtime.add_task(Box::new(async move || {
+            //     Ok(())
+            // }));
         }
 
         Box::new(runtime)
