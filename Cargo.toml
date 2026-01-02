@@ -19,3 +19,4 @@ runtime = { path = "./runtime" }
 node = { path = "./node" }
 replication = { path = "./replication" }
 log = "0.4.29"
+dashmap = "6.1.0"

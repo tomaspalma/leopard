@@ -1,4 +1,5 @@
 use log::{trace};
+use std::sync::Arc;
 
 use protocol::Protocol;
 use node::{connection::{NodeSocketTask, port::NodePort}, state::NodeState};
@@ -10,14 +11,14 @@ pub struct HintedHandoffReplicationProtocolConfig {
 pub trait ReplicationProtocol : Protocol {}
 
 pub struct HintedHandoffReplicationProtocol {
-    state: Box<dyn NodeState + Send + Sync>,
+    state: Arc<dyn NodeState + Send + Sync>,
     port: NodePort
 }
 
 impl ReplicationProtocol for HintedHandoffReplicationProtocol {}
 
 impl HintedHandoffReplicationProtocol {
-    pub fn new(state: Box<dyn NodeState + Send + Sync>, port: NodePort) -> Self {
+    pub fn new(state: Arc<dyn NodeState + Send + Sync>, port: NodePort) -> Self {
         Self {
             state,
             port
