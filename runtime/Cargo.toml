@@ -5,4 +5,3 @@ edition = "2024"
 
 [dependencies]
 tokio = { version = "1.48.0", features = ["full"] }
-node = { path = "../node" }

@@ -1,5 +1,5 @@
 use replication::protocol::HintedHandoffReplicationProtocol;
-use runtime::{Runtime, TokioRuntime, runner::Runner};
+use runtime::{Runtime, TokioRuntime, Task};
 use node::{Node, state::DefaultNodeState, connection::port::NodePort};
 
 use tracing::info;
@@ -7,18 +7,23 @@ use tracing_subscriber;
 
 use std::sync::Arc;
 
-fn main() {
+#[tokio::main]
+async fn main() {
     tracing::subscriber::with_default(tracing_subscriber::fmt().finish(), || {
         info!("Starting logging");
     });
 
-    let mut runtime = TokioRuntime::new(
-    Some(Box::new(|| { 
-        Box::pin(async { 
+    let runtime = Arc::new(TokioRuntime::new());
+    
+    let runtime_clone = runtime.clone();
+    let task: Box<Task> = Box::new(move || {
+        let value = runtime_clone.clone();
+
+        Box::pin(async move {
             let node_state = Arc::new(DefaultNodeState::new());
 
 
-            let mut node = Node::new_with_state(node_state.clone());
+            let mut node = Node::new_with_state(node_state.clone(), value);
             node.add_protocol(Box::new(HintedHandoffReplicationProtocol::new(
                         node_state.clone(),
                 NodePort::new(9000)
@@ -28,9 +33,11 @@ fn main() {
 
             Ok(())
         })
-    }))
-    );
-   
-    runtime.init();
-}
+    });
 
+    runtime.add_task(task);
+
+    loop {
+
+    }
+}

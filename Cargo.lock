@@ -1818,6 +1818,7 @@ dependencies = [
  "dashmap",
  "iroh",
  "protocol",
+ "runtime",
 ]
 
 [[package]]
@@ -2324,6 +2325,7 @@ dependencies = [
  "node",
  "replication",
  "runtime",
+ "tokio",
  "tracing",
  "tracing-subscriber",
 ]
@@ -2393,7 +2395,6 @@ dependencies = [
 name = "runtime"
 version = "0.1.0"
 dependencies = [
- "node",
  "tokio",
 ]
 

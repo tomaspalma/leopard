@@ -7,4 +7,6 @@ edition = "2024"
 async-trait = "0.1.89"
 dashmap = "6.1.0"
 iroh = "0.95.1"
+
 protocol = { path = "../protocol/" }
+runtime = { path = "../runtime/" }
