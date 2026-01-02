@@ -2324,6 +2324,8 @@ dependencies = [
  "node",
  "replication",
  "runtime",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]

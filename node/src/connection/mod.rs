@@ -39,7 +39,6 @@ impl NodeSocket for DefaultNodeSocket {
     }
 
     async fn bind(&self) {
-        println!("Binding socket");
         let endpoint = Endpoint::bind().await.unwrap(); 
     }
 
