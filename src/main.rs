@@ -35,7 +35,9 @@ async fn main() {
         })
     });
 
-    runtime.add_task(task);
+    runtime.add_task(task).unwrap();
+
+    runtime.init().unwrap();
 
     loop {
 

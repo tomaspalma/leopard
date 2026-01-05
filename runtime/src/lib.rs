@@ -1,5 +1,6 @@
 use std::future::Future;
 use std::pin::Pin;
+use std::sync::{LockResult, RwLock, PoisonError};
 
 use tokio;
 
@@ -8,32 +9,49 @@ pub mod builder;
 pub type Task = dyn Fn() -> Pin<Box<dyn Future<Output = Result<(), String>> + Send>> + Send + Sync;
 
 pub trait Runtime {
-    fn add_task(&self, task: Box<Task>);
-    fn tasks(&self) -> &Vec<Box<Task>>;
+    fn add_task(&self, task: Box<Task>) -> LockResult<()>;
+    fn tasks(&self) -> &RwLock<Vec<Box<Task>>>;
+    fn init(&self) -> Result<(), String>;
 }
 
 pub struct TokioRuntime {
-    tasks: Vec<Box<Task>>,
+    tasks: RwLock<Vec<Box<Task>>>,
 }
 
 impl TokioRuntime {
     pub fn new() -> Self {
         Self {
-            tasks: vec![],
+            tasks: RwLock::new(vec![]),
         }
     }
 }
 
 impl Runtime for TokioRuntime {
-    fn add_task(&self, task: Box<Task>) {
-        tokio::spawn(async move {
-            (task)().await.unwrap_or_else(|e| {
-                eprintln!("Task failed: {}", e);
-            });
-        }); 
+    fn add_task(&self, task: Box<Task>) -> LockResult<()> {
+        match self.tasks.write() {
+            Ok(mut tasks) => {
+                tasks.push(task);
+
+                Ok(())
+            },
+            Err(_) => Err(PoisonError::new(())),
+        }
     }
 
-    fn tasks(&self) -> &Vec<Box<Task>> {
+    fn tasks(&self) -> &RwLock<Vec<Box<Task>>> {
         &self.tasks
+    }
+
+    fn init(&self) -> Result<(), String> {
+        for task in self.tasks.read().unwrap().iter() {
+            let fut = (task)();
+            tokio::spawn(async move {
+                fut.await.unwrap_or_else(|e| {
+                    eprintln!("Task failed: {}", e);
+                });
+            });
+        }
+
+        Ok(())
     }
 }
