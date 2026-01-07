@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use dashmap::{DashMap, mapref::multiple::{RefMulti, RefMutMulti}};
 
-use crate::connection::{NodeSocket, DefaultNodeSocket, port::NodePort, NodeSocketTask};
+use crate::connection::{NodeSocket, iroh::DefaultNodeSocket, port::NodePort, NodeSocketTask};
 
 #[async_trait]
 pub trait NodeState {
