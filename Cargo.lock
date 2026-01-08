@@ -287,6 +287,14 @@ name = "config"
 version = "0.1.0"
 
 [[package]]
+name = "connection"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "iroh",
+]
+
+[[package]]
 name = "const-oid"
 version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1815,10 +1823,12 @@ name = "node"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "connection",
  "dashmap",
  "iroh",
  "protocol",
  "runtime",
+ "state",
 ]
 
 [[package]]
@@ -2147,6 +2157,10 @@ dependencies = [
 [[package]]
 name = "protocol"
 version = "0.1.0"
+dependencies = [
+ "connection",
+ "state",
+]
 
 [[package]]
 name = "quinn"
@@ -2311,20 +2325,23 @@ checksum = "7a2d987857b319362043e95f5353c0535c1f58eec5336fdfcf626430af7def58"
 name = "replication"
 version = "0.1.0"
 dependencies = [
+ "connection",
  "log",
- "node",
  "protocol",
+ "state",
 ]
 
 [[package]]
 name = "replication-engine"
 version = "0.1.0"
 dependencies = [
+ "connection",
  "dashmap",
  "log",
  "node",
  "replication",
  "runtime",
+ "state",
  "tokio",
  "tracing",
  "tracing-subscriber",
@@ -2802,6 +2819,15 @@ name = "stable_deref_trait"
 version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6ce2be8dc25455e1f91df71bfa12ad37d7af1092ae736f3a6cd0e37bc7810596"
+
+[[package]]
+name = "state"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "connection",
+ "dashmap",
+]
 
 [[package]]
 name = "strum"

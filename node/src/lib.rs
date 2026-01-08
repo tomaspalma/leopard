@@ -1,42 +1,50 @@
 mod config;
-pub mod state;
-pub mod connection;
 
-use state::NodeState;
 use protocol::Protocol;
 use config::{NodeConfig, DefaultNodeConfig};
+
+use state::node::NodeState;
+use connection::node::NodeSocketTask;
 
 use runtime::{Runtime};
 
 use std::sync::Arc;
+use std::marker::PhantomData;
 
-pub struct Node {
+pub struct Node<T, S> 
+where
+    T: NodeSocketTask,
+    S: NodeState<T>
+{
     runtime: Arc<dyn Runtime+ Send + Sync>,
     config: Box<dyn NodeConfig + Send + Sync>,
-    state: Arc<dyn NodeState + Send + Sync>,
-    protocols: Vec<Box<dyn Protocol + Send + Sync >>,
+    state: Arc<S>,
+    protocols: Vec<Box<dyn Protocol<S, T> + Send + Sync >>,
+    _marker: PhantomData<T>
 }
 
-impl Node {
-    pub fn new(runtime: Arc<dyn Runtime + Send + Sync>) -> Self {
+impl<T: NodeSocketTask, S: NodeState<T>> Node<T, S> {
+    pub fn new(runtime: Arc<dyn Runtime + Send + Sync>, state: Box<dyn Fn () -> S>) -> Self {
         Self {
             config: Box::new(DefaultNodeConfig {}),
             protocols: vec![],
-            state: Arc::new(state::DefaultNodeState::new()),
-            runtime
+            state: Arc::new(state()),
+            runtime,
+            _marker: PhantomData
         }
     }
     
-    pub fn new_with_state(state: Arc<dyn NodeState + Send + Sync>, runtime: Arc<dyn Runtime + Sync + Send>) -> Self {
+    pub fn new_with_state(state: Arc<S>, runtime: Arc<dyn Runtime + Sync + Send>) -> Self {
         Self {
             config: Box::new(DefaultNodeConfig {}),
             protocols: vec![],
             state,
-            runtime
+            runtime,
+            _marker: PhantomData
         }
     }
    
-    pub fn add_protocol(&mut self, protocol: Box<dyn Protocol + Send + Sync>) {
+    pub fn add_protocol(&mut self, protocol: Box<dyn Protocol<S, T> + Send + Sync>) {
         self.protocols.push(protocol);
     }
 

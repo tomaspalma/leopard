@@ -1,11 +1,20 @@
 use async_trait::async_trait;
-use crate::connection::{port::NodePort, NodeSocketTask, NodeSocket};
+use crate::node::{port::NodePort, NodeSocketTask, NodeSocket, NodeSocketTaskMetadata };
 
-use iroh::{Endpoint, protocol::ProtocolHandler};
+use std::sync::Arc;
+
+use iroh::{Endpoint};
 
 pub struct DefaultNodeSocketTask {
+    metadata: Arc<dyn NodeSocketTaskMetadata + Send + Sync>
+}
+
+#[derive(Clone)]
+pub struct DefaultNodeSocketTaskMetadata {
     protocol: String
 }
+
+impl NodeSocketTaskMetadata for DefaultNodeSocketTaskMetadata {}
 
 impl NodeSocketTask for DefaultNodeSocketTask {
     fn run(&self) {
@@ -13,12 +22,12 @@ impl NodeSocketTask for DefaultNodeSocketTask {
     }
 }
 
-pub struct DefaultNodeSocket {
+pub struct DefaultNodeSocket<T> {
     port: NodePort,
-    tasks: Vec<Box<dyn NodeSocketTask + Send + Sync>>
+    tasks: Vec<Box<T>>
 }
 
-impl DefaultNodeSocket {
+impl DefaultNodeSocket<DefaultNodeSocketTask> {
     pub fn new(port: NodePort) -> Self {
         Self {
             port,
@@ -28,8 +37,8 @@ impl DefaultNodeSocket {
 }
 
 #[async_trait]
-impl NodeSocket for DefaultNodeSocket {
-    fn add_task(&mut self, port: NodePort, task: Box<dyn NodeSocketTask + Send + Sync>) {
+impl NodeSocket<DefaultNodeSocketTask> for DefaultNodeSocket<DefaultNodeSocketTask> {
+    fn add_task(&mut self, port: NodePort, task: Box<DefaultNodeSocketTask>) {
         self.tasks.push(task);
     }
 

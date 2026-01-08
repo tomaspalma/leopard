@@ -10,3 +10,5 @@ iroh = "0.95.1"
 
 protocol = { path = "../protocol/" }
 runtime = { path = "../runtime/" }
+state = { path = "../state/" }
+connection = { path = "../connection/" }

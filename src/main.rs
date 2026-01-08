@@ -1,6 +1,9 @@
 use replication::protocol::HintedHandoffReplicationProtocol;
 use runtime::{Runtime, TokioRuntime, Task};
-use node::{Node, state::DefaultNodeState, connection::port::NodePort};
+use state::node::DefaultNodeState;
+use connection::node::port::NodePort;
+
+use node::{Node};
 
 use tracing::info;
 use tracing_subscriber;

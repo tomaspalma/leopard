@@ -11,7 +11,7 @@ members = [
   "protocol",
   "runtime",
   "reconciliation",
-  "replication",
+  "replication", "state", "connection",
 ]
 
 [dependencies]
@@ -19,6 +19,8 @@ tokio = { version = "1.48.0", features = ["full"] }
 runtime = { path = "./runtime" }
 node = { path = "./node" }
 replication = { path = "./replication" }
+state = { path = "./state" }
+connection = { path = "./connection" }
 log = "0.4.29"
 dashmap = "6.1.0"
 tracing = "0.1"
