@@ -2,21 +2,15 @@ use log::{trace};
 use std::sync::Arc;
 
 use protocol::Protocol;
-use connection::node::{NodeSocketTask, port::NodePort};
-use state::node::NodeState;
+use connection::node::{NodeSocketTask, NodeSocketTaskMetadata, iroh::{DefaultNodeSocketTask, DefaultNodeSocketTaskMetadata}, port::NodePort};
+use state::node::{DefaultNodeState, NodeState};
 
 use std::marker::PhantomData;
 
+use tracing::{info, instrument};
+
 pub struct HintedHandoffReplicationProtocolConfig {
     port: NodePort
-}
-
-pub trait ReplicationProtocol<S, T> : Protocol<S, T> 
-where
-    T: NodeSocketTask,
-    S: NodeState<T> 
-{
-
 }
 
 pub struct HintedHandoffReplicationProtocol<S, T> {
@@ -25,18 +19,9 @@ pub struct HintedHandoffReplicationProtocol<S, T> {
     _marker: PhantomData<T>
 }
 
-impl<S, T> ReplicationProtocol<S, T> for HintedHandoffReplicationProtocol<S, T> 
-where
-    T: NodeSocketTask,
-    S: NodeState<T>
-{}
-
-impl<S, T> HintedHandoffReplicationProtocol<S, T> 
-where
-    T: NodeSocketTask,
-    S: NodeState<T>
+impl HintedHandoffReplicationProtocol<DefaultNodeState<DefaultNodeSocketTask, DefaultNodeSocketTaskMetadata>, DefaultNodeSocketTask> 
 {
-    pub fn new(state: Arc<S>, port: NodePort) -> Self {
+    pub fn new(state: Arc<DefaultNodeState<DefaultNodeSocketTask, DefaultNodeSocketTaskMetadata>>, port: NodePort) -> Self {
         Self {
             state,
             port,
@@ -49,15 +34,29 @@ pub struct HintedHandoffReplicationProtocolTask {}
 
 pub struct HintedHandoffReplicationProtocolTaskMetadata {}
 
-impl NodeSocketTask for HintedHandoffReplicationProtocolTask {
+impl NodeSocketTaskMetadata for HintedHandoffReplicationProtocolTaskMetadata {}
+
+impl NodeSocketTask<HintedHandoffReplicationProtocolTaskMetadata> for HintedHandoffReplicationProtocolTask {
     fn run(&self) {
         trace!("Running HintedHandoffReplicationProtocolTask");
     }
+
+    fn metadata(&self) -> Arc<HintedHandoffReplicationProtocolTaskMetadata> {
+        Arc::new(HintedHandoffReplicationProtocolTaskMetadata {})
+    }
 }
 
-impl<S: NodeState<T>, T: NodeSocketTask> Protocol<S, T> for HintedHandoffReplicationProtocol<S, T> {
+impl Protocol<DefaultNodeState<DefaultNodeSocketTask, DefaultNodeSocketTaskMetadata>, DefaultNodeSocketTask, DefaultNodeSocketTaskMetadata> 
+    for HintedHandoffReplicationProtocol<DefaultNodeState<DefaultNodeSocketTask, DefaultNodeSocketTaskMetadata>, DefaultNodeSocketTask> 
+{
     fn init(&mut self) {
-        trace!("Initializing HintedHandoffReplicationProtocol");
-        // self.state.add_socket_task_and_create(self.port.clone(), Box::new(HintedHandoffReplicationProtocolTask {}));
+        info!("Initializing HintedHandoffReplicationProtocol");
+        self.state.add_socket_task_and_create(self.port.clone(), Box::new(
+                DefaultNodeSocketTask::new(Arc::new(
+                        DefaultNodeSocketTaskMetadata::new(String::new())
+                        )
+                )
+        )
+        );   
     }
 }

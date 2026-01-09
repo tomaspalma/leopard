@@ -6,7 +6,15 @@ use std::sync::Arc;
 use iroh::{Endpoint};
 
 pub struct DefaultNodeSocketTask {
-    metadata: Arc<dyn NodeSocketTaskMetadata + Send + Sync>
+    metadata: Arc<DefaultNodeSocketTaskMetadata>
+}
+
+impl DefaultNodeSocketTask {
+    pub fn new(metadata: Arc<DefaultNodeSocketTaskMetadata>) -> Self {
+        Self {
+            metadata
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -16,9 +24,21 @@ pub struct DefaultNodeSocketTaskMetadata {
 
 impl NodeSocketTaskMetadata for DefaultNodeSocketTaskMetadata {}
 
-impl NodeSocketTask for DefaultNodeSocketTask {
+impl DefaultNodeSocketTaskMetadata {
+    pub fn new(protocol: String) -> Self {
+        Self {
+            protocol
+        }
+    }
+}
+
+impl NodeSocketTask<DefaultNodeSocketTaskMetadata> for DefaultNodeSocketTask {
     fn run(&self) {
         println!("Running task");
+    }
+
+    fn metadata(&self) -> Arc<DefaultNodeSocketTaskMetadata> {
+        self.metadata.clone()
     }
 }
 
@@ -37,15 +57,15 @@ impl DefaultNodeSocket<DefaultNodeSocketTask> {
 }
 
 #[async_trait]
-impl NodeSocket<DefaultNodeSocketTask> for DefaultNodeSocket<DefaultNodeSocketTask> {
+impl NodeSocket<DefaultNodeSocketTask, DefaultNodeSocketTaskMetadata> for DefaultNodeSocket<DefaultNodeSocketTask> {
     fn add_task(&mut self, port: NodePort, task: Box<DefaultNodeSocketTask>) {
         self.tasks.push(task);
     }
-
+    
     async fn bind(&self) {
         let endpoint = Endpoint::bind().await.unwrap(); 
     }
-
+    
     async fn send(&self) {
 
     }

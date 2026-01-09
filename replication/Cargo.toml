@@ -8,3 +8,4 @@ protocol = { path = "../protocol" }
 connection = { path = "../connection" }
 state = { path = "../state" }
 log = "0.4.29"
+tracing = "0.1"

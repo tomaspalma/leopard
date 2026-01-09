@@ -4,26 +4,32 @@ use protocol::Protocol;
 use config::{NodeConfig, DefaultNodeConfig};
 
 use state::node::NodeState;
-use connection::node::NodeSocketTask;
+use connection::node::{NodeSocketTask, NodeSocketTaskMetadata};
 
 use runtime::{Runtime};
 
 use std::sync::Arc;
 use std::marker::PhantomData;
 
-pub struct Node<T, S> 
+pub struct Node<T, S, M> 
 where
-    T: NodeSocketTask,
-    S: NodeState<T>
+    T: NodeSocketTask<M>,
+    S: NodeState<T, M>,
+    M: NodeSocketTaskMetadata
 {
     runtime: Arc<dyn Runtime+ Send + Sync>,
     config: Box<dyn NodeConfig + Send + Sync>,
     state: Arc<S>,
-    protocols: Vec<Box<dyn Protocol<S, T> + Send + Sync >>,
+    protocols: Vec<Box<dyn Protocol<S, T, M> + Send + Sync >>,
     _marker: PhantomData<T>
 }
 
-impl<T: NodeSocketTask, S: NodeState<T>> Node<T, S> {
+impl<T, S, M> Node<T, S, M> 
+where
+    T: NodeSocketTask<M>,
+    S: NodeState<T, M>,
+    M: NodeSocketTaskMetadata
+{
     pub fn new(runtime: Arc<dyn Runtime + Send + Sync>, state: Box<dyn Fn () -> S>) -> Self {
         Self {
             config: Box::new(DefaultNodeConfig {}),
@@ -44,7 +50,7 @@ impl<T: NodeSocketTask, S: NodeState<T>> Node<T, S> {
         }
     }
    
-    pub fn add_protocol(&mut self, protocol: Box<dyn Protocol<S, T> + Send + Sync>) {
+    pub fn add_protocol(&mut self, protocol: Box<dyn Protocol<S, T, M> + Send + Sync>) {
         self.protocols.push(protocol);
     }
 

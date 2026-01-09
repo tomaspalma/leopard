@@ -4,6 +4,6 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-async-trait = "0.1.68"
+async-trait = "0.1.83"
 dashmap = "6.1.0"
 connection = { path = "../connection" }
