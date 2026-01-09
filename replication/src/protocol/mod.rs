@@ -2,12 +2,12 @@ use log::{trace};
 use std::sync::Arc;
 
 use protocol::Protocol;
-use connection::node::{NodeSocketTask, NodeSocketTaskMetadata, iroh::{DefaultNodeSocketTask, DefaultNodeSocketTaskMetadata}, port::NodePort};
+use connection::node::{NodeSocketTask, NodeSocketTaskMetadata, iroh::{DefaultNodeSocketTask, DefaultNodeSocket, DefaultNodeSocketTaskMetadata}, port::NodePort};
 use state::node::{DefaultNodeState, NodeState};
 
 use std::marker::PhantomData;
 
-use tracing::{info, instrument};
+use tracing::{info};
 
 pub struct HintedHandoffReplicationProtocolConfig {
     port: NodePort
@@ -50,13 +50,15 @@ impl Protocol<DefaultNodeState<DefaultNodeSocketTask, DefaultNodeSocketTaskMetad
     for HintedHandoffReplicationProtocol<DefaultNodeState<DefaultNodeSocketTask, DefaultNodeSocketTaskMetadata>, DefaultNodeSocketTask> 
 {
     fn init(&mut self) {
-        info!("Initializing HintedHandoffReplicationProtocol");
         self.state.add_socket_task_and_create(self.port.clone(), Box::new(
                 DefaultNodeSocketTask::new(Arc::new(
                         DefaultNodeSocketTaskMetadata::new(String::new())
                         )
-                )
-        )
+                )),
+                Box::new(|port: NodePort| {
+                    Box::new(DefaultNodeSocket::<DefaultNodeSocketTask>::new(port))
+                })
+       
         );   
     }
 }

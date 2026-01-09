@@ -7,7 +7,7 @@ use connection::node::{NodeSocket, NodeSocketTask, NodeSocketTaskMetadata, iroh:
 pub trait NodeState<T: NodeSocketTask<M>, M: NodeSocketTaskMetadata> {
     fn add_socket(&self, port: NodePort, socket: Box<dyn NodeSocket<T, M> + Send + Sync>) -> Result<(), String>;
     fn add_socket_task(&self, port: NodePort, task: Box<T>) -> Result<(), String>;
-    fn add_socket_task_and_create(&self, port: NodePort, task: Box<T>);
+    fn add_socket_task_and_create(&self, port: NodePort, task: Box<T>, socket_constructor: Box<dyn Fn(NodePort) -> Box<dyn NodeSocket<T, M> + Send + Sync>>);
 
     async fn init(&self);
 }
@@ -33,11 +33,11 @@ where
         }
     }
 
-    fn add_socket_task_and_create(&self, port: NodePort, task: Box<T>) {
+    fn add_socket_task_and_create(&self, port: NodePort, task: Box<T>, socket_constructor: Box<dyn Fn(NodePort) -> Box<dyn NodeSocket<T, M> + Send + Sync>>) {
         let element_exists = self.sockets.contains_key(&port);
 
         if !element_exists {
-            // self.add_socket(port.clone(), Box::new(DefaultNodeSocket::new(port.clone())));
+            self.add_socket(port.clone(), socket_constructor(port.clone()));
         }
 
         self.add_socket_task(port, task);

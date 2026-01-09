@@ -3,7 +3,7 @@ use crate::node::{port::NodePort, NodeSocketTask, NodeSocket, NodeSocketTaskMeta
 
 use std::sync::Arc;
 
-use iroh::{Endpoint};
+use iroh::{Endpoint, protocol::Router};
 
 pub struct DefaultNodeSocketTask {
     metadata: Arc<DefaultNodeSocketTaskMetadata>
@@ -64,6 +64,11 @@ impl NodeSocket<DefaultNodeSocketTask, DefaultNodeSocketTaskMetadata> for Defaul
     
     async fn bind(&self) {
         let endpoint = Endpoint::bind().await.unwrap(); 
+
+        // let router = Router::builder(endpoint)
+        //     .spawn();
+        //
+        // println!("Router spawned: {:?}", router);
     }
     
     async fn send(&self) {
