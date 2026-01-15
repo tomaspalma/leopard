@@ -1,31 +1,57 @@
-use log::{trace};
+use log::trace;
+use membership::{
+    DefaultMembership, DefaultMembershipNeighbor, DefaultMembershipNeighborRepresentation,
+};
 use std::sync::Arc;
 
+use connection::node::{
+    NodeSocketTask, NodeSocketTaskMetadata,
+    iroh::{DefaultNodeSocket, DefaultNodeSocketTask, DefaultNodeSocketTaskMetadata},
+    port::NodePort,
+};
 use protocol::Protocol;
-use connection::node::{NodeSocketTask, NodeSocketTaskMetadata, iroh::{DefaultNodeSocketTask, DefaultNodeSocket, DefaultNodeSocketTaskMetadata}, port::NodePort};
 use state::node::{DefaultNodeState, NodeState};
 
 use std::marker::PhantomData;
 
-use tracing::{info};
-
 pub struct HintedHandoffReplicationProtocolConfig {
-    port: NodePort
+    port: NodePort,
 }
 
 pub struct HintedHandoffReplicationProtocol<S, T> {
     state: Arc<S>,
     port: NodePort,
-    _marker: PhantomData<T>
+    _marker: PhantomData<T>,
 }
 
-impl HintedHandoffReplicationProtocol<DefaultNodeState<DefaultNodeSocketTask, DefaultNodeSocketTaskMetadata>, DefaultNodeSocketTask> 
+impl
+    HintedHandoffReplicationProtocol<
+        DefaultNodeState<
+            DefaultNodeSocketTask,
+            DefaultNodeSocketTaskMetadata,
+            DefaultMembershipNeighborRepresentation,
+            DefaultMembership,
+            DefaultMembershipNeighbor,
+        >,
+        DefaultNodeSocketTask,
+    >
 {
-    pub fn new(state: Arc<DefaultNodeState<DefaultNodeSocketTask, DefaultNodeSocketTaskMetadata>>, port: NodePort) -> Self {
+    pub fn new(
+        state: Arc<
+            DefaultNodeState<
+                DefaultNodeSocketTask,
+                DefaultNodeSocketTaskMetadata,
+                DefaultMembershipNeighborRepresentation,
+                DefaultMembership,
+                DefaultMembershipNeighbor,
+            >,
+        >,
+        port: NodePort,
+    ) -> Self {
         Self {
             state,
             port,
-            _marker: PhantomData
+            _marker: PhantomData,
         }
     }
 }
@@ -36,7 +62,9 @@ pub struct HintedHandoffReplicationProtocolTaskMetadata {}
 
 impl NodeSocketTaskMetadata for HintedHandoffReplicationProtocolTaskMetadata {}
 
-impl NodeSocketTask<HintedHandoffReplicationProtocolTaskMetadata> for HintedHandoffReplicationProtocolTask {
+impl NodeSocketTask<HintedHandoffReplicationProtocolTaskMetadata>
+    for HintedHandoffReplicationProtocolTask
+{
     fn run(&self) {
         trace!("Running HintedHandoffReplicationProtocolTask");
     }
@@ -46,19 +74,41 @@ impl NodeSocketTask<HintedHandoffReplicationProtocolTaskMetadata> for HintedHand
     }
 }
 
-impl Protocol<DefaultNodeState<DefaultNodeSocketTask, DefaultNodeSocketTaskMetadata>, DefaultNodeSocketTask, DefaultNodeSocketTaskMetadata> 
-    for HintedHandoffReplicationProtocol<DefaultNodeState<DefaultNodeSocketTask, DefaultNodeSocketTaskMetadata>, DefaultNodeSocketTask> 
+impl
+    Protocol<
+        DefaultNodeState<
+            DefaultNodeSocketTask,
+            DefaultNodeSocketTaskMetadata,
+            DefaultMembershipNeighborRepresentation,
+            DefaultMembership,
+            DefaultMembershipNeighbor,
+        >,
+        DefaultNodeSocketTask,
+        DefaultNodeSocketTaskMetadata,
+        DefaultMembershipNeighborRepresentation,
+        DefaultMembership,
+        DefaultMembershipNeighbor,
+    >
+    for HintedHandoffReplicationProtocol<
+        DefaultNodeState<
+            DefaultNodeSocketTask,
+            DefaultNodeSocketTaskMetadata,
+            DefaultMembershipNeighborRepresentation,
+            DefaultMembership,
+            DefaultMembershipNeighbor,
+        >,
+        DefaultNodeSocketTask,
+    >
 {
     fn init(&mut self) {
-        self.state.add_socket_task_and_create(self.port.clone(), Box::new(
-                DefaultNodeSocketTask::new(Arc::new(
-                        DefaultNodeSocketTaskMetadata::new(String::new())
-                        )
-                )),
-                Box::new(|port: NodePort| {
-                    Box::new(DefaultNodeSocket::<DefaultNodeSocketTask>::new(port))
-                })
-       
-        );   
+        self.state.add_socket_task_and_create(
+            self.port.clone(),
+            Box::new(DefaultNodeSocketTask::new(Arc::new(
+                DefaultNodeSocketTaskMetadata::new(String::new()),
+            ))),
+            Box::new(|port: NodePort| {
+                Box::new(DefaultNodeSocket::<DefaultNodeSocketTask>::new(port))
+            }),
+        );
     }
 }

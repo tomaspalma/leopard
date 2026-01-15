@@ -7,3 +7,4 @@ edition = "2024"
 async-trait = "0.1.83"
 dashmap = "6.1.0"
 connection = { path = "../connection" }
+membership = { path = "../membership" }

@@ -12,3 +12,4 @@ protocol = { path = "../protocol/" }
 runtime = { path = "../runtime/" }
 state = { path = "../state/" }
 connection = { path = "../connection/" }
+membership = { path = "../membership/" }

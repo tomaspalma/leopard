@@ -1,4 +1,4 @@
-#[derive(Eq, Hash, PartialEq, Clone, Debug)]
+#[derive(Eq, Hash, PartialEq, Clone)]
 pub struct NodePort {
     value: u16
 }

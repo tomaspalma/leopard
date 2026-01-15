@@ -7,5 +7,6 @@ edition = "2024"
 protocol = { path = "../protocol" }
 connection = { path = "../connection" }
 state = { path = "../state" }
+membership = { path = "../membership" }
 log = "0.4.29"
 tracing = "0.1"

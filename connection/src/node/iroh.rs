@@ -65,10 +65,9 @@ impl NodeSocket<DefaultNodeSocketTask, DefaultNodeSocketTaskMetadata> for Defaul
     async fn bind(&self) {
         let endpoint = Endpoint::bind().await.unwrap(); 
 
-        // let router = Router::builder(endpoint)
-        //     .spawn();
-        //
-        // println!("Router spawned: {:?}", router);
+        let router = Router::builder(endpoint)
+            .spawn();
+                
     }
     
     async fn send(&self) {

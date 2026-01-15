@@ -1826,6 +1826,7 @@ dependencies = [
  "connection",
  "dashmap",
  "iroh",
+ "membership",
  "protocol",
  "runtime",
  "state",
@@ -2159,6 +2160,7 @@ name = "protocol"
 version = "0.1.0"
 dependencies = [
  "connection",
+ "membership",
  "state",
 ]
 
@@ -2327,6 +2329,7 @@ version = "0.1.0"
 dependencies = [
  "connection",
  "log",
+ "membership",
  "protocol",
  "state",
  "tracing",
@@ -2828,6 +2831,7 @@ dependencies = [
  "async-trait",
  "connection",
  "dashmap",
+ "membership",
 ]
 
 [[package]]
