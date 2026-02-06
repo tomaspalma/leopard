@@ -1,3 +1,4 @@
+use membership_protocols::DefaultMembershipProtocol;
 use replication::protocol::HintedHandoffReplicationProtocol;
 use runtime::{Runtime, Task, TokioRuntime};
 
@@ -31,6 +32,7 @@ async fn main() {
                 node_state.clone(),
                 NodePort::new(9000),
             )));
+            node.add_protocol(Box::new(DefaultMembershipProtocol::new()));
 
             node.init().await.unwrap();
 

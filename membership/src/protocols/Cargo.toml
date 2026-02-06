@@ -1,0 +1,10 @@
+[package]
+name = "membership-protocols"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+protocol = { path = "../../../protocol" }
+state = { path = "../../../state" }
+connection = { path = "../../../connection" }
+membership = { path = "../../../membership" }

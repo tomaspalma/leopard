@@ -1633,6 +1633,16 @@ name = "membership"
 version = "0.1.0"
 
 [[package]]
+name = "membership-protocols"
+version = "0.1.0"
+dependencies = [
+ "connection",
+ "membership",
+ "protocol",
+ "state",
+]
+
+[[package]]
 name = "memchr"
 version = "2.7.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2342,6 +2352,7 @@ dependencies = [
  "connection",
  "dashmap",
  "log",
+ "membership-protocols",
  "node",
  "replication",
  "runtime",
