@@ -3,7 +3,7 @@ use dashmap::DashMap;
 
 use std::marker::PhantomData;
 
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 
 use connection::node::{
     NodeSocket, NodeSocketTask, NodeSocketTaskMetadata,
@@ -37,7 +37,7 @@ where
         socket_constructor: Box<dyn Fn(NodePort) -> Box<dyn NodeSocket<T, M> + Send + Sync>>,
     );
 
-    fn membership(&self) -> Arc<N>;
+    fn membership(&self) -> Arc<RwLock<N>>;
 
     async fn init(&self);
 }
@@ -51,7 +51,7 @@ where
     MN: MembershipNeighbor + Send + Sync,
 {
     sockets: DashMap<NodePort, Box<dyn NodeSocket<T, M> + Send + Sync>>,
-    membership: Arc<N>,
+    membership: Arc<RwLock<N>>,
     _marker_r: PhantomData<R>,
     _marker_mn: PhantomData<MN>,
 }
@@ -76,7 +76,7 @@ where
         }
     }
 
-    fn membership(&self) -> Arc<N> {
+    fn membership(&self) -> Arc<RwLock<N>> {
         self.membership.clone()
     }
 
@@ -132,7 +132,7 @@ impl
     pub fn new() -> Self {
         Self {
             sockets: DashMap::new(),
-            membership: Arc::new(DefaultMembership::new()),
+            membership: Arc::new(RwLock::new(DefaultMembership::new())),
             _marker_r: PhantomData,
             _marker_mn: PhantomData,
         }
