@@ -1,10 +1,11 @@
 use std::future::Future;
 use std::pin::Pin;
-use std::sync::{LockResult, RwLock, PoisonError};
+use std::sync::{LockResult, PoisonError, RwLock};
 
 use tokio;
 
 pub mod builder;
+pub mod time;
 
 pub type Task = dyn Fn() -> Pin<Box<dyn Future<Output = Result<(), String>> + Send>> + Send + Sync;
 
@@ -33,7 +34,7 @@ impl Runtime for TokioRuntime {
                 tasks.push(task);
 
                 Ok(())
-            },
+            }
             Err(_) => Err(PoisonError::new(())),
         }
     }

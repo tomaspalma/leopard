@@ -6,3 +6,4 @@ edition = "2024"
 [dependencies]
 async-trait = "0.1.68"
 iroh = "0.95.1"
+runtime = { path = "../runtime" }
