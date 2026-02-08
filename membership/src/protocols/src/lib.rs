@@ -1,4 +1,4 @@
-use connection::node::iroh::{DefaultNodeSocketTask, DefaultNodeSocketTaskMetadata};
+use connection::node::default::{DefaultNodeSocketTask, DefaultNodeSocketTaskMetadata};
 use membership::{
     DefaultMembership, DefaultMembershipNeighbor, DefaultMembershipNeighborRepresentation,
 };

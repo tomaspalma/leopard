@@ -63,6 +63,8 @@ impl NodeSocket<DefaultNodeSocketTask, DefaultNodeSocketTaskMetadata>
     async fn bind(&self) {
         let endpoint = Endpoint::bind().await.unwrap();
 
+        println!("Port: {}", self.port.value());
+
         let router = Router::builder(endpoint).spawn();
     }
 

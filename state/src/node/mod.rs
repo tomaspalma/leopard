@@ -7,7 +7,7 @@ use std::sync::{Arc, RwLock};
 
 use connection::node::{
     NodeSocket, NodeSocketTask, NodeSocketTaskMetadata,
-    iroh::{DefaultNodeSocketTask, DefaultNodeSocketTaskMetadata},
+    default::{DefaultNodeSocketTask, DefaultNodeSocketTaskMetadata},
     port::NodePort,
 };
 use membership::{

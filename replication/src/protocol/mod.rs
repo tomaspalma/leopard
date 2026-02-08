@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use connection::node::{
     NodeSocketTask, NodeSocketTaskMetadata,
-    iroh::{DefaultNodeSocket, DefaultNodeSocketTask, DefaultNodeSocketTaskMetadata},
+    default::{DefaultNodeSocket, DefaultNodeSocketTask, DefaultNodeSocketTaskMetadata},
     port::NodePort,
 };
 use protocol::Protocol;
