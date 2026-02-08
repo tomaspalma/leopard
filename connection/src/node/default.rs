@@ -70,9 +70,23 @@ impl NodeSocket<DefaultNodeSocketTask, DefaultNodeSocketTaskMetadata>
         Ok(())
     }
 
-    async fn send(&self) {}
+    async fn receive(&self) {
+        if let Some(listener) = &self.listener {
+            loop {
+                println!("Waiting for connection");
+                match listener.accept() {
+                    Ok((stream, addr)) => {
+                        println!("New connection from {}", addr);
+                    }
+                    Err(e) => {
+                        eprintln!("Failed to accept connection: {}", e);
+                    }
+                }
+            }
+        }
+    }
 
-    async fn receive(&self) {}
+    async fn send(&self) {}
 
     async fn disconnect(&self) {}
 }

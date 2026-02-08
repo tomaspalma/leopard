@@ -120,7 +120,7 @@ where
                 return Err(NodeInitError::SocketDoesNotExist());
             }
 
-            socket.unwrap().bind().await;
+            socket.unwrap().bind().await?;
         }
 
         Ok(())
