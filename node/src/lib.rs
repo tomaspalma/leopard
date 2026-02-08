@@ -1,6 +1,7 @@
 mod config;
 
 use config::{DefaultNodeConfig, NodeConfig};
+use errors::node::NodeInitError;
 use membership::{Membership, MembershipNeighbor, MembershipNeighbors};
 use protocol::Protocol;
 
@@ -61,12 +62,12 @@ where
         self.protocols.push(protocol);
     }
 
-    pub async fn init(&mut self) -> Result<(), ()> {
+    pub async fn init(&mut self) -> Result<(), NodeInitError> {
         for protocol in self.protocols.iter_mut() {
             protocol.init();
         }
 
-        self.state.init().await;
+        self.state.init().await?;
 
         Ok(())
     }

@@ -1,7 +1,7 @@
 use crate::node::{NodeSocket, NodeSocketTask, NodeSocketTaskMetadata, port::NodePort};
 use async_trait::async_trait;
 
-use std::sync::Arc;
+use std::{net::TcpListener, sync::Arc};
 
 use iroh::{Endpoint, protocol::Router};
 
@@ -41,6 +41,7 @@ impl NodeSocketTask<DefaultNodeSocketTaskMetadata> for DefaultNodeSocketTask {
 pub struct DefaultNodeSocket<T> {
     port: NodePort,
     tasks: Vec<Box<T>>,
+    listener: Option<TcpListener>,
 }
 
 impl DefaultNodeSocket<DefaultNodeSocketTask> {
@@ -48,6 +49,7 @@ impl DefaultNodeSocket<DefaultNodeSocketTask> {
         Self {
             port,
             tasks: vec![],
+            listener: None,
         }
     }
 }
@@ -60,12 +62,12 @@ impl NodeSocket<DefaultNodeSocketTask, DefaultNodeSocketTaskMetadata>
         self.tasks.push(task);
     }
 
-    async fn bind(&self) {
-        let endpoint = Endpoint::bind().await.unwrap();
+    async fn bind(&mut self) -> Result<(), std::io::Error> {
+        let listener = TcpListener::bind(format!("127.0.0.1:{}", self.port.value()))?;
 
-        println!("Port: {}", self.port.value());
+        self.listener = Some(listener);
 
-        let router = Router::builder(endpoint).spawn();
+        Ok(())
     }
 
     async fn send(&self) {}

@@ -15,7 +15,7 @@ members = [
   "state", 
   "connection",
   "membership/src/protocols"
-]
+, "errors"]
 
 [dependencies]
 tokio = { version = "1.48.0", features = ["full"] }
@@ -30,4 +30,5 @@ replication = { path = "./replication" }
 state = { path = "./state" }
 connection = { path = "./connection" }
 membership-protocols = { path = "./membership/src/protocols" }
+thiserror = "2.0.18"
 

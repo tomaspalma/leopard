@@ -1,5 +1,6 @@
 use async_trait::async_trait;
 use dashmap::DashMap;
+use errors::node::NodeInitError;
 
 use std::marker::PhantomData;
 
@@ -39,7 +40,7 @@ where
 
     fn membership(&self) -> Arc<RwLock<N>>;
 
-    async fn init(&self);
+    async fn init(&self) -> Result<(), NodeInitError>;
 }
 
 pub struct DefaultNodeState<T, M, R, N, MN>
@@ -105,7 +106,7 @@ where
         }
     }
 
-    async fn init(&self) {
+    async fn init(&self) -> Result<(), NodeInitError> {
         let keys = self
             .sockets
             .iter()
@@ -113,10 +114,16 @@ where
             .collect::<Vec<NodePort>>();
 
         for key in keys {
-            let socket = self.sockets.get_mut(&key).unwrap();
+            let socket = self.sockets.get_mut(&key);
 
-            socket.bind().await;
+            if let None = socket {
+                return Err(NodeInitError::SocketDoesNotExist());
+            }
+
+            socket.unwrap().bind().await;
         }
+
+        Ok(())
     }
 }
 

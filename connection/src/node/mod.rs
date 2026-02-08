@@ -32,7 +32,7 @@ where
 #[async_trait]
 pub trait NodeSocket<T: NodeSocketTask<M>, M: NodeSocketTaskMetadata> {
     fn add_task(&mut self, port: NodePort, task: Box<T>);
-    async fn bind(&self);
+    async fn bind(&mut self) -> Result<(), std::io::Error>;
     async fn send(&self);
     async fn receive(&self);
     async fn disconnect(&self);
