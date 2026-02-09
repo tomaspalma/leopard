@@ -22,12 +22,11 @@ async fn main() {
 
     let runtime_clone = runtime.clone();
     let task: Box<Task> = Box::new(move || {
-        let value = runtime_clone.clone();
-
+        let runtime_value = runtime_clone.clone();
         Box::pin(async move {
-            let node_state = Arc::new(DefaultNodeState::new());
+            let node_state = Arc::new(DefaultNodeState::new(runtime_value.clone()));
 
-            let mut node = Node::new_with_state(node_state.clone(), value);
+            let mut node = Node::new_with_state(node_state.clone(), runtime_value.clone());
             node.add_protocol(Box::new(HintedHandoffReplicationProtocol::new(
                 node_state.clone(),
                 NodePort::new(9000),

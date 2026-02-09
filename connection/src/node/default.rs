@@ -1,9 +1,9 @@
 use crate::node::{NodeSocket, NodeSocketTask, NodeSocketTaskMetadata, port::NodePort};
+use crate::request::handler::{DefaultRequestHandler, RequestHandler};
 use async_trait::async_trait;
 
+use std::io::Read;
 use std::{net::TcpListener, sync::Arc};
-
-use iroh::{Endpoint, protocol::Router};
 
 pub struct DefaultNodeSocketTask {
     metadata: Arc<DefaultNodeSocketTaskMetadata>,
@@ -42,6 +42,7 @@ pub struct DefaultNodeSocket<T> {
     port: NodePort,
     tasks: Vec<Box<T>>,
     listener: Option<TcpListener>,
+    request_handler: Box<dyn RequestHandler + Send + Sync>,
 }
 
 impl DefaultNodeSocket<DefaultNodeSocketTask> {
@@ -50,6 +51,7 @@ impl DefaultNodeSocket<DefaultNodeSocketTask> {
             port,
             tasks: vec![],
             listener: None,
+            request_handler: Box::new(DefaultRequestHandler::new()),
         }
     }
 }
@@ -76,7 +78,8 @@ impl NodeSocket<DefaultNodeSocketTask, DefaultNodeSocketTaskMetadata>
                 println!("Waiting for connection");
                 match listener.accept() {
                     Ok((stream, addr)) => {
-                        println!("New connection from {}", addr);
+                        println!("enfim");
+                        println!("{:?}", stream.bytes());
                     }
                     Err(e) => {
                         eprintln!("Failed to accept connection: {}", e);

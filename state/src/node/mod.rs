@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use dashmap::DashMap;
 use errors::node::NodeInitError;
+use runtime::Runtime;
 
 use std::marker::PhantomData;
 
@@ -53,6 +54,7 @@ where
 {
     sockets: DashMap<NodePort, Box<dyn NodeSocket<T, M> + Send + Sync>>,
     membership: Arc<RwLock<N>>,
+    runtime: Arc<dyn Runtime + Sync + Send>,
     _marker_r: PhantomData<R>,
     _marker_mn: PhantomData<MN>,
 }
@@ -120,7 +122,7 @@ where
                 return Err(NodeInitError::SocketDoesNotExist());
             }
 
-            socket.unwrap().bind().await?;
+            let listener = socket.unwrap().bind().await?;
         }
 
         Ok(())
@@ -136,10 +138,11 @@ impl
         DefaultMembershipNeighbor,
     >
 {
-    pub fn new() -> Self {
+    pub fn new(runtime: Arc<dyn Runtime + Sync + Send>) -> Self {
         Self {
             sockets: DashMap::new(),
             membership: Arc::new(RwLock::new(DefaultMembership::new())),
+            runtime,
             _marker_r: PhantomData,
             _marker_mn: PhantomData,
         }
