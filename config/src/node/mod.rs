@@ -3,7 +3,7 @@ use membership::{
     DefaultMembershipNeighbor, DefaultMembershipNeighborRepresentation, Membership,
     MembershipNeighbor, MembershipNeighbors,
 };
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 
 pub trait NodeConfig<MN, N>
 where
@@ -28,10 +28,12 @@ impl
     > for DefaultNodeConfig
 {
     fn neighbors(&self) -> Arc<DefaultMembershipNeighborRepresentation<DefaultMembershipNeighbor>> {
-        Arc::new(DefaultMembershipNeighborRepresentation::new(vec![
-            Arc::new(DefaultMembershipNeighbor::new(NodePort::new(9000))),
-            Arc::new(DefaultMembershipNeighbor::new(NodePort::new(9001))),
-            Arc::new(DefaultMembershipNeighbor::new(NodePort::new(9002))),
-        ]))
+        Arc::new(DefaultMembershipNeighborRepresentation::new(Arc::new(
+            RwLock::new(vec![
+                Arc::new(DefaultMembershipNeighbor::new(NodePort::new(9000))),
+                Arc::new(DefaultMembershipNeighbor::new(NodePort::new(9001))),
+                Arc::new(DefaultMembershipNeighbor::new(NodePort::new(9002))),
+            ]),
+        )))
     }
 }

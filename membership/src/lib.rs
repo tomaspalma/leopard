@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 
 use connection::node::port::NodePort;
 
@@ -20,21 +20,21 @@ pub trait MembershipNeighbors<N>
 where
     N: MembershipNeighbor + Send + Sync,
 {
-    fn neighbors(&self) -> Vec<Arc<N>>;
+    fn neighbors(&self) -> Arc<RwLock<Vec<Arc<N>>>>;
 }
 
 pub struct DefaultMembershipNeighborRepresentation<N>
 where
     N: MembershipNeighbor + Send + Sync,
 {
-    neighbors: Vec<Arc<N>>,
+    neighbors: Arc<RwLock<Vec<Arc<N>>>>,
 }
 
 impl<N> DefaultMembershipNeighborRepresentation<N>
 where
     N: MembershipNeighbor + Send + Sync,
 {
-    pub fn new(neighbors: Vec<Arc<N>>) -> Self {
+    pub fn new(neighbors: Arc<RwLock<Vec<Arc<N>>>>) -> Self {
         Self { neighbors }
     }
 }
@@ -42,7 +42,7 @@ where
 impl MembershipNeighbors<DefaultMembershipNeighbor>
     for DefaultMembershipNeighborRepresentation<DefaultMembershipNeighbor>
 {
-    fn neighbors(&self) -> Vec<Arc<DefaultMembershipNeighbor>> {
+    fn neighbors(&self) -> Arc<RwLock<Vec<Arc<DefaultMembershipNeighbor>>>> {
         self.neighbors.clone()
     }
 }
@@ -52,20 +52,26 @@ where
     R: MembershipNeighbors<N>,
     N: MembershipNeighbor + Send + Sync,
 {
-    fn neighbors(&self) -> R;
+    fn neighbors(&self) -> Arc<R>;
     fn add_neighbor(&self, neighbor: Arc<N>);
-    fn add_multiple_neighbors(&self, neighbors: Arc<R>) {
-        for neighbor in neighbors.neighbors() {
-            self.add_neighbor(neighbor);
+    fn add_multiple_neighbors(&self, new_neighbors: Vec<Arc<N>>) {
+        for i in 0..new_neighbors.len() {
+            self.add_neighbor(new_neighbors[i].clone());
         }
     }
 }
 
-pub struct DefaultMembership {}
+pub struct DefaultMembership {
+    neighbors: Arc<DefaultMembershipNeighborRepresentation<DefaultMembershipNeighbor>>,
+}
 
 impl DefaultMembership {
     pub fn new() -> Self {
-        Self {}
+        Self {
+            neighbors: Arc::new(DefaultMembershipNeighborRepresentation::new(Arc::new(
+                RwLock::new(Vec::new()),
+            ))),
+        }
     }
 }
 
@@ -75,12 +81,11 @@ impl
         DefaultMembershipNeighbor,
     > for DefaultMembership
 {
-    fn neighbors(&self) -> DefaultMembershipNeighborRepresentation<DefaultMembershipNeighbor> {
-        DefaultMembershipNeighborRepresentation { neighbors: vec![] }
+    fn neighbors(&self) -> Arc<DefaultMembershipNeighborRepresentation<DefaultMembershipNeighbor>> {
+        self.neighbors.clone()
     }
 
     fn add_neighbor(&self, neighbor: Arc<DefaultMembershipNeighbor>) {
-        println!("fds meu: {}", self.neighbors().neighbors().len());
-        self.neighbors().neighbors().push(neighbor);
+        self.neighbors().neighbors().write().unwrap().push(neighbor);
     }
 }

@@ -115,12 +115,7 @@ where
         self.membership
             .write()
             .unwrap()
-            .add_multiple_neighbors(self.config.neighbors());
-
-        println!(
-            "Config neighbors: {}",
-            self.config.neighbors().neighbors().len()
-        );
+            .add_multiple_neighbors(self.config.neighbors().neighbors().read().unwrap().clone());
 
         println!(
             "Neighbors length: {}",
@@ -129,6 +124,8 @@ where
                 .unwrap()
                 .neighbors()
                 .neighbors()
+                .read()
+                .unwrap()
                 .len()
         );
 
