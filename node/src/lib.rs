@@ -38,9 +38,13 @@ where
     R: MembershipNeighbors,
     MN: MembershipNeighbor,
 {
-    pub fn new(runtime: Arc<dyn Runtime + Send + Sync>, state: Box<dyn Fn() -> S>) -> Self {
+    pub fn new(
+        runtime: Arc<dyn Runtime + Send + Sync>,
+        state: Box<dyn Fn() -> S>,
+        config: Box<dyn NodeConfig + Send + Sync>,
+    ) -> Self {
         Self {
-            config: Box::new(DefaultNodeConfig {}),
+            config,
             protocols: vec![],
             state: Arc::new(state()),
             runtime,

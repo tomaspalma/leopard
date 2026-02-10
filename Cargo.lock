@@ -1639,6 +1639,9 @@ dependencies = [
 [[package]]
 name = "membership"
 version = "0.1.0"
+dependencies = [
+ "connection",
+]
 
 [[package]]
 name = "membership-protocols"

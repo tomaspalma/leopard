@@ -1,8 +1,18 @@
 use std::sync::Arc;
 
+use connection::node::port::NodePort;
+
 pub trait MembershipNeighbor {}
 
-pub struct DefaultMembershipNeighbor {}
+pub struct DefaultMembershipNeighbor {
+    port: NodePort,
+}
+
+impl DefaultMembershipNeighbor {
+    pub fn new(port: NodePort) -> Self {
+        Self { port }
+    }
+}
 
 impl MembershipNeighbor for DefaultMembershipNeighbor {}
 
@@ -12,6 +22,12 @@ pub trait MembershipNeighbors {
 
 pub struct DefaultMembershipNeighborRepresentation {
     neighbors: Vec<Arc<dyn MembershipNeighbor + Send + Sync>>,
+}
+
+impl DefaultMembershipNeighborRepresentation {
+    pub fn new(neighbors: Vec<Arc<dyn MembershipNeighbor + Send + Sync>>) -> Self {
+        Self { neighbors }
+    }
 }
 
 impl MembershipNeighbors for DefaultMembershipNeighborRepresentation {

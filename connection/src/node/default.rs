@@ -1,5 +1,5 @@
 use crate::node::{NodeSocket, NodeSocketTask, NodeSocketTaskMetadata, port::NodePort};
-use crate::request::handler::{DefaultRequestHandler, RequestHandler};
+use crate::request::handler::{RequestHandler, default::DefaultRequestHandler};
 use async_trait::async_trait;
 
 use std::io::Read;
@@ -68,6 +68,8 @@ impl NodeSocket<DefaultNodeSocketTask, DefaultNodeSocketTaskMetadata>
         let listener = TcpListener::bind(format!("127.0.0.1:{}", self.port.value()))?;
 
         self.listener = Some(listener);
+
+        self.receive().await;
 
         Ok(())
     }
