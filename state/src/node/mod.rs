@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use config::node::NodeConfig;
 use dashmap::DashMap;
 use errors::node::NodeInitError;
 use runtime::Runtime;
@@ -23,8 +24,8 @@ where
     T: NodeSocketTask<M>,
     M: NodeSocketTaskMetadata,
     N: Membership<R, MN>,
-    R: MembershipNeighbors,
-    MN: MembershipNeighbor,
+    R: MembershipNeighbors<MN>,
+    MN: MembershipNeighbor + Send + Sync,
 {
     fn add_socket(
         &self,
@@ -49,11 +50,12 @@ where
     T: NodeSocketTask<M>,
     M: NodeSocketTaskMetadata,
     N: Membership<R, MN> + Send + Sync,
-    R: MembershipNeighbors + Send + Sync,
+    R: MembershipNeighbors<MN> + Send + Sync,
     MN: MembershipNeighbor + Send + Sync,
 {
     sockets: DashMap<NodePort, Box<dyn NodeSocket<T, M> + Send + Sync>>,
     membership: Arc<RwLock<N>>,
+    config: Arc<dyn NodeConfig<R, MN> + Send + Sync>,
     runtime: Arc<dyn Runtime + Sync + Send>,
     _marker_r: PhantomData<R>,
     _marker_mn: PhantomData<MN>,
@@ -65,7 +67,7 @@ where
     T: NodeSocketTask<M>,
     M: NodeSocketTaskMetadata + Send + Sync,
     N: Membership<R, MN> + Send + Sync,
-    R: MembershipNeighbors + Send + Sync,
+    R: MembershipNeighbors<MN> + Send + Sync,
     MN: MembershipNeighbor + Send + Sync,
 {
     fn add_socket(
@@ -109,6 +111,27 @@ where
     }
 
     async fn init(&self) -> Result<(), NodeInitError> {
+        println!("Initializing node state");
+        self.membership
+            .write()
+            .unwrap()
+            .add_multiple_neighbors(self.config.neighbors());
+
+        println!(
+            "Config neighbors: {}",
+            self.config.neighbors().neighbors().len()
+        );
+
+        println!(
+            "Neighbors length: {}",
+            self.membership
+                .read()
+                .unwrap()
+                .neighbors()
+                .neighbors()
+                .len()
+        );
+
         let keys = self
             .sockets
             .iter()
@@ -133,15 +156,25 @@ impl
     DefaultNodeState<
         DefaultNodeSocketTask,
         DefaultNodeSocketTaskMetadata,
-        DefaultMembershipNeighborRepresentation,
+        DefaultMembershipNeighborRepresentation<DefaultMembershipNeighbor>,
         DefaultMembership,
         DefaultMembershipNeighbor,
     >
 {
-    pub fn new(runtime: Arc<dyn Runtime + Sync + Send>) -> Self {
+    pub fn new(
+        runtime: Arc<dyn Runtime + Sync + Send>,
+        config: Arc<
+            dyn NodeConfig<
+                    DefaultMembershipNeighborRepresentation<DefaultMembershipNeighbor>,
+                    DefaultMembershipNeighbor,
+                > + Send
+                + Sync,
+        >,
+    ) -> Self {
         Self {
             sockets: DashMap::new(),
             membership: Arc::new(RwLock::new(DefaultMembership::new())),
+            config,
             runtime,
             _marker_r: PhantomData,
             _marker_mn: PhantomData,

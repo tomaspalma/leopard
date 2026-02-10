@@ -1,6 +1,4 @@
-mod config;
-
-use config::{DefaultNodeConfig, NodeConfig};
+use config::node::NodeConfig;
 use errors::node::NodeInitError;
 use membership::{Membership, MembershipNeighbor, MembershipNeighbors};
 use protocol::Protocol;
@@ -19,11 +17,11 @@ where
     S: NodeState<T, M, N, R, MN>,
     M: NodeSocketTaskMetadata,
     N: Membership<R, MN>,
-    R: MembershipNeighbors,
-    MN: MembershipNeighbor,
+    R: MembershipNeighbors<MN>,
+    MN: MembershipNeighbor + Send + Sync,
 {
     runtime: Arc<dyn Runtime + Send + Sync>,
-    config: Box<dyn NodeConfig + Send + Sync>,
+    config: Arc<dyn NodeConfig<R, MN> + Send + Sync>,
     state: Arc<S>,
     protocols: Vec<Box<dyn Protocol<S, T, M, R, N, MN> + Send + Sync>>,
     _marker: PhantomData<T>,
@@ -35,26 +33,16 @@ where
     S: NodeState<T, M, N, R, MN>,
     M: NodeSocketTaskMetadata,
     N: Membership<R, MN>,
-    R: MembershipNeighbors,
-    MN: MembershipNeighbor,
+    R: MembershipNeighbors<MN>,
+    MN: MembershipNeighbor + Send + Sync,
 {
     pub fn new(
         runtime: Arc<dyn Runtime + Send + Sync>,
-        state: Box<dyn Fn() -> S>,
-        config: Box<dyn NodeConfig + Send + Sync>,
+        state: Arc<S>,
+        config: Arc<dyn NodeConfig<R, MN> + Send + Sync>,
     ) -> Self {
         Self {
             config,
-            protocols: vec![],
-            state: Arc::new(state()),
-            runtime,
-            _marker: PhantomData,
-        }
-    }
-
-    pub fn new_with_state(state: Arc<S>, runtime: Arc<dyn Runtime + Sync + Send>) -> Self {
-        Self {
-            config: Box::new(DefaultNodeConfig {}),
             protocols: vec![],
             state,
             runtime,

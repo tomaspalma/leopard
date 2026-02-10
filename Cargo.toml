@@ -23,6 +23,7 @@ log = "0.4.29"
 dashmap = "6.1.0"
 tracing = "0.1"
 tracing-subscriber = "0.3"
+thiserror = "2.0.18"
 
 runtime = { path = "./runtime" }
 node = { path = "./node" }
@@ -30,5 +31,4 @@ replication = { path = "./replication" }
 state = { path = "./state" }
 connection = { path = "./connection" }
 membership-protocols = { path = "./membership/src/protocols" }
-thiserror = "2.0.18"
-
+config = { path = "./config" }

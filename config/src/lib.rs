@@ -1,3 +1,1 @@
-trait Config {
-
-}
+pub mod node;

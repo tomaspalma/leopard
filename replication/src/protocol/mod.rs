@@ -29,7 +29,7 @@ impl
         DefaultNodeState<
             DefaultNodeSocketTask,
             DefaultNodeSocketTaskMetadata,
-            DefaultMembershipNeighborRepresentation,
+            DefaultMembershipNeighborRepresentation<DefaultMembershipNeighbor>,
             DefaultMembership,
             DefaultMembershipNeighbor,
         >,
@@ -41,7 +41,7 @@ impl
             DefaultNodeState<
                 DefaultNodeSocketTask,
                 DefaultNodeSocketTaskMetadata,
-                DefaultMembershipNeighborRepresentation,
+                DefaultMembershipNeighborRepresentation<DefaultMembershipNeighbor>,
                 DefaultMembership,
                 DefaultMembershipNeighbor,
             >,
@@ -79,13 +79,13 @@ impl
         DefaultNodeState<
             DefaultNodeSocketTask,
             DefaultNodeSocketTaskMetadata,
-            DefaultMembershipNeighborRepresentation,
+            DefaultMembershipNeighborRepresentation<DefaultMembershipNeighbor>,
             DefaultMembership,
             DefaultMembershipNeighbor,
         >,
         DefaultNodeSocketTask,
         DefaultNodeSocketTaskMetadata,
-        DefaultMembershipNeighborRepresentation,
+        DefaultMembershipNeighborRepresentation<DefaultMembershipNeighbor>,
         DefaultMembership,
         DefaultMembershipNeighbor,
     >
@@ -93,7 +93,7 @@ impl
         DefaultNodeState<
             DefaultNodeSocketTask,
             DefaultNodeSocketTaskMetadata,
-            DefaultMembershipNeighborRepresentation,
+            DefaultMembershipNeighborRepresentation<DefaultMembershipNeighbor>,
             DefaultMembership,
             DefaultMembershipNeighbor,
         >,

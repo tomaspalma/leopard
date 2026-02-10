@@ -7,9 +7,9 @@ where
     S: NodeState<T, M, N, R, MN>,
     T: NodeSocketTask<M>,
     M: NodeSocketTaskMetadata,
-    R: MembershipNeighbors,
+    R: MembershipNeighbors<MN>,
     N: Membership<R, MN>,
-    MN: MembershipNeighbor,
+    MN: MembershipNeighbor + Send + Sync,
 {
     fn init(&mut self);
 }

@@ -14,3 +14,4 @@ state = { path = "../state/" }
 connection = { path = "../connection/" }
 membership = { path = "../membership/" }
 errors = { path = "../errors/" }
+config = { path = "../config/" }

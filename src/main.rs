@@ -1,10 +1,10 @@
+use connection::node::port::NodePort;
 use membership_protocols::DefaultMembershipProtocol;
 use replication::protocol::HintedHandoffReplicationProtocol;
 use runtime::{Runtime, Task, TokioRuntime};
-
-use connection::node::port::NodePort;
 use state::node::DefaultNodeState;
 
+use config::node::DefaultNodeConfig;
 use node::Node;
 
 use tracing::info;
@@ -24,9 +24,10 @@ async fn main() {
     let task: Box<Task> = Box::new(move || {
         let runtime_value = runtime_clone.clone();
         Box::pin(async move {
-            let node_state = Arc::new(DefaultNodeState::new(runtime_value.clone()));
+            let config = Arc::new(DefaultNodeConfig::new());
+            let node_state = Arc::new(DefaultNodeState::new(runtime_value.clone(), config.clone()));
 
-            let mut node = Node::new_with_state(node_state.clone(), runtime_value.clone());
+            let mut node = Node::new(runtime_value.clone(), node_state.clone(), config.clone());
             node.add_protocol(Box::new(HintedHandoffReplicationProtocol::new(
                 node_state.clone(),
                 NodePort::new(9000),
