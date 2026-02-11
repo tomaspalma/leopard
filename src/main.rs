@@ -1,3 +1,4 @@
+use connection::node::id::DefaultNodeIdentifier;
 use connection::node::port::NodePort;
 use membership_protocols::DefaultMembershipProtocol;
 use replication::protocol::HintedHandoffReplicationProtocol;
@@ -27,7 +28,12 @@ async fn main() {
             let config = Arc::new(DefaultNodeConfig::new());
             let node_state = Arc::new(DefaultNodeState::new(runtime_value.clone(), config.clone()));
 
-            let mut node = Node::new(runtime_value.clone(), node_state.clone(), config.clone());
+            let mut node = Node::new(
+                runtime_value.clone(),
+                node_state.clone(),
+                config.clone(),
+                Box::new(DefaultNodeIdentifier::new(NodePort::new(9000))),
+            );
             node.add_protocol(Box::new(HintedHandoffReplicationProtocol::new(
                 node_state.clone(),
                 NodePort::new(9000),
