@@ -1,16 +1,18 @@
 use std::sync::{Arc, RwLock};
 
-use connection::node::port::NodePort;
+use connection::node::{id::NodeIdentifier, port::NodePort};
 
 pub trait MembershipNeighbor {}
 
 pub struct DefaultMembershipNeighbor {
-    port: NodePort,
+    identifier: Box<dyn NodeIdentifier<NodePort, u16> + Send + Sync>,
 }
 
 impl DefaultMembershipNeighbor {
     pub fn new(port: NodePort) -> Self {
-        Self { port }
+        Self {
+            identifier: Box::new(connection::node::id::DefaultNodeIdentifier::new(port)),
+        }
     }
 }
 
