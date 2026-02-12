@@ -45,6 +45,8 @@ where
 
     fn membership(&self) -> Arc<RwLock<N>>;
 
+    fn init_neighbors(&self);
+
     async fn init(&self) -> Result<(), NodeInitError>;
 }
 
@@ -119,24 +121,15 @@ where
         }
     }
 
-    async fn init(&self) -> Result<(), NodeInitError> {
-        println!("Initializing node state");
+    fn init_neighbors(&self) {
         self.membership
             .write()
             .unwrap()
             .add_multiple_neighbors(self.config.neighbors().neighbors().read().unwrap().clone());
+    }
 
-        println!(
-            "Neighbors length: {}",
-            self.membership
-                .read()
-                .unwrap()
-                .neighbors()
-                .neighbors()
-                .read()
-                .unwrap()
-                .len()
-        );
+    async fn init(&self) -> Result<(), NodeInitError> {
+        self.init_neighbors();
 
         let keys = self
             .sockets
