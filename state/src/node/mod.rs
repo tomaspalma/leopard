@@ -11,7 +11,8 @@ use std::sync::{Arc, RwLock};
 use connection::node::{
     NodeSocket, NodeSocketTask, NodeSocketTaskMetadata,
     default::{DefaultNodeSocketTask, DefaultNodeSocketTaskMetadata},
-    port::NodePort,
+    id::{DefaultNodeIdentifier, NodeIdentifier},
+    port::{ConnectionInfo, NodePort},
 };
 use membership::{
     DefaultMembership, DefaultMembershipNeighbor, DefaultMembershipNeighborRepresentation,
@@ -19,13 +20,15 @@ use membership::{
 };
 
 #[async_trait]
-pub trait NodeState<T, M, N, R, MN>
+pub trait NodeState<T, M, N, R, MN, CI, CV>
 where
     T: NodeSocketTask<M>,
     M: NodeSocketTaskMetadata,
     N: Membership<R, MN>,
     R: MembershipNeighbors<MN>,
     MN: MembershipNeighbor + Send + Sync,
+    CI: ConnectionInfo<CV>,
+    CV: Sized,
 {
     fn add_socket(
         &self,
@@ -45,30 +48,36 @@ where
     async fn init(&self) -> Result<(), NodeInitError>;
 }
 
-pub struct DefaultNodeState<T, M, R, N, MN>
+pub struct DefaultNodeState<T, M, R, N, MN, CI, CV>
 where
     T: NodeSocketTask<M>,
     M: NodeSocketTaskMetadata,
     N: Membership<R, MN> + Send + Sync,
     R: MembershipNeighbors<MN> + Send + Sync,
     MN: MembershipNeighbor + Send + Sync,
+    CI: ConnectionInfo<CV> + Send + Sync,
+    CV: Sized,
 {
     sockets: DashMap<NodePort, Box<dyn NodeSocket<T, M> + Send + Sync>>,
     membership: Arc<RwLock<N>>,
     config: Arc<dyn NodeConfig<R, MN> + Send + Sync>,
     runtime: Arc<dyn Runtime + Sync + Send>,
+    identifier: Box<dyn NodeIdentifier<CI, CV> + Send + Sync>,
     _marker_r: PhantomData<R>,
     _marker_mn: PhantomData<MN>,
 }
 
 #[async_trait]
-impl<T, M, R, N, MN> NodeState<T, M, N, R, MN> for DefaultNodeState<T, M, R, N, MN>
+impl<T, M, R, N, MN, CI, CV> NodeState<T, M, N, R, MN, CI, CV>
+    for DefaultNodeState<T, M, R, N, MN, CI, CV>
 where
     T: NodeSocketTask<M>,
     M: NodeSocketTaskMetadata + Send + Sync,
     N: Membership<R, MN> + Send + Sync,
     R: MembershipNeighbors<MN> + Send + Sync,
     MN: MembershipNeighbor + Send + Sync,
+    CI: ConnectionInfo<CV> + Send + Sync,
+    CV: Sized,
 {
     fn add_socket(
         &self,
@@ -156,6 +165,8 @@ impl
         DefaultMembershipNeighborRepresentation<DefaultMembershipNeighbor>,
         DefaultMembership,
         DefaultMembershipNeighbor,
+        NodePort,
+        u16,
     >
 {
     pub fn new(
@@ -167,12 +178,14 @@ impl
                 > + Send
                 + Sync,
         >,
+        identifier: Box<dyn NodeIdentifier<NodePort, u16> + Send + Sync>,
     ) -> Self {
         Self {
             sockets: DashMap::new(),
             membership: Arc::new(RwLock::new(DefaultMembership::new())),
             config,
             runtime,
+            identifier,
             _marker_r: PhantomData,
             _marker_mn: PhantomData,
         }

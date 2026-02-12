@@ -32,6 +32,8 @@ impl
             DefaultMembershipNeighborRepresentation<DefaultMembershipNeighbor>,
             DefaultMembership,
             DefaultMembershipNeighbor,
+            NodePort,
+            u16,
         >,
         DefaultNodeSocketTask,
     >
@@ -44,6 +46,8 @@ impl
                 DefaultMembershipNeighborRepresentation<DefaultMembershipNeighbor>,
                 DefaultMembership,
                 DefaultMembershipNeighbor,
+                NodePort,
+                u16,
             >,
         >,
         port: NodePort,
@@ -82,12 +86,16 @@ impl
             DefaultMembershipNeighborRepresentation<DefaultMembershipNeighbor>,
             DefaultMembership,
             DefaultMembershipNeighbor,
+            NodePort,
+            u16,
         >,
         DefaultNodeSocketTask,
         DefaultNodeSocketTaskMetadata,
         DefaultMembershipNeighborRepresentation<DefaultMembershipNeighbor>,
         DefaultMembership,
         DefaultMembershipNeighbor,
+        NodePort,
+        u16,
     >
     for HintedHandoffReplicationProtocol<
         DefaultNodeState<
@@ -96,6 +104,8 @@ impl
             DefaultMembershipNeighborRepresentation<DefaultMembershipNeighbor>,
             DefaultMembership,
             DefaultMembershipNeighbor,
+            NodePort,
+            u16,
         >,
         DefaultNodeSocketTask,
     >

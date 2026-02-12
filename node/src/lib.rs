@@ -16,7 +16,7 @@ use std::sync::Arc;
 pub struct Node<T, S, M, R, N, MN, CI, CV>
 where
     T: NodeSocketTask<M>,
-    S: NodeState<T, M, N, R, MN>,
+    S: NodeState<T, M, N, R, MN, CI, CV>,
     M: NodeSocketTaskMetadata,
     N: Membership<R, MN>,
     R: MembershipNeighbors<MN>,
@@ -28,14 +28,14 @@ where
     runtime: Arc<dyn Runtime + Send + Sync>,
     config: Arc<dyn NodeConfig<R, MN> + Send + Sync>,
     state: Arc<S>,
-    protocols: Vec<Box<dyn Protocol<S, T, M, R, N, MN> + Send + Sync>>,
+    protocols: Vec<Box<dyn Protocol<S, T, M, R, N, MN, CI, CV> + Send + Sync>>,
     _marker: PhantomData<T>,
 }
 
 impl<T, S, M, R, N, MN, CI, CV> Node<T, S, M, R, N, MN, CI, CV>
 where
     T: NodeSocketTask<M>,
-    S: NodeState<T, M, N, R, MN>,
+    S: NodeState<T, M, N, R, MN, CI, CV>,
     M: NodeSocketTaskMetadata,
     N: Membership<R, MN>,
     R: MembershipNeighbors<MN>,
@@ -59,7 +59,10 @@ where
         }
     }
 
-    pub fn add_protocol(&mut self, protocol: Box<dyn Protocol<S, T, M, R, N, MN> + Send + Sync>) {
+    pub fn add_protocol(
+        &mut self,
+        protocol: Box<dyn Protocol<S, T, M, R, N, MN, CI, CV> + Send + Sync>,
+    ) {
         self.protocols.push(protocol);
     }
 
