@@ -1,9 +1,13 @@
+use async_trait::async_trait;
+
+#[async_trait]
 pub trait PeriodTimeUnit {
-    fn tick(&self) -> ();
+    async fn tick(&self) -> ();
 }
 
 pub struct TokioPeriodTimeUnit {}
 
+#[async_trait]
 impl PeriodTimeUnit for TokioPeriodTimeUnit {
-    fn tick(&self) {}
+    async fn tick(&self) {}
 }

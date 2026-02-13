@@ -10,3 +10,4 @@ state = { path = "../state" }
 membership = { path = "../membership" }
 log = "0.4.29"
 tracing = "0.1"
+async-trait = "0.1.83"

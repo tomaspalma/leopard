@@ -1,6 +1,7 @@
 use crate::node::{NodeSocket, NodeSocketTask, NodeSocketTaskMetadata, port::NodePort};
 use crate::request::handler::{RequestHandler, default::DefaultRequestHandler};
 use async_trait::async_trait;
+use runtime::time::PeriodTimeUnit;
 
 use std::io::Read;
 use std::{net::TcpListener, sync::Arc};
@@ -28,8 +29,9 @@ impl DefaultNodeSocketTaskMetadata {
     }
 }
 
+#[async_trait]
 impl NodeSocketTask<DefaultNodeSocketTaskMetadata> for DefaultNodeSocketTask {
-    fn run(&self) {
+    async fn run(&self) {
         println!("Running task");
     }
 
@@ -62,6 +64,14 @@ impl NodeSocket<DefaultNodeSocketTask, DefaultNodeSocketTaskMetadata>
 {
     fn add_task(&mut self, port: NodePort, task: Box<DefaultNodeSocketTask>) {
         self.tasks.push(task);
+    }
+
+    fn add_periodic_task(
+        &mut self,
+        port: NodePort,
+        task: Box<DefaultNodeSocketTask>,
+        interval: Arc<dyn PeriodTimeUnit>,
+    ) {
     }
 
     async fn bind(&mut self) -> Result<(), std::io::Error> {

@@ -2355,6 +2355,7 @@ checksum = "7a2d987857b319362043e95f5353c0535c1f58eec5336fdfcf626430af7def58"
 name = "replication"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "connection",
  "log",
  "membership",
@@ -2447,6 +2448,7 @@ dependencies = [
 name = "runtime"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "tokio",
 ]
 

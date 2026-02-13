@@ -1,3 +1,4 @@
+use async_trait::async_trait;
 use log::trace;
 use membership::{
     DefaultMembership, DefaultMembershipNeighbor, DefaultMembershipNeighborRepresentation,
@@ -66,10 +67,11 @@ pub struct HintedHandoffReplicationProtocolTaskMetadata {}
 
 impl NodeSocketTaskMetadata for HintedHandoffReplicationProtocolTaskMetadata {}
 
+#[async_trait]
 impl NodeSocketTask<HintedHandoffReplicationProtocolTaskMetadata>
     for HintedHandoffReplicationProtocolTask
 {
-    fn run(&self) {
+    async fn run(&self) {
         trace!("Running HintedHandoffReplicationProtocolTask");
     }
 
