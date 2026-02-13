@@ -30,7 +30,7 @@ async fn main() {
             let node_state = Arc::new(DefaultNodeState::new(
                 runtime_value.clone(),
                 config.clone(),
-                Box::new(node1_id),
+                Arc::new(node1_id),
             ));
 
             let mut node = Node::new(

@@ -18,6 +18,7 @@ use membership::{
     DefaultMembership, DefaultMembershipNeighbor, DefaultMembershipNeighborRepresentation,
     Membership, MembershipNeighbor, MembershipNeighbors,
 };
+use taints::NodePortTaint;
 
 #[async_trait]
 pub trait NodeState<T, M, N, R, MN, CI, CV>
@@ -43,6 +44,8 @@ where
         socket_constructor: Box<dyn Fn(NodePort) -> Box<dyn NodeSocket<T, M> + Send + Sync>>,
     );
 
+    fn node_identifier(&self) -> Arc<dyn NodeIdentifier<CI, CV> + Send + Sync>;
+
     fn membership(&self) -> Arc<RwLock<N>>;
 
     fn init_neighbors(&self);
@@ -64,22 +67,20 @@ where
     membership: Arc<RwLock<N>>,
     config: Arc<dyn NodeConfig<R, MN> + Send + Sync>,
     runtime: Arc<dyn Runtime + Sync + Send>,
-    identifier: Box<dyn NodeIdentifier<CI, CV> + Send + Sync>,
+    identifier: Arc<dyn NodeIdentifier<CI, CV> + Send + Sync>,
     _marker_r: PhantomData<R>,
     _marker_mn: PhantomData<MN>,
 }
 
 #[async_trait]
-impl<T, M, R, N, MN, CI, CV> NodeState<T, M, N, R, MN, CI, CV>
-    for DefaultNodeState<T, M, R, N, MN, CI, CV>
+impl<T, M, R, N, MN> NodeState<T, M, N, R, MN, NodePort, u16>
+    for DefaultNodeState<T, M, R, N, MN, NodePort, u16>
 where
     T: NodeSocketTask<M>,
     M: NodeSocketTaskMetadata + Send + Sync,
     N: Membership<R, MN> + Send + Sync,
     R: MembershipNeighbors<MN> + Send + Sync,
     MN: MembershipNeighbor + Send + Sync,
-    CI: ConnectionInfo<CV> + Send + Sync,
-    CV: Sized,
 {
     fn add_socket(
         &self,
@@ -90,6 +91,10 @@ where
             Some(_) => Ok(()),
             _ => Err(format!("Socket with port {} already exists", port.value())),
         }
+    }
+
+    fn node_identifier(&self) -> Arc<dyn NodeIdentifier<NodePort, u16> + Send + Sync> {
+        self.identifier.clone()
     }
 
     fn membership(&self) -> Arc<RwLock<N>> {
@@ -122,10 +127,23 @@ where
     }
 
     fn init_neighbors(&self) {
-        self.membership
-            .write()
-            .unwrap()
-            .add_multiple_neighbors(self.config.neighbors().neighbors().read().unwrap().clone());
+        let neighbors = self.config.neighbors().neighbors().read().unwrap().clone();
+
+        for i in 0..neighbors.len() {
+            let mut n = neighbors[i].write().unwrap();
+
+            let neighbor_info = self.node_identifier().connection_info();
+
+            n.add_taint(Box::new(NodePortTaint::new(
+                self.node_identifier().connection_info(),
+                neighbor_info,
+            )));
+
+            self.membership
+                .write()
+                .unwrap()
+                .add_neighbor(neighbors[i].clone());
+        }
     }
 
     async fn init(&self) -> Result<(), NodeInitError> {
@@ -171,7 +189,7 @@ impl
                 > + Send
                 + Sync,
         >,
-        identifier: Box<dyn NodeIdentifier<NodePort, u16> + Send + Sync>,
+        identifier: Arc<dyn NodeIdentifier<NodePort, u16> + Send + Sync>,
     ) -> Self {
         Self {
             sockets: DashMap::new(),

@@ -11,3 +11,4 @@ membership = { path = "../membership" }
 config = { path = "../config" }
 runtime = { path = "../runtime" }
 errors = { path = "../errors" }
+taints = { path = "../taints" }

@@ -5,7 +5,7 @@ pub trait NodeIdentifier<T, V>
 where
     T: ConnectionInfo<V>,
 {
-    fn connection_info(&self) -> V;
+    fn connection_info(&self) -> T;
 }
 
 pub struct DefaultNodeIdentifier {
@@ -19,7 +19,7 @@ impl DefaultNodeIdentifier {
 }
 
 impl NodeIdentifier<NodePort, u16> for DefaultNodeIdentifier {
-    fn connection_info(&self) -> u16 {
-        self.port.value()
+    fn connection_info(&self) -> NodePort {
+        self.port.clone()
     }
 }
