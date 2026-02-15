@@ -33,14 +33,15 @@ where
 }
 
 #[async_trait]
-pub trait NodeSocket<T: NodeSocketTask<M>, M: NodeSocketTaskMetadata> {
+pub trait NodeSocket<T, PT, PTU, M>
+where
+    T: NodeSocketTask<M>,
+    PT: PeriodicNodeSocketTask<PTU>,
+    M: NodeSocketTaskMetadata,
+    PTU: PeriodTimeUnit + Send + Sync,
+{
     fn add_task(&mut self, port: NodePort, task: Box<T>);
-    fn add_periodic_task(
-        &mut self,
-        port: NodePort,
-        task: Box<T>,
-        interval: Arc<dyn PeriodTimeUnit>,
-    );
+    async fn add_periodic_task(&mut self, port: NodePort, task: Arc<PT>, interval: Arc<PTU>);
     async fn bind(&mut self) -> Result<(), std::io::Error>;
     async fn send(&self);
     async fn receive(&self);

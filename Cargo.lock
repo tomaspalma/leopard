@@ -1652,9 +1652,11 @@ dependencies = [
 name = "membership-protocols"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "connection",
  "membership",
  "protocol",
+ "runtime",
  "state",
 ]
 
@@ -2187,8 +2189,10 @@ dependencies = [
 name = "protocol"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "connection",
  "membership",
+ "runtime",
  "state",
 ]
 
@@ -2360,6 +2364,7 @@ dependencies = [
  "log",
  "membership",
  "protocol",
+ "runtime",
  "state",
  "tracing",
 ]

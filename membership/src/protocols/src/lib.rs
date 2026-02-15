@@ -1,13 +1,18 @@
-use connection::node::default::{DefaultNodeSocketTask, DefaultNodeSocketTaskMetadata};
+use async_trait::async_trait;
+use connection::node::default::{
+    DefaultNodeSocketTask, DefaultNodeSocketTaskMetadata, PeriodicDefaultNodeSocketTask,
+};
 use connection::node::port::NodePort;
 use membership::{
     DefaultMembership, DefaultMembershipNeighbor, DefaultMembershipNeighborRepresentation,
 };
 use protocol::Protocol;
+use runtime::time::TokioPeriodTimeUnit;
 use state::node::DefaultNodeState;
 
 pub struct DefaultMembershipProtocol {}
 
+#[async_trait]
 impl
     Protocol<
         DefaultNodeState<
@@ -26,9 +31,11 @@ impl
         DefaultMembershipNeighbor,
         NodePort,
         u16,
+        TokioPeriodTimeUnit,
+        PeriodicDefaultNodeSocketTask,
     > for DefaultMembershipProtocol
 {
-    fn init(&mut self) {}
+    async fn init(&mut self) {}
 }
 
 impl DefaultMembershipProtocol {

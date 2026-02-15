@@ -2,16 +2,19 @@ use async_trait::async_trait;
 use config::node::NodeConfig;
 use dashmap::DashMap;
 use errors::node::NodeInitError;
-use runtime::Runtime;
+use runtime::time::TokioPeriodTimeUnit;
+use runtime::{Runtime, TokioRuntime, time::PeriodTimeUnit};
 
 use std::marker::PhantomData;
 
 use std::sync::{Arc, RwLock};
 
 use connection::node::{
-    NodeSocket, NodeSocketTask, NodeSocketTaskMetadata,
-    default::{DefaultNodeSocketTask, DefaultNodeSocketTaskMetadata},
-    id::{DefaultNodeIdentifier, NodeIdentifier},
+    NodeSocket, NodeSocketTask, NodeSocketTaskMetadata, PeriodicNodeSocketTask,
+    default::{
+        DefaultNodeSocketTask, DefaultNodeSocketTaskMetadata, PeriodicDefaultNodeSocketTask,
+    },
+    id::NodeIdentifier,
     port::{ConnectionInfo, NodePort},
 };
 use membership::{
@@ -21,7 +24,7 @@ use membership::{
 use taints::NodePortTaint;
 
 #[async_trait]
-pub trait NodeState<T, M, N, R, MN, CI, CV>
+pub trait NodeState<T, M, N, R, MN, CI, CV, PTU, PT>
 where
     T: NodeSocketTask<M>,
     M: NodeSocketTaskMetadata,
@@ -30,19 +33,35 @@ where
     MN: MembershipNeighbor + Send + Sync,
     CI: ConnectionInfo<CV>,
     CV: Sized,
+    PTU: PeriodTimeUnit + Send + Sync,
+    PT: PeriodicNodeSocketTask<PTU>,
 {
     fn add_socket(
         &self,
         port: NodePort,
-        socket: Box<dyn NodeSocket<T, M> + Send + Sync>,
+        socket: Box<dyn NodeSocket<T, PeriodicDefaultNodeSocketTask, PTU, M> + Send + Sync>,
     ) -> Result<(), String>;
-    fn add_socket_task(&self, port: NodePort, task: Box<T>) -> Result<(), String>;
+    async fn add_periodic_socket_task(
+        &self,
+        port: NodePort,
+        task: Arc<PT>,
+        interval: Arc<PTU>,
+    ) -> Result<(), String>;
     fn add_socket_task_and_create(
         &self,
         port: NodePort,
         task: Box<T>,
-        socket_constructor: Box<dyn Fn(NodePort) -> Box<dyn NodeSocket<T, M> + Send + Sync>>,
-    );
+        socket_constructor: Box<
+            dyn Fn(
+                NodePort,
+            )
+                -> Box<dyn NodeSocket<T, PeriodicDefaultNodeSocketTask, PTU, M> + Send + Sync>,
+        >,
+    ) -> Result<(), String>;
+
+    fn runtime(&self) -> Arc<dyn Runtime + Send + Sync>;
+
+    fn add_socket_task(&self, port: NodePort, task: Box<T>) -> Result<(), String>;
 
     fn node_identifier(&self) -> Arc<dyn NodeIdentifier<CI, CV> + Send + Sync>;
 
@@ -63,7 +82,10 @@ where
     CI: ConnectionInfo<CV> + Send + Sync,
     CV: Sized,
 {
-    sockets: DashMap<NodePort, Box<dyn NodeSocket<T, M> + Send + Sync>>,
+    sockets: DashMap<
+        NodePort,
+        Box<dyn NodeSocket<T, PeriodicDefaultNodeSocketTask, TokioPeriodTimeUnit, M> + Send + Sync>,
+    >,
     membership: Arc<RwLock<N>>,
     config: Arc<dyn NodeConfig<R, MN> + Send + Sync>,
     runtime: Arc<dyn Runtime + Sync + Send>,
@@ -73,7 +95,8 @@ where
 }
 
 #[async_trait]
-impl<T, M, R, N, MN> NodeState<T, M, N, R, MN, NodePort, u16>
+impl<T, M, R, N, MN>
+    NodeState<T, M, N, R, MN, NodePort, u16, TokioPeriodTimeUnit, PeriodicDefaultNodeSocketTask>
     for DefaultNodeState<T, M, R, N, MN, NodePort, u16>
 where
     T: NodeSocketTask<M>,
@@ -85,12 +108,12 @@ where
     fn add_socket(
         &self,
         port: NodePort,
-        socket: Box<dyn NodeSocket<T, M> + Send + Sync>,
+        socket: Box<
+            dyn NodeSocket<T, PeriodicDefaultNodeSocketTask, TokioPeriodTimeUnit, M> + Send + Sync,
+        >,
     ) -> Result<(), String> {
-        match self.sockets.insert(port.clone(), socket) {
-            Some(_) => Ok(()),
-            _ => Err(format!("Socket with port {} already exists", port.value())),
-        }
+        self.sockets.insert(port.clone(), socket);
+        Ok(())
     }
 
     fn node_identifier(&self) -> Arc<dyn NodeIdentifier<NodePort, u16> + Send + Sync> {
@@ -101,19 +124,48 @@ where
         self.membership.clone()
     }
 
+    fn runtime(&self) -> Arc<dyn Runtime + Send + Sync> {
+        self.runtime.clone()
+    }
+
     fn add_socket_task_and_create(
         &self,
         port: NodePort,
         task: Box<T>,
-        socket_constructor: Box<dyn Fn(NodePort) -> Box<dyn NodeSocket<T, M> + Send + Sync>>,
-    ) {
+        socket_constructor: Box<
+            dyn Fn(
+                NodePort,
+            ) -> Box<
+                dyn NodeSocket<T, PeriodicDefaultNodeSocketTask, TokioPeriodTimeUnit, M>
+                    + Send
+                    + Sync,
+            >,
+        >,
+    ) -> Result<(), String> {
         let element_exists = self.sockets.contains_key(&port);
 
         if !element_exists {
-            self.add_socket(port.clone(), socket_constructor(port.clone()));
+            self.add_socket(port.clone(), socket_constructor(port.clone()))?;
         }
 
-        self.add_socket_task(port, task);
+        self.add_socket_task(port, task)?;
+
+        Ok(())
+    }
+
+    async fn add_periodic_socket_task(
+        &self,
+        port: NodePort,
+        task: Arc<PeriodicDefaultNodeSocketTask>,
+        interval: Arc<TokioPeriodTimeUnit>,
+    ) -> Result<(), String> {
+        match self.sockets.get_mut(&port) {
+            Some(mut socket) => {
+                socket.add_periodic_task(port, task, interval).await;
+                Ok(())
+            }
+            None => Err(format!("Socket with port {} not found", port.value())),
+        }
     }
 
     fn add_socket_task(&self, port: NodePort, task: Box<T>) -> Result<(), String> {

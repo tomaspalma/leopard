@@ -8,3 +8,6 @@ protocol = { path = "../../../protocol" }
 state = { path = "../../../state" }
 connection = { path = "../../../connection" }
 membership = { path = "../../../membership" }
+runtime = { path = "../../../runtime" }
+
+async-trait = "0.1.83"

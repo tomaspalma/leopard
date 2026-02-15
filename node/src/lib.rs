@@ -2,9 +2,11 @@ use config::node::NodeConfig;
 use errors::node::NodeInitError;
 use membership::{Membership, MembershipNeighbor, MembershipNeighbors};
 use protocol::Protocol;
+use runtime::time::PeriodTimeUnit;
 
 use connection::node::{
     id::NodeIdentifier, port::ConnectionInfo, NodeSocketTask, NodeSocketTaskMetadata,
+    PeriodicNodeSocketTask,
 };
 use state::node::NodeState;
 
@@ -13,35 +15,39 @@ use runtime::Runtime;
 use std::marker::PhantomData;
 use std::sync::Arc;
 
-pub struct Node<T, S, M, R, N, MN, CI, CV>
+pub struct Node<T, S, M, R, N, MN, CI, CV, PTU, PT>
 where
     T: NodeSocketTask<M>,
-    S: NodeState<T, M, N, R, MN, CI, CV>,
+    S: NodeState<T, M, N, R, MN, CI, CV, PTU, PT>,
     M: NodeSocketTaskMetadata,
     N: Membership<R, MN>,
     R: MembershipNeighbors<MN>,
     MN: MembershipNeighbor + Send + Sync,
     CI: ConnectionInfo<CV>,
     CV: Sized,
+    PTU: PeriodTimeUnit + Send + Sync,
+    PT: PeriodicNodeSocketTask<PTU>,
 {
     identifier: Box<dyn NodeIdentifier<CI, CV> + Send + Sync>,
     runtime: Arc<dyn Runtime + Send + Sync>,
     config: Arc<dyn NodeConfig<R, MN> + Send + Sync>,
     state: Arc<S>,
-    protocols: Vec<Box<dyn Protocol<S, T, M, R, N, MN, CI, CV> + Send + Sync>>,
+    protocols: Vec<Box<dyn Protocol<S, T, M, R, N, MN, CI, CV, PTU, PT> + Send + Sync>>,
     _marker: PhantomData<T>,
 }
 
-impl<T, S, M, R, N, MN, CI, CV> Node<T, S, M, R, N, MN, CI, CV>
+impl<T, S, M, R, N, MN, CI, CV, PTU, PT> Node<T, S, M, R, N, MN, CI, CV, PTU, PT>
 where
     T: NodeSocketTask<M>,
-    S: NodeState<T, M, N, R, MN, CI, CV>,
+    S: NodeState<T, M, N, R, MN, CI, CV, PTU, PT>,
     M: NodeSocketTaskMetadata,
     N: Membership<R, MN>,
     R: MembershipNeighbors<MN>,
     MN: MembershipNeighbor + Send + Sync,
     CI: ConnectionInfo<CV>,
     CV: Sized,
+    PTU: PeriodTimeUnit + Send + Sync,
+    PT: PeriodicNodeSocketTask<PTU>,
 {
     pub fn new(
         runtime: Arc<dyn Runtime + Send + Sync>,
@@ -61,14 +67,14 @@ where
 
     pub fn add_protocol(
         &mut self,
-        protocol: Box<dyn Protocol<S, T, M, R, N, MN, CI, CV> + Send + Sync>,
+        protocol: Box<dyn Protocol<S, T, M, R, N, MN, CI, CV, PTU, PT> + Send + Sync>,
     ) {
         self.protocols.push(protocol);
     }
 
     pub async fn init(&mut self) -> Result<(), NodeInitError> {
         for protocol in self.protocols.iter_mut() {
-            protocol.init();
+            protocol.init().await;
         }
 
         self.state.init().await?;

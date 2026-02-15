@@ -1,10 +1,35 @@
-use crate::node::{NodeSocket, NodeSocketTask, NodeSocketTaskMetadata, port::NodePort};
+use crate::node::{
+    NodeSocket, NodeSocketTask, NodeSocketTaskMetadata, PeriodicNodeSocketTask, port::NodePort,
+};
 use crate::request::handler::{RequestHandler, default::DefaultRequestHandler};
 use async_trait::async_trait;
-use runtime::time::PeriodTimeUnit;
+use runtime::{
+    Runtime, Task,
+    time::{PeriodTimeUnit, TokioPeriodTimeUnit},
+};
 
 use std::io::Read;
 use std::{net::TcpListener, sync::Arc};
+
+pub struct PeriodicDefaultNodeSocketTask {
+    metadata: Arc<DefaultNodeSocketTaskMetadata>,
+    task: Box<Task>,
+    interval: Arc<dyn PeriodTimeUnit + Send + Sync>,
+}
+
+impl PeriodicDefaultNodeSocketTask {
+    pub fn new(
+        metadata: Arc<DefaultNodeSocketTaskMetadata>,
+        task: Box<Task>,
+        interval: Arc<dyn PeriodTimeUnit + Send + Sync>,
+    ) -> Self {
+        Self {
+            metadata,
+            task,
+            interval,
+        }
+    }
+}
 
 pub struct DefaultNodeSocketTask {
     metadata: Arc<DefaultNodeSocketTaskMetadata>,
@@ -40,7 +65,24 @@ impl NodeSocketTask<DefaultNodeSocketTaskMetadata> for DefaultNodeSocketTask {
     }
 }
 
+#[async_trait]
+impl PeriodicNodeSocketTask<TokioPeriodTimeUnit> for PeriodicDefaultNodeSocketTask {
+    async fn run(&self) {
+        loop {
+            self.run_task();
+
+            self.interval().tick().await;
+        }
+    }
+    fn run_task(&self) {}
+
+    fn interval(&self) -> Arc<dyn PeriodTimeUnit + Send + Sync> {
+        self.interval.clone()
+    }
+}
+
 pub struct DefaultNodeSocket<T> {
+    runtime: Arc<dyn Runtime + Send + Sync>,
     port: NodePort,
     tasks: Vec<Box<T>>,
     listener: Option<TcpListener>,
@@ -48,8 +90,9 @@ pub struct DefaultNodeSocket<T> {
 }
 
 impl DefaultNodeSocket<DefaultNodeSocketTask> {
-    pub fn new(port: NodePort) -> Self {
+    pub fn new(port: NodePort, runtime: Arc<dyn Runtime + Send + Sync>) -> Self {
         Self {
+            runtime,
             port,
             tasks: vec![],
             listener: None,
@@ -59,19 +102,35 @@ impl DefaultNodeSocket<DefaultNodeSocketTask> {
 }
 
 #[async_trait]
-impl NodeSocket<DefaultNodeSocketTask, DefaultNodeSocketTaskMetadata>
-    for DefaultNodeSocket<DefaultNodeSocketTask>
+impl
+    NodeSocket<
+        DefaultNodeSocketTask,
+        PeriodicDefaultNodeSocketTask,
+        TokioPeriodTimeUnit,
+        DefaultNodeSocketTaskMetadata,
+    > for DefaultNodeSocket<DefaultNodeSocketTask>
 {
     fn add_task(&mut self, port: NodePort, task: Box<DefaultNodeSocketTask>) {
         self.tasks.push(task);
     }
 
-    fn add_periodic_task(
+    async fn add_periodic_task(
         &mut self,
         port: NodePort,
-        task: Box<DefaultNodeSocketTask>,
-        interval: Arc<dyn PeriodTimeUnit>,
+        task: Arc<PeriodicDefaultNodeSocketTask>,
+        interval: Arc<TokioPeriodTimeUnit>,
     ) {
+        self.runtime
+            .add_task(Box::new(move || {
+                Box::pin({
+                    let value = task.clone();
+                    async move {
+                        value.run().await;
+                        Ok(())
+                    }
+                })
+            }))
+            .unwrap();
     }
 
     async fn bind(&mut self) -> Result<(), std::io::Error> {
@@ -90,7 +149,6 @@ impl NodeSocket<DefaultNodeSocketTask, DefaultNodeSocketTaskMetadata>
                 println!("Waiting for connection");
                 match listener.accept() {
                     Ok((stream, addr)) => {
-                        println!("enfim");
                         println!("{:?}", stream.bytes());
                     }
                     Err(e) => {
