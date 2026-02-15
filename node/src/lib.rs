@@ -38,8 +38,8 @@ where
 
 impl<T, S, M, R, N, MN, CI, CV, PTU, PT> Node<T, S, M, R, N, MN, CI, CV, PTU, PT>
 where
-    T: NodeSocketTask<M>,
-    S: NodeState<T, M, N, R, MN, CI, CV, PTU, PT>,
+    T: NodeSocketTask<M> + Send + Sync,
+    S: NodeState<T, M, N, R, MN, CI, CV, PTU, PT> + Send + Sync + 'static,
     M: NodeSocketTaskMetadata,
     N: Membership<R, MN>,
     R: MembershipNeighbors<MN>,
@@ -77,7 +77,17 @@ where
             protocol.init().await;
         }
 
-        self.state.init().await?;
+        let state_clone = self.state.clone();
+        self.runtime
+            .clone()
+            .spawn(Box::new(move || {
+                let state = state_clone.clone();
+                Box::pin(async move {
+                    state.init().await.unwrap();
+                    Ok(())
+                })
+            }))
+            .await;
 
         Ok(())
     }
