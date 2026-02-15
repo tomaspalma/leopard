@@ -74,7 +74,9 @@ impl PeriodicNodeSocketTask<TokioPeriodTimeUnit> for PeriodicDefaultNodeSocketTa
             self.interval().tick().await;
         }
     }
-    fn run_task(&self) {}
+    fn run_task(&self) {
+        println!("Running periodic node socket task!");
+    }
 
     fn interval(&self) -> Arc<dyn PeriodTimeUnit + Send + Sync> {
         self.interval.clone()
@@ -121,7 +123,7 @@ impl
         interval: Arc<TokioPeriodTimeUnit>,
     ) {
         self.runtime
-            .add_task(Box::new(move || {
+            .spawn(Box::new(move || {
                 Box::pin({
                     let value = task.clone();
                     async move {
@@ -130,7 +132,7 @@ impl
                     }
                 })
             }))
-            .unwrap();
+            .await;
     }
 
     async fn bind(&mut self) -> Result<(), std::io::Error> {

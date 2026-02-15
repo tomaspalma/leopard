@@ -146,9 +146,9 @@ impl
                             Ok(())
                         })
                     }),
-                    Arc::new(TokioPeriodTimeUnit::new(std::time::Duration::from_secs(1))),
+                    Arc::new(TokioPeriodTimeUnit::new(std::time::Duration::from_secs(5))),
                 )),
-                Arc::new(TokioPeriodTimeUnit::new(std::time::Duration::from_secs(1))),
+                Arc::new(TokioPeriodTimeUnit::new(std::time::Duration::from_secs(5))),
             )
             .await
             .unwrap();

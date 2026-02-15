@@ -1,3 +1,4 @@
+use async_trait::async_trait;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::{LockResult, PoisonError, RwLock};
@@ -9,7 +10,9 @@ pub mod time;
 
 pub type Task = dyn Fn() -> Pin<Box<dyn Future<Output = Result<(), String>> + Send>> + Send + Sync;
 
+#[async_trait]
 pub trait Runtime {
+    async fn spawn(&self, task: Box<Task>);
     fn add_task(&self, task: Box<Task>) -> LockResult<()>;
     fn tasks(&self) -> &RwLock<Vec<Box<Task>>>;
     fn init(&self) -> Result<(), String>;
@@ -27,7 +30,14 @@ impl TokioRuntime {
     }
 }
 
+#[async_trait]
 impl Runtime for TokioRuntime {
+    async fn spawn(&self, task: Box<Task>) {
+        tokio::spawn(async move {
+            task().await.unwrap();
+        });
+    }
+
     fn add_task(&self, task: Box<Task>) -> LockResult<()> {
         match self.tasks.write() {
             Ok(mut tasks) => {
