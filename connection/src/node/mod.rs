@@ -4,7 +4,7 @@ pub mod port;
 
 use crate::node::port::NodePort;
 use async_trait::async_trait;
-use runtime::time::PeriodTimeUnit;
+use runtime::{Task, time::PeriodTimeUnit};
 
 use std::sync::Arc;
 
@@ -23,12 +23,13 @@ where
 {
     async fn run(&self) {
         loop {
-            self.run_task();
+            self.run_task().await;
 
             self.interval().tick().await;
         }
     }
-    fn run_task(&self);
+    fn task(&self) -> Arc<Task>;
+    async fn run_task(&self);
     fn interval(&self) -> Arc<dyn PeriodTimeUnit + Send + Sync>;
 }
 

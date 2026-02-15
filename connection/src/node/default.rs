@@ -13,14 +13,14 @@ use std::{net::TcpListener, sync::Arc};
 
 pub struct PeriodicDefaultNodeSocketTask {
     metadata: Arc<DefaultNodeSocketTaskMetadata>,
-    task: Box<Task>,
+    task: Arc<Task>,
     interval: Arc<dyn PeriodTimeUnit + Send + Sync>,
 }
 
 impl PeriodicDefaultNodeSocketTask {
     pub fn new(
         metadata: Arc<DefaultNodeSocketTaskMetadata>,
-        task: Box<Task>,
+        task: Arc<Task>,
         interval: Arc<dyn PeriodTimeUnit + Send + Sync>,
     ) -> Self {
         Self {
@@ -69,13 +69,18 @@ impl NodeSocketTask<DefaultNodeSocketTaskMetadata> for DefaultNodeSocketTask {
 impl PeriodicNodeSocketTask<TokioPeriodTimeUnit> for PeriodicDefaultNodeSocketTask {
     async fn run(&self) {
         loop {
-            self.run_task();
+            self.run_task().await;
 
             self.interval().tick().await;
         }
     }
-    fn run_task(&self) {
-        println!("Running periodic node socket task!");
+
+    fn task(&self) -> Arc<Task> {
+        self.task.clone()
+    }
+
+    async fn run_task(&self) {
+        (self.task())().await;
     }
 
     fn interval(&self) -> Arc<dyn PeriodTimeUnit + Send + Sync> {

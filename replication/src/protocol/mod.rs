@@ -140,7 +140,7 @@ impl
                 self.port.clone(),
                 Arc::new(PeriodicDefaultNodeSocketTask::new(
                     Arc::new(DefaultNodeSocketTaskMetadata::new(String::new())),
-                    Box::new(move || {
+                    Arc::new(move || {
                         Box::pin(async move {
                             println!("Processing connection");
                             Ok(())
