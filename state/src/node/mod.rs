@@ -41,12 +41,7 @@ where
         port: NodePort,
         socket: Box<dyn NodeSocket<T, PeriodicDefaultNodeSocketTask, PTU, M> + Send + Sync>,
     ) -> Result<(), String>;
-    async fn add_periodic_socket_task(
-        &self,
-        port: NodePort,
-        task: Arc<PT>,
-        interval: Arc<PTU>,
-    ) -> Result<(), String>;
+    async fn add_periodic_socket_task(&self, port: NodePort, task: Arc<PT>) -> Result<(), String>;
     fn add_socket_task_and_create(
         &self,
         port: NodePort,
@@ -157,11 +152,10 @@ where
         &self,
         port: NodePort,
         task: Arc<PeriodicDefaultNodeSocketTask>,
-        interval: Arc<TokioPeriodTimeUnit>,
     ) -> Result<(), String> {
         match self.sockets.get_mut(&port) {
             Some(mut socket) => {
-                socket.add_periodic_task(port, task, interval).await;
+                socket.add_periodic_task(port, task).await;
                 Ok(())
             }
             None => Err(format!("Socket with port {} not found", port.value())),

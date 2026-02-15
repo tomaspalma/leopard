@@ -120,7 +120,6 @@ impl
         &mut self,
         port: NodePort,
         task: Arc<PeriodicDefaultNodeSocketTask>,
-        interval: Arc<TokioPeriodTimeUnit>,
     ) {
         self.runtime
             .spawn(Box::new(move || {

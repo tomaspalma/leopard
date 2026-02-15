@@ -147,8 +147,7 @@ impl
                         })
                     }),
                     Arc::new(TokioPeriodTimeUnit::new(std::time::Duration::from_secs(5))),
-                )),
-                Arc::new(TokioPeriodTimeUnit::new(std::time::Duration::from_secs(5))),
+                ))
             )
             .await
             .unwrap();

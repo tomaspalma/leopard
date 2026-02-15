@@ -41,7 +41,7 @@ where
     PTU: PeriodTimeUnit + Send + Sync,
 {
     fn add_task(&mut self, port: NodePort, task: Box<T>);
-    async fn add_periodic_task(&mut self, port: NodePort, task: Arc<PT>, interval: Arc<PTU>);
+    async fn add_periodic_task(&mut self, port: NodePort, task: Arc<PT>);
     async fn bind(&mut self) -> Result<(), std::io::Error>;
     async fn send(&self);
     async fn receive(&self);
