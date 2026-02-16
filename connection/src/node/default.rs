@@ -69,9 +69,9 @@ impl NodeSocketTask<DefaultNodeSocketTaskMetadata> for DefaultNodeSocketTask {
 impl PeriodicNodeSocketTask<TokioPeriodTimeUnit> for PeriodicDefaultNodeSocketTask {
     async fn run(&self) {
         loop {
-            self.run_task().await;
-
             self.interval().tick().await;
+
+            self.run_task().await;
         }
     }
 
