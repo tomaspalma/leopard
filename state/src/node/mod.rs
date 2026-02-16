@@ -180,10 +180,12 @@ where
 
             let neighbor_info = self.node_identifier().connection_info();
 
-            n.add_taint(Box::new(NodePortTaint::new(
-                self.node_identifier().connection_info(),
-                neighbor_info,
-            )));
+            if self.node_identifier().connection_info().value() == neighbor_info.value() {
+                n.add_taint(Box::new(NodePortTaint::new(
+                    self.node_identifier().connection_info(),
+                    neighbor_info,
+                )));
+            }
 
             self.membership
                 .write()
