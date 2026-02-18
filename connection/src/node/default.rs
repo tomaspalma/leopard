@@ -3,6 +3,7 @@ use crate::node::{
 };
 use crate::request::handler::{RequestHandler, default::DefaultRequestHandler};
 use async_trait::async_trait;
+use message::{DefaultMessage, DefaultMessageType};
 use runtime::{
     Runtime, Task,
     time::{PeriodTimeUnit, TokioPeriodTimeUnit},
@@ -93,7 +94,7 @@ pub struct DefaultNodeSocket<T> {
     port: NodePort,
     tasks: Vec<Box<T>>,
     listener: Option<TcpListener>,
-    request_handler: Box<dyn RequestHandler + Send + Sync>,
+    request_handler: Box<dyn RequestHandler<DefaultMessage, DefaultMessageType> + Send + Sync>,
 }
 
 impl DefaultNodeSocket<DefaultNodeSocketTask> {
@@ -156,6 +157,8 @@ impl
                 match listener.accept() {
                     Ok((stream, addr)) => {
                         println!("{:?}", stream.bytes());
+                        // aqui era ter um handler que recebe as informações, processa o pediodo e
+                        // responde
                     }
                     Err(e) => {
                         eprintln!("Failed to accept connection: {}", e);

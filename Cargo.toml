@@ -15,7 +15,7 @@ members = [
   "state", 
   "connection",
   "membership/src/protocols"
-, "errors", "taints"]
+, "errors", "taints", "message"]
 
 [dependencies]
 tokio = { version = "1.48.0", features = ["full"] }

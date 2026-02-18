@@ -1,3 +1,5 @@
+use message::{DefaultMessage, DefaultMessageType};
+
 use crate::request::handler::RequestHandler;
 
 pub struct DefaultRequestHandler {}
@@ -8,7 +10,7 @@ impl DefaultRequestHandler {
     }
 }
 
-impl RequestHandler for DefaultRequestHandler {
+impl RequestHandler<DefaultMessage, DefaultMessageType> for DefaultRequestHandler {
     fn handle(&self) {
         println!("Handling request");
     }
