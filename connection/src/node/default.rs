@@ -8,6 +8,7 @@ use runtime::{
     Runtime, Task,
     time::{PeriodTimeUnit, TokioPeriodTimeUnit},
 };
+use std::net::TcpStream;
 
 use std::io::Read;
 use std::{net::TcpListener, sync::Arc};
@@ -81,7 +82,7 @@ impl PeriodicNodeSocketTask<TokioPeriodTimeUnit> for PeriodicDefaultNodeSocketTa
     }
 
     async fn run_task(&self) {
-        (self.task())().await;
+        (self.task())().await.unwrap();
     }
 
     fn interval(&self) -> Arc<dyn PeriodTimeUnit + Send + Sync> {
@@ -94,7 +95,8 @@ pub struct DefaultNodeSocket<T> {
     port: NodePort,
     tasks: Vec<Box<T>>,
     listener: Option<TcpListener>,
-    request_handler: Box<dyn RequestHandler<DefaultMessage, DefaultMessageType> + Send + Sync>,
+    request_handler:
+        Arc<dyn RequestHandler<DefaultMessage, DefaultMessageType, TcpStream> + Send + Sync>,
 }
 
 impl DefaultNodeSocket<DefaultNodeSocketTask> {
@@ -104,7 +106,7 @@ impl DefaultNodeSocket<DefaultNodeSocketTask> {
             port,
             tasks: vec![],
             listener: None,
-            request_handler: Box::new(DefaultRequestHandler::new()),
+            request_handler: Arc::new(DefaultRequestHandler::new()),
         }
     }
 }
@@ -118,6 +120,12 @@ impl
         DefaultNodeSocketTaskMetadata,
     > for DefaultNodeSocket<DefaultNodeSocketTask>
 {
+    fn request_handler(
+        &self,
+    ) -> Arc<dyn RequestHandler<DefaultMessage, DefaultMessageType, TcpStream>> {
+        self.request_handler.clone()
+    }
+
     fn add_task(&mut self, port: NodePort, task: Box<DefaultNodeSocketTask>) {
         self.tasks.push(task);
     }
@@ -156,9 +164,8 @@ impl
                 println!("Waiting for connection");
                 match listener.accept() {
                     Ok((stream, addr)) => {
-                        println!("{:?}", stream.bytes());
-                        // aqui era ter um handler que recebe as informações, processa o pediodo e
-                        // responde
+                        let msg = self.request_handler().handle(stream.bytes());
+                        // mensagem
                     }
                     Err(e) => {
                         eprintln!("Failed to accept connection: {}", e);

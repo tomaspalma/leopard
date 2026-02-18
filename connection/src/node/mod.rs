@@ -3,8 +3,12 @@ pub mod id;
 pub mod port;
 
 use crate::node::port::NodePort;
+use crate::request::handler::RequestHandler;
 use async_trait::async_trait;
+use message::{DefaultMessage, DefaultMessageType};
 use runtime::{Task, time::PeriodTimeUnit};
+
+use std::net::TcpStream;
 
 use std::sync::Arc;
 
@@ -41,6 +45,9 @@ where
     M: NodeSocketTaskMetadata,
     PTU: PeriodTimeUnit + Send + Sync,
 {
+    fn request_handler(
+        &self,
+    ) -> Arc<dyn RequestHandler<DefaultMessage, DefaultMessageType, TcpStream>>;
     fn add_task(&mut self, port: NodePort, task: Box<T>);
     async fn add_periodic_task(&mut self, port: NodePort, task: Arc<PT>);
     async fn bind(&mut self) -> Result<(), std::io::Error>;

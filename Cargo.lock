@@ -298,6 +298,7 @@ dependencies = [
  "iroh",
  "message",
  "runtime",
+ "tokio",
 ]
 
 [[package]]

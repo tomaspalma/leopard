@@ -17,6 +17,14 @@ pub struct DefaultMessage {
     _type: Rc<DefaultMessageType>,
 }
 
+impl DefaultMessage {
+    pub fn new() -> Self {
+        Self {
+            _type: Rc::new(DefaultMessageType),
+        }
+    }
+}
+
 impl Message<DefaultMessageType> for DefaultMessage {
     fn get_type(&self) -> Rc<DefaultMessageType> {
         self._type.clone()
