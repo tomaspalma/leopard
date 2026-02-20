@@ -2,6 +2,8 @@ use crate::node::{
     NodeSocket, NodeSocketTask, NodeSocketTaskMetadata, PeriodicNodeSocketTask, port::NodePort,
 };
 use crate::request::handler::{RequestHandler, default::DefaultRequestHandler};
+use crate::route::{DefaultRouteHandler, RouteHandler};
+
 use async_trait::async_trait;
 use message::{DefaultMessage, DefaultMessageType};
 use runtime::{
@@ -97,6 +99,7 @@ pub struct DefaultNodeSocket<T> {
     listener: Option<TcpListener>,
     request_handler:
         Arc<dyn RequestHandler<DefaultMessage, DefaultMessageType, TcpStream> + Send + Sync>,
+    route_handler: Arc<dyn RouteHandler<DefaultMessageType> + Send + Sync>,
 }
 
 impl DefaultNodeSocket<DefaultNodeSocketTask> {
@@ -107,6 +110,7 @@ impl DefaultNodeSocket<DefaultNodeSocketTask> {
             tasks: vec![],
             listener: None,
             request_handler: Arc::new(DefaultRequestHandler::new()),
+            route_handler: Arc::new(DefaultRouteHandler::new()),
         }
     }
 }
@@ -118,12 +122,17 @@ impl
         PeriodicDefaultNodeSocketTask,
         TokioPeriodTimeUnit,
         DefaultNodeSocketTaskMetadata,
+        DefaultMessageType,
     > for DefaultNodeSocket<DefaultNodeSocketTask>
 {
     fn request_handler(
         &self,
     ) -> Arc<dyn RequestHandler<DefaultMessage, DefaultMessageType, TcpStream>> {
         self.request_handler.clone()
+    }
+
+    fn route_handler(&self) -> Arc<dyn RouteHandler<DefaultMessageType> + Send + Sync> {
+        self.route_handler.clone()
     }
 
     fn add_task(&mut self, port: NodePort, task: Box<DefaultNodeSocketTask>) {
@@ -165,7 +174,8 @@ impl
                 match listener.accept() {
                     Ok((stream, addr)) => {
                         let msg = self.request_handler().handle(stream.bytes());
-                        // mensagem
+
+                        self.route_handler().handle(msg);
                     }
                     Err(e) => {
                         eprintln!("Failed to accept connection: {}", e);

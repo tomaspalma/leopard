@@ -8,5 +8,5 @@ connection = { path = "../connection" }
 state = { path = "../state" }
 membership = { path = "../membership" }
 runtime = { path = "../runtime" }
-
+message = { path = "../message" }
 async-trait = "0.1.83"

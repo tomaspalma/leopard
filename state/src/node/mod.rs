@@ -2,6 +2,7 @@ use async_trait::async_trait;
 use config::node::NodeConfig;
 use dashmap::DashMap;
 use errors::node::NodeInitError;
+use message::{DefaultMessageType, MessageType};
 use runtime::time::TokioPeriodTimeUnit;
 use runtime::{Runtime, TokioRuntime, time::PeriodTimeUnit};
 
@@ -24,7 +25,7 @@ use membership::{
 use taints::NodePortTaint;
 
 #[async_trait]
-pub trait NodeState<T, M, N, R, MN, CI, CV, PTU, PT>
+pub trait NodeState<T, M, N, R, MN, CI, CV, PTU, PT, MType>
 where
     T: NodeSocketTask<M>,
     M: NodeSocketTaskMetadata,
@@ -35,11 +36,12 @@ where
     CV: Sized,
     PTU: PeriodTimeUnit + Send + Sync,
     PT: PeriodicNodeSocketTask<PTU>,
+    MType: MessageType,
 {
     fn add_socket(
         &self,
         port: NodePort,
-        socket: Box<dyn NodeSocket<T, PeriodicDefaultNodeSocketTask, PTU, M> + Send + Sync>,
+        socket: Box<dyn NodeSocket<T, PeriodicDefaultNodeSocketTask, PTU, M, MType> + Send + Sync>,
     ) -> Result<(), String>;
     async fn add_periodic_socket_task(&self, port: NodePort, task: Arc<PT>) -> Result<(), String>;
     fn add_socket_task_and_create(
@@ -49,8 +51,9 @@ where
         socket_constructor: Box<
             dyn Fn(
                 NodePort,
-            )
-                -> Box<dyn NodeSocket<T, PeriodicDefaultNodeSocketTask, PTU, M> + Send + Sync>,
+            ) -> Box<
+                dyn NodeSocket<T, PeriodicDefaultNodeSocketTask, PTU, M, MType> + Send + Sync,
+            >,
         >,
     ) -> Result<(), String>;
 
@@ -67,7 +70,7 @@ where
     async fn init(&self) -> Result<(), NodeInitError>;
 }
 
-pub struct DefaultNodeState<T, M, R, N, MN, CI, CV>
+pub struct DefaultNodeState<T, M, R, N, MN, CI, CV, MType>
 where
     T: NodeSocketTask<M>,
     M: NodeSocketTaskMetadata,
@@ -76,10 +79,15 @@ where
     MN: MembershipNeighbor + Send + Sync,
     CI: ConnectionInfo<CV> + Send + Sync,
     CV: Sized,
+    MType: MessageType,
 {
     sockets: DashMap<
         NodePort,
-        Box<dyn NodeSocket<T, PeriodicDefaultNodeSocketTask, TokioPeriodTimeUnit, M> + Send + Sync>,
+        Box<
+            dyn NodeSocket<T, PeriodicDefaultNodeSocketTask, TokioPeriodTimeUnit, M, MType>
+                + Send
+                + Sync,
+        >,
     >,
     membership: Arc<RwLock<N>>,
     config: Arc<dyn NodeConfig<R, MN> + Send + Sync>,
@@ -91,8 +99,18 @@ where
 
 #[async_trait]
 impl<T, M, R, N, MN>
-    NodeState<T, M, N, R, MN, NodePort, u16, TokioPeriodTimeUnit, PeriodicDefaultNodeSocketTask>
-    for DefaultNodeState<T, M, R, N, MN, NodePort, u16>
+    NodeState<
+        T,
+        M,
+        N,
+        R,
+        MN,
+        NodePort,
+        u16,
+        TokioPeriodTimeUnit,
+        PeriodicDefaultNodeSocketTask,
+        DefaultMessageType,
+    > for DefaultNodeState<T, M, R, N, MN, NodePort, u16, DefaultMessageType>
 where
     T: NodeSocketTask<M>,
     M: NodeSocketTaskMetadata + Send + Sync,
@@ -104,7 +122,14 @@ where
         &self,
         port: NodePort,
         socket: Box<
-            dyn NodeSocket<T, PeriodicDefaultNodeSocketTask, TokioPeriodTimeUnit, M> + Send + Sync,
+            dyn NodeSocket<
+                    T,
+                    PeriodicDefaultNodeSocketTask,
+                    TokioPeriodTimeUnit,
+                    M,
+                    DefaultMessageType,
+                > + Send
+                + Sync,
         >,
     ) -> Result<(), String> {
         self.sockets.insert(port.clone(), socket);
@@ -131,8 +156,13 @@ where
             dyn Fn(
                 NodePort,
             ) -> Box<
-                dyn NodeSocket<T, PeriodicDefaultNodeSocketTask, TokioPeriodTimeUnit, M>
-                    + Send
+                dyn NodeSocket<
+                        T,
+                        PeriodicDefaultNodeSocketTask,
+                        TokioPeriodTimeUnit,
+                        M,
+                        DefaultMessageType,
+                    > + Send
                     + Sync,
             >,
         >,
@@ -226,6 +256,7 @@ impl
         DefaultMembershipNeighbor,
         NodePort,
         u16,
+        DefaultMessageType,
     >
 {
     pub fn new(

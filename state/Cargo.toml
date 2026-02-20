@@ -8,6 +8,7 @@ async-trait = "0.1.83"
 dashmap = "6.1.0"
 connection = { path = "../connection" }
 membership = { path = "../membership" }
+message = { path = "../message" }
 config = { path = "../config" }
 runtime = { path = "../runtime" }
 errors = { path = "../errors" }

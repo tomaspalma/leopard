@@ -2,6 +2,7 @@ use async_trait::async_trait;
 use membership::{
     DefaultMembership, DefaultMembershipNeighbor, DefaultMembershipNeighborRepresentation,
 };
+use message::DefaultMessageType;
 use std::sync::Arc;
 
 use connection::node::{
@@ -38,6 +39,7 @@ impl
             DefaultMembershipNeighbor,
             NodePort,
             u16,
+            DefaultMessageType,
         >,
         DefaultNodeSocketTask,
     >
@@ -52,6 +54,7 @@ impl
                 DefaultMembershipNeighbor,
                 NodePort,
                 u16,
+                DefaultMessageType,
             >,
         >,
         port: NodePort,
@@ -94,6 +97,7 @@ impl
             DefaultMembershipNeighbor,
             NodePort,
             u16,
+            DefaultMessageType,
         >,
         DefaultNodeSocketTask,
         DefaultNodeSocketTaskMetadata,
@@ -104,6 +108,7 @@ impl
         u16,
         TokioPeriodTimeUnit,
         PeriodicDefaultNodeSocketTask,
+        DefaultMessageType,
     >
     for HintedHandoffReplicationProtocol<
         DefaultNodeState<
@@ -114,6 +119,7 @@ impl
             DefaultMembershipNeighbor,
             NodePort,
             u16,
+            DefaultMessageType,
         >,
         DefaultNodeSocketTask,
     >
@@ -147,7 +153,7 @@ impl
                         })
                     }),
                     Arc::new(TokioPeriodTimeUnit::new(std::time::Duration::from_secs(5))),
-                ))
+                )),
             )
             .await
             .unwrap();

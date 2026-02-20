@@ -6,6 +6,7 @@ use connection::node::port::NodePort;
 use membership::{
     DefaultMembership, DefaultMembershipNeighbor, DefaultMembershipNeighborRepresentation,
 };
+use message::DefaultMessageType;
 use protocol::Protocol;
 use runtime::time::TokioPeriodTimeUnit;
 use state::node::DefaultNodeState;
@@ -23,6 +24,7 @@ impl
             DefaultMembershipNeighbor,
             NodePort,
             u16,
+            DefaultMessageType,
         >,
         DefaultNodeSocketTask,
         DefaultNodeSocketTaskMetadata,
@@ -33,6 +35,7 @@ impl
         u16,
         TokioPeriodTimeUnit,
         PeriodicDefaultNodeSocketTask,
+        DefaultMessageType,
     > for DefaultMembershipProtocol
 {
     async fn init(&mut self) {}

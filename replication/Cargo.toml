@@ -9,6 +9,7 @@ connection = { path = "../connection" }
 state = { path = "../state" }
 membership = { path = "../membership" }
 runtime = { path = "../runtime" }
+message = { path = "../message" }
 
 log = "0.4.29"
 tracing = "0.1"

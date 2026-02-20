@@ -1,6 +1,7 @@
 use config::node::NodeConfig;
 use errors::node::NodeInitError;
 use membership::{Membership, MembershipNeighbor, MembershipNeighbors};
+use message::MessageType;
 use protocol::Protocol;
 use runtime::time::PeriodTimeUnit;
 
@@ -15,10 +16,10 @@ use runtime::Runtime;
 use std::marker::PhantomData;
 use std::sync::Arc;
 
-pub struct Node<T, S, M, R, N, MN, CI, CV, PTU, PT>
+pub struct Node<T, S, M, R, N, MN, CI, CV, PTU, PT, MType>
 where
     T: NodeSocketTask<M>,
-    S: NodeState<T, M, N, R, MN, CI, CV, PTU, PT>,
+    S: NodeState<T, M, N, R, MN, CI, CV, PTU, PT, MType>,
     M: NodeSocketTaskMetadata,
     N: Membership<R, MN>,
     R: MembershipNeighbors<MN>,
@@ -27,19 +28,20 @@ where
     CV: Sized,
     PTU: PeriodTimeUnit + Send + Sync,
     PT: PeriodicNodeSocketTask<PTU>,
+    MType: MessageType,
 {
     identifier: Box<dyn NodeIdentifier<CI, CV> + Send + Sync>,
     runtime: Arc<dyn Runtime + Send + Sync>,
     config: Arc<dyn NodeConfig<R, MN> + Send + Sync>,
     state: Arc<S>,
-    protocols: Vec<Box<dyn Protocol<S, T, M, R, N, MN, CI, CV, PTU, PT> + Send + Sync>>,
+    protocols: Vec<Box<dyn Protocol<S, T, M, R, N, MN, CI, CV, PTU, PT, MType> + Send + Sync>>,
     _marker: PhantomData<T>,
 }
 
-impl<T, S, M, R, N, MN, CI, CV, PTU, PT> Node<T, S, M, R, N, MN, CI, CV, PTU, PT>
+impl<T, S, M, R, N, MN, CI, CV, PTU, PT, MType> Node<T, S, M, R, N, MN, CI, CV, PTU, PT, MType>
 where
     T: NodeSocketTask<M> + Send + Sync,
-    S: NodeState<T, M, N, R, MN, CI, CV, PTU, PT> + Send + Sync + 'static,
+    S: NodeState<T, M, N, R, MN, CI, CV, PTU, PT, MType> + Send + Sync + 'static,
     M: NodeSocketTaskMetadata,
     N: Membership<R, MN>,
     R: MembershipNeighbors<MN>,
@@ -48,6 +50,7 @@ where
     CV: Sized,
     PTU: PeriodTimeUnit + Send + Sync,
     PT: PeriodicNodeSocketTask<PTU>,
+    MType: MessageType,
 {
     pub fn new(
         runtime: Arc<dyn Runtime + Send + Sync>,
@@ -67,7 +70,7 @@ where
 
     pub fn add_protocol(
         &mut self,
-        protocol: Box<dyn Protocol<S, T, M, R, N, MN, CI, CV, PTU, PT> + Send + Sync>,
+        protocol: Box<dyn Protocol<S, T, M, R, N, MN, CI, CV, PTU, PT, MType> + Send + Sync>,
     ) {
         self.protocols.push(protocol);
     }
