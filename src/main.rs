@@ -1,5 +1,5 @@
-use connection::node::id::DefaultNodeIdentifier;
 use connection::node::port::NodePort;
+use connection::{node::id::DefaultNodeIdentifier, route::DefaultRouteHandler};
 use membership_protocols::DefaultMembershipProtocol;
 use replication::protocol::HintedHandoffReplicationProtocol;
 use runtime::{Runtime, Task, TokioRuntime};
@@ -31,6 +31,7 @@ async fn main() {
                 runtime_value.clone(),
                 config.clone(),
                 Arc::new(node1_id),
+                Arc::new(DefaultRouteHandler::new()),
             ));
 
             let mut node = Node::new(

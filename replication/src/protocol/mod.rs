@@ -5,13 +5,16 @@ use membership::{
 use message::DefaultMessageType;
 use std::sync::Arc;
 
-use connection::node::{
-    NodeSocketTask, NodeSocketTaskMetadata,
-    default::{
-        DefaultNodeSocket, DefaultNodeSocketTask, DefaultNodeSocketTaskMetadata,
-        PeriodicDefaultNodeSocketTask,
+use connection::{
+    node::{
+        NodeSocketTask, NodeSocketTaskMetadata,
+        default::{
+            DefaultNodeSocket, DefaultNodeSocketTask, DefaultNodeSocketTaskMetadata,
+            PeriodicDefaultNodeSocketTask,
+        },
+        port::NodePort,
     },
-    port::NodePort,
+    route::DefaultRouteHandler,
 };
 use protocol::Protocol;
 use runtime::time::TokioPeriodTimeUnit;
@@ -40,6 +43,7 @@ impl
             NodePort,
             u16,
             DefaultMessageType,
+            DefaultRouteHandler,
         >,
         DefaultNodeSocketTask,
     >
@@ -55,6 +59,7 @@ impl
                 NodePort,
                 u16,
                 DefaultMessageType,
+                DefaultRouteHandler,
             >,
         >,
         port: NodePort,
@@ -98,6 +103,7 @@ impl
             NodePort,
             u16,
             DefaultMessageType,
+            DefaultRouteHandler,
         >,
         DefaultNodeSocketTask,
         DefaultNodeSocketTaskMetadata,
@@ -109,6 +115,7 @@ impl
         TokioPeriodTimeUnit,
         PeriodicDefaultNodeSocketTask,
         DefaultMessageType,
+        DefaultRouteHandler,
     >
     for HintedHandoffReplicationProtocol<
         DefaultNodeState<
@@ -120,6 +127,7 @@ impl
             NodePort,
             u16,
             DefaultMessageType,
+            DefaultRouteHandler,
         >,
         DefaultNodeSocketTask,
     >

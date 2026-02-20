@@ -10,6 +10,8 @@ use std::marker::PhantomData;
 
 use std::sync::{Arc, RwLock};
 
+use connection::route::{DefaultRouteHandler, RouteHandler};
+
 use connection::node::{
     NodeSocket, NodeSocketTask, NodeSocketTaskMetadata, PeriodicNodeSocketTask,
     default::{
@@ -25,7 +27,7 @@ use membership::{
 use taints::NodePortTaint;
 
 #[async_trait]
-pub trait NodeState<T, M, N, R, MN, CI, CV, PTU, PT, MType>
+pub trait NodeState<T, M, N, R, MN, CI, CV, PTU, PT, MType, RHandler>
 where
     T: NodeSocketTask<M>,
     M: NodeSocketTaskMetadata,
@@ -37,6 +39,7 @@ where
     PTU: PeriodTimeUnit + Send + Sync,
     PT: PeriodicNodeSocketTask<PTU>,
     MType: MessageType,
+    RHandler: RouteHandler<MType> + Send + Sync,
 {
     fn add_socket(
         &self,
@@ -59,6 +62,8 @@ where
 
     fn runtime(&self) -> Arc<dyn Runtime + Send + Sync>;
 
+    fn route_handler(&self) -> Arc<RHandler>;
+
     fn add_socket_task(&self, port: NodePort, task: Box<T>) -> Result<(), String>;
 
     fn node_identifier(&self) -> Arc<dyn NodeIdentifier<CI, CV> + Send + Sync>;
@@ -70,7 +75,7 @@ where
     async fn init(&self) -> Result<(), NodeInitError>;
 }
 
-pub struct DefaultNodeState<T, M, R, N, MN, CI, CV, MType>
+pub struct DefaultNodeState<T, M, R, N, MN, CI, CV, MType, RHandler>
 where
     T: NodeSocketTask<M>,
     M: NodeSocketTaskMetadata,
@@ -80,6 +85,7 @@ where
     CI: ConnectionInfo<CV> + Send + Sync,
     CV: Sized,
     MType: MessageType,
+    RHandler: RouteHandler<MType> + Send + Sync,
 {
     sockets: DashMap<
         NodePort,
@@ -93,6 +99,7 @@ where
     config: Arc<dyn NodeConfig<R, MN> + Send + Sync>,
     runtime: Arc<dyn Runtime + Sync + Send>,
     identifier: Arc<dyn NodeIdentifier<CI, CV> + Send + Sync>,
+    route_handler: Arc<RHandler>,
     _marker_r: PhantomData<R>,
     _marker_mn: PhantomData<MN>,
 }
@@ -110,7 +117,8 @@ impl<T, M, R, N, MN>
         TokioPeriodTimeUnit,
         PeriodicDefaultNodeSocketTask,
         DefaultMessageType,
-    > for DefaultNodeState<T, M, R, N, MN, NodePort, u16, DefaultMessageType>
+        DefaultRouteHandler,
+    > for DefaultNodeState<T, M, R, N, MN, NodePort, u16, DefaultMessageType, DefaultRouteHandler>
 where
     T: NodeSocketTask<M>,
     M: NodeSocketTaskMetadata + Send + Sync,
@@ -134,6 +142,10 @@ where
     ) -> Result<(), String> {
         self.sockets.insert(port.clone(), socket);
         Ok(())
+    }
+
+    fn route_handler(&self) -> Arc<DefaultRouteHandler> {
+        self.route_handler.clone()
     }
 
     fn node_identifier(&self) -> Arc<dyn NodeIdentifier<NodePort, u16> + Send + Sync> {
@@ -194,10 +206,7 @@ where
 
     fn add_socket_task(&self, port: NodePort, task: Box<T>) -> Result<(), String> {
         match self.sockets.get_mut(&port) {
-            Some(mut socket) => {
-                socket.add_task(port, task);
-                Ok(())
-            }
+            Some(mut socket) => Ok(()),
             None => Err(format!("Socket with port {} not found", port.value())),
         }
     }
@@ -257,6 +266,7 @@ impl
         NodePort,
         u16,
         DefaultMessageType,
+        DefaultRouteHandler,
     >
 {
     pub fn new(
@@ -269,6 +279,7 @@ impl
                 + Sync,
         >,
         identifier: Arc<dyn NodeIdentifier<NodePort, u16> + Send + Sync>,
+        route_handler: Arc<DefaultRouteHandler>,
     ) -> Self {
         Self {
             sockets: DashMap::new(),
@@ -276,6 +287,7 @@ impl
             config,
             runtime,
             identifier,
+            route_handler,
             _marker_r: PhantomData,
             _marker_mn: PhantomData,
         }
