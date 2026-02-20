@@ -92,22 +92,20 @@ impl PeriodicNodeSocketTask<TokioPeriodTimeUnit> for PeriodicDefaultNodeSocketTa
     }
 }
 
-pub struct DefaultNodeSocket<T> {
+pub struct DefaultNodeSocket {
     runtime: Arc<dyn Runtime + Send + Sync>,
     port: NodePort,
-    tasks: Vec<Box<T>>,
     listener: Option<TcpListener>,
     request_handler:
         Arc<dyn RequestHandler<DefaultMessage, DefaultMessageType, TcpStream> + Send + Sync>,
     route_handler: Arc<dyn RouteHandler<DefaultMessageType> + Send + Sync>,
 }
 
-impl DefaultNodeSocket<DefaultNodeSocketTask> {
+impl DefaultNodeSocket {
     pub fn new(port: NodePort, runtime: Arc<dyn Runtime + Send + Sync>) -> Self {
         Self {
             runtime,
             port,
-            tasks: vec![],
             listener: None,
             request_handler: Arc::new(DefaultRequestHandler::new()),
             route_handler: Arc::new(DefaultRouteHandler::new()),
@@ -123,7 +121,7 @@ impl
         TokioPeriodTimeUnit,
         DefaultNodeSocketTaskMetadata,
         DefaultMessageType,
-    > for DefaultNodeSocket<DefaultNodeSocketTask>
+    > for DefaultNodeSocket
 {
     fn request_handler(
         &self,
@@ -135,9 +133,7 @@ impl
         self.route_handler.clone()
     }
 
-    fn add_task(&mut self, port: NodePort, task: Box<DefaultNodeSocketTask>) {
-        self.tasks.push(task);
-    }
+    fn add_task(&mut self, port: NodePort, task: Box<DefaultNodeSocketTask>) {}
 
     async fn add_periodic_task(
         &mut self,

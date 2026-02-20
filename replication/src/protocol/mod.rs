@@ -133,10 +133,7 @@ impl
                     DefaultNodeSocketTaskMetadata::new(String::new()),
                 ))),
                 Box::new(move |port: NodePort| {
-                    Box::new(DefaultNodeSocket::<DefaultNodeSocketTask>::new(
-                        port,
-                        runtime.clone(),
-                    ))
+                    Box::new(DefaultNodeSocket::new(port, runtime.clone()))
                 }),
             )
             .unwrap();
