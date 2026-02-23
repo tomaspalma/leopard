@@ -2,7 +2,7 @@ use crate::node::{
     NodeSocket, NodeSocketTask, NodeSocketTaskMetadata, PeriodicNodeSocketTask, port::NodePort,
 };
 use crate::request::handler::{RequestHandler, default::DefaultRequestHandler};
-use crate::route::{DefaultRouteHandler, RouteHandler};
+use crate::route::{DefaultRouteHandler, HashMapRouteStorage, RouteHandler, RouterHandlerInfo};
 
 use async_trait::async_trait;
 use message::{DefaultMessage, DefaultMessageType};
@@ -98,7 +98,7 @@ pub struct DefaultNodeSocket {
     listener: Option<TcpListener>,
     request_handler:
         Arc<dyn RequestHandler<DefaultMessage, DefaultMessageType, TcpStream> + Send + Sync>,
-    route_handler: Arc<dyn RouteHandler<DefaultMessageType> + Send + Sync>,
+    route_handler: Arc<dyn RouteHandler<DefaultMessageType, HashMapRouteStorage> + Send + Sync>,
 }
 
 impl DefaultNodeSocket {
@@ -121,6 +121,7 @@ impl
         TokioPeriodTimeUnit,
         DefaultNodeSocketTaskMetadata,
         DefaultMessageType,
+        HashMapRouteStorage,
     > for DefaultNodeSocket
 {
     fn request_handler(
@@ -129,17 +130,13 @@ impl
         self.request_handler.clone()
     }
 
-    fn route_handler(&self) -> Arc<dyn RouteHandler<DefaultMessageType> + Send + Sync> {
+    fn route_handler(
+        &self,
+    ) -> Arc<dyn RouteHandler<DefaultMessageType, HashMapRouteStorage> + Send + Sync> {
         self.route_handler.clone()
     }
 
-    fn add_task(&mut self, port: NodePort, task: Box<DefaultNodeSocketTask>) {}
-
-    async fn add_periodic_task(
-        &mut self,
-        port: NodePort,
-        task: Arc<PeriodicDefaultNodeSocketTask>,
-    ) {
+    async fn add_periodic_task(&mut self, task: Arc<PeriodicDefaultNodeSocketTask>) {
         self.runtime
             .spawn(Box::new(move || {
                 Box::pin({

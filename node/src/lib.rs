@@ -1,5 +1,5 @@
 use config::node::NodeConfig;
-use connection::route::RouteHandler;
+use connection::route::{RouteHandler, RouteStorage};
 use errors::node::NodeInitError;
 use membership::{Membership, MembershipNeighbor, MembershipNeighbors};
 use message::MessageType;
@@ -17,10 +17,10 @@ use runtime::Runtime;
 use std::marker::PhantomData;
 use std::sync::Arc;
 
-pub struct Node<T, S, M, R, N, MN, CI, CV, PTU, PT, MType, RHandler>
+pub struct Node<T, S, M, R, N, MN, CI, CV, PTU, PT, MType, RHandler, RStorage>
 where
     T: NodeSocketTask<M>,
-    S: NodeState<T, M, N, R, MN, CI, CV, PTU, PT, MType, RHandler>,
+    S: NodeState<T, M, N, R, MN, CI, CV, PTU, PT, MType, RHandler, RStorage>,
     M: NodeSocketTaskMetadata,
     N: Membership<R, MN>,
     R: MembershipNeighbors<MN>,
@@ -30,22 +30,31 @@ where
     PTU: PeriodTimeUnit + Send + Sync,
     PT: PeriodicNodeSocketTask<PTU>,
     MType: MessageType,
-    RHandler: RouteHandler<MType> + Send + Sync,
+    RHandler: RouteHandler<MType, RStorage> + Send + Sync,
+    RStorage: RouteStorage,
 {
     identifier: Box<dyn NodeIdentifier<CI, CV> + Send + Sync>,
     runtime: Arc<dyn Runtime + Send + Sync>,
     config: Arc<dyn NodeConfig<R, MN> + Send + Sync>,
     state: Arc<S>,
-    protocols:
-        Vec<Box<dyn Protocol<S, T, M, R, N, MN, CI, CV, PTU, PT, MType, RHandler> + Send + Sync>>,
+    protocols: Vec<
+        Box<
+            dyn Protocol<S, T, M, R, N, MN, CI, CV, PTU, PT, MType, RHandler, RStorage>
+                + Send
+                + Sync,
+        >,
+    >,
     _marker: PhantomData<T>,
 }
 
-impl<T, S, M, R, N, MN, CI, CV, PTU, PT, MType, RHandler>
-    Node<T, S, M, R, N, MN, CI, CV, PTU, PT, MType, RHandler>
+impl<T, S, M, R, N, MN, CI, CV, PTU, PT, MType, RHandler, RStorage>
+    Node<T, S, M, R, N, MN, CI, CV, PTU, PT, MType, RHandler, RStorage>
 where
     T: NodeSocketTask<M> + Send + Sync,
-    S: NodeState<T, M, N, R, MN, CI, CV, PTU, PT, MType, RHandler> + Send + Sync + 'static,
+    S: NodeState<T, M, N, R, MN, CI, CV, PTU, PT, MType, RHandler, RStorage>
+        + Send
+        + Sync
+        + 'static,
     M: NodeSocketTaskMetadata,
     N: Membership<R, MN>,
     R: MembershipNeighbors<MN>,
@@ -55,7 +64,8 @@ where
     PTU: PeriodTimeUnit + Send + Sync,
     PT: PeriodicNodeSocketTask<PTU>,
     MType: MessageType,
-    RHandler: RouteHandler<MType> + Send + Sync,
+    RHandler: RouteHandler<MType, RStorage> + Send + Sync,
+    RStorage: RouteStorage,
 {
     pub fn new(
         runtime: Arc<dyn Runtime + Send + Sync>,
@@ -76,7 +86,9 @@ where
     pub fn add_protocol(
         &mut self,
         protocol: Box<
-            dyn Protocol<S, T, M, R, N, MN, CI, CV, PTU, PT, MType, RHandler> + Send + Sync,
+            dyn Protocol<S, T, M, R, N, MN, CI, CV, PTU, PT, MType, RHandler, RStorage>
+                + Send
+                + Sync,
         >,
     ) {
         self.protocols.push(protocol);

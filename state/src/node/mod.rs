@@ -4,13 +4,13 @@ use dashmap::DashMap;
 use errors::node::NodeInitError;
 use message::{DefaultMessageType, MessageType};
 use runtime::time::TokioPeriodTimeUnit;
-use runtime::{Runtime, TokioRuntime, time::PeriodTimeUnit};
+use runtime::{Runtime, time::PeriodTimeUnit};
 
 use std::marker::PhantomData;
 
 use std::sync::{Arc, RwLock};
 
-use connection::route::{DefaultRouteHandler, RouteHandler};
+use connection::route::{DefaultRouteHandler, HashMapRouteStorage, RouteHandler, RouteStorage};
 
 use connection::node::{
     NodeSocket, NodeSocketTask, NodeSocketTaskMetadata, PeriodicNodeSocketTask,
@@ -27,7 +27,7 @@ use membership::{
 use taints::NodePortTaint;
 
 #[async_trait]
-pub trait NodeState<T, M, N, R, MN, CI, CV, PTU, PT, MType, RHandler>
+pub trait NodeState<T, M, N, R, MN, CI, CV, PTU, PT, MType, RHandler, RStorage>
 where
     T: NodeSocketTask<M>,
     M: NodeSocketTaskMetadata,
@@ -39,12 +39,15 @@ where
     PTU: PeriodTimeUnit + Send + Sync,
     PT: PeriodicNodeSocketTask<PTU>,
     MType: MessageType,
-    RHandler: RouteHandler<MType> + Send + Sync,
+    RHandler: RouteHandler<MType, RStorage> + Send + Sync,
+    RStorage: RouteStorage,
 {
     fn add_socket(
         &self,
         port: NodePort,
-        socket: Box<dyn NodeSocket<T, PeriodicDefaultNodeSocketTask, PTU, M, MType> + Send + Sync>,
+        socket: Box<
+            dyn NodeSocket<T, PeriodicDefaultNodeSocketTask, PTU, M, MType, RStorage> + Send + Sync,
+        >,
     ) -> Result<(), String>;
     async fn add_periodic_socket_task(&self, port: NodePort, task: Arc<PT>) -> Result<(), String>;
     fn add_socket_task_and_create(
@@ -55,7 +58,9 @@ where
             dyn Fn(
                 NodePort,
             ) -> Box<
-                dyn NodeSocket<T, PeriodicDefaultNodeSocketTask, PTU, M, MType> + Send + Sync,
+                dyn NodeSocket<T, PeriodicDefaultNodeSocketTask, PTU, M, MType, RStorage>
+                    + Send
+                    + Sync,
             >,
         >,
     ) -> Result<(), String>;
@@ -75,7 +80,7 @@ where
     async fn init(&self) -> Result<(), NodeInitError>;
 }
 
-pub struct DefaultNodeState<T, M, R, N, MN, CI, CV, MType, RHandler>
+pub struct DefaultNodeState<T, M, R, N, MN, CI, CV, MType, RHandler, RStorage>
 where
     T: NodeSocketTask<M>,
     M: NodeSocketTaskMetadata,
@@ -85,13 +90,20 @@ where
     CI: ConnectionInfo<CV> + Send + Sync,
     CV: Sized,
     MType: MessageType,
-    RHandler: RouteHandler<MType> + Send + Sync,
+    RHandler: RouteHandler<MType, RStorage> + Send + Sync,
+    RStorage: RouteStorage,
 {
     sockets: DashMap<
         NodePort,
         Box<
-            dyn NodeSocket<T, PeriodicDefaultNodeSocketTask, TokioPeriodTimeUnit, M, MType>
-                + Send
+            dyn NodeSocket<
+                    T,
+                    PeriodicDefaultNodeSocketTask,
+                    TokioPeriodTimeUnit,
+                    M,
+                    MType,
+                    RStorage,
+                > + Send
                 + Sync,
         >,
     >,
@@ -118,7 +130,20 @@ impl<T, M, R, N, MN>
         PeriodicDefaultNodeSocketTask,
         DefaultMessageType,
         DefaultRouteHandler,
-    > for DefaultNodeState<T, M, R, N, MN, NodePort, u16, DefaultMessageType, DefaultRouteHandler>
+        HashMapRouteStorage,
+    >
+    for DefaultNodeState<
+        T,
+        M,
+        R,
+        N,
+        MN,
+        NodePort,
+        u16,
+        DefaultMessageType,
+        DefaultRouteHandler,
+        HashMapRouteStorage,
+    >
 where
     T: NodeSocketTask<M>,
     M: NodeSocketTaskMetadata + Send + Sync,
@@ -136,6 +161,7 @@ where
                     TokioPeriodTimeUnit,
                     M,
                     DefaultMessageType,
+                    HashMapRouteStorage,
                 > + Send
                 + Sync,
         >,
@@ -174,6 +200,7 @@ where
                         TokioPeriodTimeUnit,
                         M,
                         DefaultMessageType,
+                        HashMapRouteStorage,
                     > + Send
                     + Sync,
             >,
@@ -197,7 +224,7 @@ where
     ) -> Result<(), String> {
         match self.sockets.get_mut(&port) {
             Some(mut socket) => {
-                socket.add_periodic_task(port, task).await;
+                socket.add_periodic_task(task).await;
                 Ok(())
             }
             None => Err(format!("Socket with port {} not found", port.value())),
@@ -267,6 +294,7 @@ impl
         u16,
         DefaultMessageType,
         DefaultRouteHandler,
+        HashMapRouteStorage,
     >
 {
     pub fn new(

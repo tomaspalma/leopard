@@ -3,7 +3,7 @@ use connection::node::default::{
     DefaultNodeSocketTask, DefaultNodeSocketTaskMetadata, PeriodicDefaultNodeSocketTask,
 };
 use connection::node::port::NodePort;
-use connection::route::DefaultRouteHandler;
+use connection::route::{DefaultRouteHandler, HashMapRouteStorage};
 use membership::{
     DefaultMembership, DefaultMembershipNeighbor, DefaultMembershipNeighborRepresentation,
 };
@@ -27,6 +27,7 @@ impl
             u16,
             DefaultMessageType,
             DefaultRouteHandler,
+            HashMapRouteStorage,
         >,
         DefaultNodeSocketTask,
         DefaultNodeSocketTaskMetadata,
@@ -39,6 +40,7 @@ impl
         PeriodicDefaultNodeSocketTask,
         DefaultMessageType,
         DefaultRouteHandler,
+        HashMapRouteStorage,
     > for DefaultMembershipProtocol
 {
     async fn init(&mut self) {}

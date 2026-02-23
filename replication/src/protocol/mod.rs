@@ -14,7 +14,7 @@ use connection::{
         },
         port::NodePort,
     },
-    route::DefaultRouteHandler,
+    route::{DefaultRouteHandler, HashMapRouteStorage},
 };
 use protocol::Protocol;
 use runtime::time::TokioPeriodTimeUnit;
@@ -44,6 +44,7 @@ impl
             u16,
             DefaultMessageType,
             DefaultRouteHandler,
+            HashMapRouteStorage,
         >,
         DefaultNodeSocketTask,
     >
@@ -60,6 +61,7 @@ impl
                 u16,
                 DefaultMessageType,
                 DefaultRouteHandler,
+                HashMapRouteStorage,
             >,
         >,
         port: NodePort,
@@ -104,6 +106,7 @@ impl
             u16,
             DefaultMessageType,
             DefaultRouteHandler,
+            HashMapRouteStorage,
         >,
         DefaultNodeSocketTask,
         DefaultNodeSocketTaskMetadata,
@@ -116,6 +119,7 @@ impl
         PeriodicDefaultNodeSocketTask,
         DefaultMessageType,
         DefaultRouteHandler,
+        HashMapRouteStorage,
     >
     for HintedHandoffReplicationProtocol<
         DefaultNodeState<
@@ -128,6 +132,7 @@ impl
             u16,
             DefaultMessageType,
             DefaultRouteHandler,
+            HashMapRouteStorage,
         >,
         DefaultNodeSocketTask,
     >
