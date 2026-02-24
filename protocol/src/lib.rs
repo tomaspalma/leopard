@@ -1,5 +1,7 @@
 use async_trait::async_trait;
 
+use uuid::Uuid;
+
 use connection::node::{
     NodeSocket, NodeSocketTask, NodeSocketTaskMetadata, PeriodicNodeSocketTask,
     port::ConnectionInfo,
@@ -27,5 +29,8 @@ where
     RHandler: RouteHandler<MType, RStorage> + Send + Sync,
     RStorage: RouteStorage,
 {
+    fn id(&self) -> String {
+        Uuid::new_v4().to_string()
+    }
     async fn init(&mut self);
 }

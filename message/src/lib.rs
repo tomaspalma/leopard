@@ -1,10 +1,16 @@
 use std::rc::Rc;
 
-pub trait MessageType {}
+pub trait MessageType {
+    fn value(&self) -> &str;
+}
 
 pub struct DefaultMessageType;
 
-impl MessageType for DefaultMessageType {}
+impl MessageType for DefaultMessageType {
+    fn value(&self) -> &str {
+        "default"
+    }
+}
 
 pub trait Message<MType>
 where
