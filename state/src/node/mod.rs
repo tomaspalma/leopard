@@ -231,11 +231,11 @@ where
         }
     }
 
+    //TODO change `NodePort` to `SocketIdentifier` to be more generic
     fn add_socket_task(&self, port: NodePort, task: Box<T>) -> Result<(), String> {
-        match self.sockets.get_mut(&port) {
-            Some(mut socket) => Ok(()),
-            None => Err(format!("Socket with port {} not found", port.value())),
-        }
+        // self.route_handler.add_route((9000,), task);
+
+        Ok(())
     }
 
     fn init_neighbors(&self) {

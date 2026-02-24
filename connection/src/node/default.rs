@@ -2,7 +2,7 @@ use crate::node::{
     NodeSocket, NodeSocketTask, NodeSocketTaskMetadata, PeriodicNodeSocketTask, port::NodePort,
 };
 use crate::request::handler::{RequestHandler, default::DefaultRequestHandler};
-use crate::route::{DefaultRouteHandler, HashMapRouteStorage, RouteHandler, RouterHandlerInfo};
+use crate::route::{DefaultRouteHandler, HashMapRouteStorage, Route, RouteHandler, RouteTask};
 
 use async_trait::async_trait;
 use message::{DefaultMessage, DefaultMessageType};
@@ -182,3 +182,11 @@ impl
 
     async fn disconnect(&self) {}
 }
+
+pub struct NodeSocketRoute {}
+
+// impl Route for NodeSocketRoute {
+//     fn task(&self) -> Box<dyn RouteTask> {
+//         Box::new(NodeSocketTask {})
+//     }
+// }

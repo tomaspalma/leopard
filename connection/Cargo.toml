@@ -9,3 +9,4 @@ iroh = "0.95.1"
 runtime = { path = "../runtime" }
 message = { path = "../message" }
 tokio = { version = "1.28.2" }
+dashmap = "5.5.3"

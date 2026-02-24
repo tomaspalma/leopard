@@ -1,4 +1,29 @@
+use dashmap::DashMap;
 use message::{DefaultMessageType, Message, MessageType};
+use std::sync::Arc;
+
+use crate::node::port::NodePort;
+
+pub trait RouteId<V> {
+    fn id(&self) -> V;
+}
+
+#[derive(Clone, Hash, Eq, PartialEq)]
+pub struct NodeSocketRouteIdInfo {
+    port: NodePort,
+    protocol: String,
+}
+
+#[derive(Hash, Eq, PartialEq)]
+pub struct NodeSocketRouteId {
+    info: NodeSocketRouteIdInfo,
+}
+
+impl RouteId<NodeSocketRouteIdInfo> for NodeSocketRouteId {
+    fn id(&self) -> NodeSocketRouteIdInfo {
+        self.info.clone()
+    }
+}
 
 pub trait Route {
     fn task(&self) -> Box<dyn RouteTask>;
@@ -12,19 +37,37 @@ pub trait RouterHandlerInfo {
 }
 
 pub trait RouteStorage {
-    fn store(&self, route: Box<dyn Route>);
-    fn get(&self, route: Box<dyn Route>) -> Option<Box<dyn Route>>; // explorar a ideia de ter um
-    // id em vez de ser a route
-    // toda
+    type RouteIdValue;
+    type Key: RouteId<Self::RouteIdValue>;
+    type Value;
+
+    fn store(&self, key: Self::Key, value: Self::Value);
+    fn get(&self, id: Self::Key) -> Option<Self::Value>;
 }
 
-pub struct HashMapRouteStorage {}
+pub struct HashMapRouteStorage {
+    storage: DashMap<NodeSocketRouteId, Arc<dyn Route + Send + Sync>>,
+}
+
+impl HashMapRouteStorage {
+    pub fn new() -> Self {
+        Self {
+            storage: DashMap::new(),
+        }
+    }
+}
 
 impl RouteStorage for HashMapRouteStorage {
-    fn store(&self, route: Box<dyn Route>) {}
+    type RouteIdValue = NodeSocketRouteIdInfo;
+    type Key = NodeSocketRouteId;
+    type Value = Arc<dyn Route + Send + Sync>;
 
-    fn get(&self, route: Box<dyn Route>) -> Option<Box<dyn Route>> {
-        None
+    fn store(&self, key: Self::Key, value: Self::Value) {
+        self.storage.insert(key, value);
+    }
+
+    fn get(&self, id: Self::Key) -> Option<Self::Value> {
+        self.storage.get(&id).map(|entry| entry.value().clone())
     }
 }
 
@@ -34,14 +77,18 @@ where
     RStorage: RouteStorage,
 {
     fn handle(&self, message: Box<dyn Message<MType>>);
-    fn add_route(&self, route: Box<dyn Route>, route_task: Box<dyn RouteTask>);
+    fn add_route(&self, id: String, route: Box<dyn Route>);
 }
 
-pub struct DefaultRouteHandler {}
+pub struct DefaultRouteHandler {
+    storage: HashMapRouteStorage,
+}
 
 impl DefaultRouteHandler {
     pub fn new() -> Self {
-        Self {}
+        Self {
+            storage: HashMapRouteStorage::new(),
+        }
     }
 }
 
@@ -50,5 +97,5 @@ impl RouteHandler<DefaultMessageType, HashMapRouteStorage> for DefaultRouteHandl
         println!("Handling route");
     }
 
-    fn add_route(&self, route: Box<dyn Route>, route_task: Box<dyn RouteTask>) {}
+    fn add_route(&self, id: String, route: Box<dyn Route>) {}
 }
