@@ -10,7 +10,9 @@ use std::marker::PhantomData;
 
 use std::sync::{Arc, RwLock};
 
-use connection::route::{DefaultRouteHandler, HashMapRouteStorage, RouteHandler, RouteStorage};
+use connection::route::{
+    DefaultRouteHandler, HashMapRouteStorage, NodeSocketRouteId, RouteHandler, RouteStorage,
+};
 
 use connection::node::{
     NodeSocket, NodeSocketTask, NodeSocketTaskMetadata, PeriodicNodeSocketTask,
@@ -42,24 +44,42 @@ where
     RHandler: RouteHandler<MType, RStorage> + Send + Sync,
     RStorage: RouteStorage,
 {
+    type RouteId;
+
     fn add_socket(
         &self,
         port: NodePort,
         socket: Box<
-            dyn NodeSocket<T, PeriodicDefaultNodeSocketTask, PTU, M, MType, RStorage> + Send + Sync,
+            dyn NodeSocket<
+                    T,
+                    PeriodicDefaultNodeSocketTask,
+                    PTU,
+                    M,
+                    MType,
+                    RStorage,
+                    RouteId = Self::RouteId,
+                > + Send
+                + Sync,
         >,
     ) -> Result<(), String>;
     async fn add_periodic_socket_task(&self, port: NodePort, task: Arc<PT>) -> Result<(), String>;
     fn add_socket_task_and_create(
         &self,
-        port: NodePort,
+        id: Self::RouteId,
         task: Box<T>,
         socket_constructor: Box<
             dyn Fn(
                 NodePort,
             ) -> Box<
-                dyn NodeSocket<T, PeriodicDefaultNodeSocketTask, PTU, M, MType, RStorage>
-                    + Send
+                dyn NodeSocket<
+                        T,
+                        PeriodicDefaultNodeSocketTask,
+                        PTU,
+                        M,
+                        MType,
+                        RStorage,
+                        RouteId = Self::RouteId,
+                    > + Send
                     + Sync,
             >,
         >,
@@ -69,7 +89,7 @@ where
 
     fn route_handler(&self) -> Arc<RHandler>;
 
-    fn add_socket_task(&self, port: NodePort, task: Box<T>) -> Result<(), String>;
+    fn add_socket_task(&self, id: Self::RouteId, task: Box<T>) -> Result<(), String>;
 
     fn node_identifier(&self) -> Arc<dyn NodeIdentifier<CI, CV> + Send + Sync>;
 
@@ -103,6 +123,7 @@ where
                     M,
                     MType,
                     RStorage,
+                    RouteId = NodeSocketRouteId,
                 > + Send
                 + Sync,
         >,
@@ -151,6 +172,8 @@ where
     R: MembershipNeighbors<MN> + Send + Sync,
     MN: MembershipNeighbor + Send + Sync,
 {
+    type RouteId = NodeSocketRouteId;
+
     fn add_socket(
         &self,
         port: NodePort,
@@ -162,6 +185,7 @@ where
                     M,
                     DefaultMessageType,
                     HashMapRouteStorage,
+                    RouteId = NodeSocketRouteId,
                 > + Send
                 + Sync,
         >,
@@ -188,7 +212,7 @@ where
 
     fn add_socket_task_and_create(
         &self,
-        port: NodePort,
+        id: NodeSocketRouteId,
         task: Box<T>,
         socket_constructor: Box<
             dyn Fn(
@@ -201,18 +225,19 @@ where
                         M,
                         DefaultMessageType,
                         HashMapRouteStorage,
+                        RouteId = NodeSocketRouteId,
                     > + Send
                     + Sync,
             >,
         >,
     ) -> Result<(), String> {
-        let element_exists = self.sockets.contains_key(&port);
+        let element_exists = self.sockets.contains_key(&id.info().port());
 
         if !element_exists {
-            self.add_socket(port.clone(), socket_constructor(port.clone()))?;
+            self.add_socket(id.info().port(), socket_constructor(id.info().port()))?;
         }
 
-        self.add_socket_task(port, task)?;
+        self.add_socket_task(id, task)?;
 
         Ok(())
     }
@@ -232,9 +257,8 @@ where
     }
 
     //TODO change `NodePort` to `SocketIdentifier` to be more generic
-    fn add_socket_task(&self, port: NodePort, task: Box<T>) -> Result<(), String> {
-        // self.route_handler.add_route((9000,), task);
-
+    fn add_socket_task(&self, id: NodeSocketRouteId, task: Box<T>) -> Result<(), String> {
+        // self.route_handler.
         Ok(())
     }
 

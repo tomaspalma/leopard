@@ -2,7 +2,9 @@ use crate::node::{
     NodeSocket, NodeSocketTask, NodeSocketTaskMetadata, PeriodicNodeSocketTask, port::NodePort,
 };
 use crate::request::handler::{RequestHandler, default::DefaultRequestHandler};
-use crate::route::{DefaultRouteHandler, HashMapRouteStorage, Route, RouteHandler, RouteTask};
+use crate::route::{
+    DefaultRouteHandler, HashMapRouteStorage, NodeSocketRouteId, Route, RouteHandler, RouteTask,
+};
 
 use async_trait::async_trait;
 use message::{DefaultMessage, DefaultMessageType};
@@ -98,7 +100,11 @@ pub struct DefaultNodeSocket {
     listener: Option<TcpListener>,
     request_handler:
         Arc<dyn RequestHandler<DefaultMessage, DefaultMessageType, TcpStream> + Send + Sync>,
-    route_handler: Arc<dyn RouteHandler<DefaultMessageType, HashMapRouteStorage> + Send + Sync>,
+    route_handler: Arc<
+        dyn RouteHandler<DefaultMessageType, HashMapRouteStorage, RouteId = NodeSocketRouteId>
+            + Send
+            + Sync,
+    >,
 }
 
 impl DefaultNodeSocket {
@@ -124,6 +130,8 @@ impl
         HashMapRouteStorage,
     > for DefaultNodeSocket
 {
+    type RouteId = NodeSocketRouteId;
+
     fn request_handler(
         &self,
     ) -> Arc<dyn RequestHandler<DefaultMessage, DefaultMessageType, TcpStream>> {
@@ -132,7 +140,11 @@ impl
 
     fn route_handler(
         &self,
-    ) -> Arc<dyn RouteHandler<DefaultMessageType, HashMapRouteStorage> + Send + Sync> {
+    ) -> Arc<
+        dyn RouteHandler<DefaultMessageType, HashMapRouteStorage, RouteId = NodeSocketRouteId>
+            + Send
+            + Sync,
+    > {
         self.route_handler.clone()
     }
 

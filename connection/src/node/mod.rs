@@ -49,10 +49,14 @@ where
     MType: MessageType,
     RStorage: RouteStorage,
 {
+    type RouteId;
+
     fn request_handler(
         &self,
     ) -> Arc<dyn RequestHandler<DefaultMessage, DefaultMessageType, TcpStream>>;
-    fn route_handler(&self) -> Arc<dyn RouteHandler<MType, RStorage> + Send + Sync>;
+    fn route_handler(
+        &self,
+    ) -> Arc<dyn RouteHandler<MType, RStorage, RouteId = Self::RouteId> + Send + Sync>;
     async fn add_periodic_task(&mut self, task: Arc<PT>);
     async fn bind(&mut self) -> Result<(), std::io::Error>;
     async fn send(&self);

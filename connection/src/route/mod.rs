@@ -14,9 +14,35 @@ pub struct NodeSocketRouteIdInfo {
     protocol: String,
 }
 
+impl NodeSocketRouteIdInfo {
+    pub fn new(port: NodePort, protocol: String) -> Self {
+        Self { port, protocol }
+    }
+
+    pub fn port(&self) -> NodePort {
+        self.port.clone()
+    }
+
+    pub fn protocol(&self) -> String {
+        self.protocol.clone()
+    }
+}
+
 #[derive(Hash, Eq, PartialEq)]
 pub struct NodeSocketRouteId {
     info: NodeSocketRouteIdInfo,
+}
+
+impl NodeSocketRouteId {
+    pub fn new(port: NodePort, protocol: String) -> Self {
+        Self {
+            info: NodeSocketRouteIdInfo { port, protocol },
+        }
+    }
+
+    pub fn info(&self) -> NodeSocketRouteIdInfo {
+        self.info.clone()
+    }
 }
 
 impl RouteId<NodeSocketRouteIdInfo> for NodeSocketRouteId {
@@ -76,8 +102,10 @@ where
     MType: MessageType,
     RStorage: RouteStorage,
 {
+    type RouteId;
+
     fn handle(&self, message: Box<dyn Message<MType>>);
-    fn add_route(&self, id: String, route: Box<dyn Route>);
+    fn add_route(&self, id: Self::RouteId, route: Arc<dyn Route + Send + Sync>);
 }
 
 pub struct DefaultRouteHandler {
@@ -93,9 +121,13 @@ impl DefaultRouteHandler {
 }
 
 impl RouteHandler<DefaultMessageType, HashMapRouteStorage> for DefaultRouteHandler {
+    type RouteId = NodeSocketRouteId;
+
     fn handle(&self, message: Box<dyn Message<DefaultMessageType>>) {
         println!("Handling route");
     }
 
-    fn add_route(&self, id: String, route: Box<dyn Route>) {}
+    fn add_route(&self, id: NodeSocketRouteId, route: Arc<dyn Route + Send + Sync>) {
+        self.storage.store(id, route);
+    }
 }

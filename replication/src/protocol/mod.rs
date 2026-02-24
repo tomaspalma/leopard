@@ -14,7 +14,7 @@ use connection::{
         },
         port::NodePort,
     },
-    route::{DefaultRouteHandler, HashMapRouteStorage},
+    route::{DefaultRouteHandler, HashMapRouteStorage, NodeSocketRouteId},
 };
 use protocol::Protocol;
 use runtime::time::TokioPeriodTimeUnit;
@@ -141,7 +141,7 @@ impl
         let runtime = self.state.runtime();
         self.state
             .add_socket_task_and_create(
-                self.port.clone(),
+                NodeSocketRouteId::new(self.port.clone(), self.id()),
                 Box::new(DefaultNodeSocketTask::new(Arc::new(
                     DefaultNodeSocketTaskMetadata::new(String::new()),
                 ))),
