@@ -1,14 +1,22 @@
 use std::rc::Rc;
 
 pub trait MessageType {
-    fn value(&self) -> &str;
+    type PossibleEnumValues;
+
+    fn value(&self) -> Self::PossibleEnumValues;
+}
+
+pub enum DefaultMessageTypes {
+    Default,
 }
 
 pub struct DefaultMessageType;
 
 impl MessageType for DefaultMessageType {
-    fn value(&self) -> &str {
-        "default"
+    type PossibleEnumValues = DefaultMessageTypes;
+
+    fn value(&self) -> DefaultMessageTypes {
+        DefaultMessageTypes::Default
     }
 }
 
