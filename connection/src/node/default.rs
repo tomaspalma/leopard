@@ -1,6 +1,4 @@
-use crate::node::{
-    NodeSocket, NodeSocketTask, NodeSocketTaskMetadata, PeriodicNodeSocketTask, port::NodePort,
-};
+use crate::node::{NodeSocket, NodeSocketTaskMetadata, PeriodicNodeSocketTask, port::NodePort};
 use crate::request::handler::{RequestHandler, default::DefaultRequestHandler};
 use crate::route::{
     DefaultRouteHandler, HashMapRouteStorage, NodeSocketRouteId, Route, RouteHandler, RouteTask,
@@ -60,14 +58,9 @@ impl DefaultNodeSocketTaskMetadata {
     }
 }
 
-#[async_trait]
-impl NodeSocketTask<DefaultNodeSocketTaskMetadata> for DefaultNodeSocketTask {
-    async fn run(&self) {
+impl RouteTask for DefaultNodeSocketTask {
+    fn run(&self) {
         println!("Running task");
-    }
-
-    fn metadata(&self) -> Arc<DefaultNodeSocketTaskMetadata> {
-        self.metadata.clone()
     }
 }
 
@@ -180,7 +173,7 @@ impl
                     Ok((stream, addr)) => {
                         let msg = self.request_handler().handle(stream.bytes());
 
-                        self.route_handler().handle(msg);
+                        self.route_handler().handle(msg, self.port.clone());
                     }
                     Err(e) => {
                         eprintln!("Failed to accept connection: {}", e);
@@ -195,10 +188,20 @@ impl
     async fn disconnect(&self) {}
 }
 
-pub struct NodeSocketRoute {}
+pub struct NodeSocketRoute {
+    task: Box<dyn RouteTask + Send + Sync>,
+}
 
-// impl Route for NodeSocketRoute {
-//     fn task(&self) -> Box<dyn RouteTask> {
-//         Box::new(NodeSocketTask {})
-//     }
-// }
+impl NodeSocketRoute {
+    pub fn new(task: Box<dyn RouteTask + Send + Sync>) -> Self {
+        Self { task }
+    }
+}
+
+impl Route for NodeSocketRoute {
+    fn task(&self) -> Box<dyn RouteTask> {
+        Box::new(DefaultNodeSocketTask::new(Arc::new(
+            DefaultNodeSocketTaskMetadata::new(String::new()),
+        )))
+    }
+}

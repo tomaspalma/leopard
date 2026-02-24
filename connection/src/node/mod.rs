@@ -2,9 +2,8 @@ pub mod default;
 pub mod id;
 pub mod port;
 
-use crate::node::port::NodePort;
 use crate::request::handler::RequestHandler;
-use crate::route::{RouteHandler, RouteStorage};
+use crate::route::{RouteHandler, RouteStorage, RouteTask};
 
 use async_trait::async_trait;
 use message::{DefaultMessage, DefaultMessageType, MessageType};
@@ -15,12 +14,6 @@ use std::net::TcpStream;
 use std::sync::Arc;
 
 pub trait NodeSocketTaskMetadata {}
-
-#[async_trait]
-pub trait NodeSocketTask<M: NodeSocketTaskMetadata> {
-    async fn run(&self);
-    fn metadata(&self) -> Arc<M>;
-}
 
 #[async_trait]
 pub trait PeriodicNodeSocketTask<I>
@@ -42,7 +35,7 @@ where
 #[async_trait]
 pub trait NodeSocket<T, PT, PTU, M, MType, RStorage>
 where
-    T: NodeSocketTask<M>,
+    T: RouteTask,
     PT: PeriodicNodeSocketTask<PTU>,
     M: NodeSocketTaskMetadata,
     PTU: PeriodTimeUnit + Send + Sync,

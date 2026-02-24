@@ -55,7 +55,9 @@ pub trait Route {
     fn task(&self) -> Box<dyn RouteTask>;
 }
 
-pub trait RouteTask {}
+pub trait RouteTask {
+    fn run(&self);
+}
 
 pub trait RouterHandlerInfo {
     type MType: MessageType;
@@ -104,7 +106,7 @@ where
 {
     type RouteId;
 
-    fn handle(&self, message: Box<dyn Message<MType>>);
+    fn handle(&self, message: Box<dyn Message<MType>>, port: NodePort);
     fn add_route(&self, id: Self::RouteId, route: Arc<dyn Route + Send + Sync>);
 }
 
@@ -120,14 +122,21 @@ impl DefaultRouteHandler {
     }
 }
 
+// aqui vai ser preciso mudar isto, não me está a fazer muito sentido ter um "DefaultMessageType" aqui
 impl RouteHandler<DefaultMessageType, HashMapRouteStorage> for DefaultRouteHandler {
     type RouteId = NodeSocketRouteId;
 
-    fn handle(&self, message: Box<dyn Message<DefaultMessageType>>) {
+    fn handle(&self, message: Box<dyn Message<DefaultMessageType>>, port: NodePort) {
+        // aqui é só correr a task e passar a mensagem
+        // self.storage.get()
+        
+
         println!("Handling route");
     }
 
     fn add_route(&self, id: NodeSocketRouteId, route: Arc<dyn Route + Send + Sync>) {
         self.storage.store(id, route);
+
+        println!("Current routes stored: {}", self.storage.storage.len());
     }
 }

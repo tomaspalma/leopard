@@ -1,5 +1,5 @@
 use config::node::NodeConfig;
-use connection::route::{RouteHandler, RouteStorage};
+use connection::route::{RouteHandler, RouteStorage, RouteTask};
 use errors::node::NodeInitError;
 use membership::{Membership, MembershipNeighbor, MembershipNeighbors};
 use message::MessageType;
@@ -7,8 +7,7 @@ use protocol::Protocol;
 use runtime::time::PeriodTimeUnit;
 
 use connection::node::{
-    id::NodeIdentifier, port::ConnectionInfo, NodeSocketTask, NodeSocketTaskMetadata,
-    PeriodicNodeSocketTask,
+    id::NodeIdentifier, port::ConnectionInfo, NodeSocketTaskMetadata, PeriodicNodeSocketTask,
 };
 use state::node::NodeState;
 
@@ -19,7 +18,7 @@ use std::sync::Arc;
 
 pub struct Node<T, S, M, R, N, MN, CI, CV, PTU, PT, MType, RHandler, RStorage>
 where
-    T: NodeSocketTask<M>,
+    T: RouteTask,
     S: NodeState<T, M, N, R, MN, CI, CV, PTU, PT, MType, RHandler, RStorage>,
     M: NodeSocketTaskMetadata,
     N: Membership<R, MN>,
@@ -50,7 +49,7 @@ where
 impl<T, S, M, R, N, MN, CI, CV, PTU, PT, MType, RHandler, RStorage>
     Node<T, S, M, R, N, MN, CI, CV, PTU, PT, MType, RHandler, RStorage>
 where
-    T: NodeSocketTask<M> + Send + Sync,
+    T: RouteTask + Send + Sync,
     S: NodeState<T, M, N, R, MN, CI, CV, PTU, PT, MType, RHandler, RStorage>
         + Send
         + Sync

@@ -1,5 +1,6 @@
 use async_trait::async_trait;
 use config::node::NodeConfig;
+use connection::node::default::NodeSocketRoute;
 use dashmap::DashMap;
 use errors::node::NodeInitError;
 use message::{DefaultMessageType, MessageType};
@@ -12,10 +13,11 @@ use std::sync::{Arc, RwLock};
 
 use connection::route::{
     DefaultRouteHandler, HashMapRouteStorage, NodeSocketRouteId, RouteHandler, RouteStorage,
+    RouteTask,
 };
 
 use connection::node::{
-    NodeSocket, NodeSocketTask, NodeSocketTaskMetadata, PeriodicNodeSocketTask,
+    NodeSocket, NodeSocketTaskMetadata, PeriodicNodeSocketTask,
     default::{
         DefaultNodeSocketTask, DefaultNodeSocketTaskMetadata, PeriodicDefaultNodeSocketTask,
     },
@@ -31,7 +33,7 @@ use taints::NodePortTaint;
 #[async_trait]
 pub trait NodeState<T, M, N, R, MN, CI, CV, PTU, PT, MType, RHandler, RStorage>
 where
-    T: NodeSocketTask<M>,
+    T: RouteTask,
     M: NodeSocketTaskMetadata,
     N: Membership<R, MN>,
     R: MembershipNeighbors<MN>,
@@ -102,7 +104,7 @@ where
 
 pub struct DefaultNodeState<T, M, R, N, MN, CI, CV, MType, RHandler, RStorage>
 where
-    T: NodeSocketTask<M>,
+    T: RouteTask,
     M: NodeSocketTaskMetadata,
     N: Membership<R, MN> + Send + Sync,
     R: MembershipNeighbors<MN> + Send + Sync,
@@ -166,7 +168,7 @@ impl<T, M, R, N, MN>
         HashMapRouteStorage,
     >
 where
-    T: NodeSocketTask<M>,
+    T: RouteTask + Send + Sync + 'static,
     M: NodeSocketTaskMetadata + Send + Sync,
     N: Membership<R, MN> + Send + Sync,
     R: MembershipNeighbors<MN> + Send + Sync,
@@ -256,9 +258,9 @@ where
         }
     }
 
-    //TODO change `NodePort` to `SocketIdentifier` to be more generic
     fn add_socket_task(&self, id: NodeSocketRouteId, task: Box<T>) -> Result<(), String> {
-        // self.route_handler.
+        self.route_handler()
+            .add_route(id, Arc::new(NodeSocketRoute::new(task)));
         Ok(())
     }
 

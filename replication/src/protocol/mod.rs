@@ -7,14 +7,14 @@ use std::sync::Arc;
 
 use connection::{
     node::{
-        NodeSocketTask, NodeSocketTaskMetadata,
+        NodeSocketTaskMetadata,
         default::{
             DefaultNodeSocket, DefaultNodeSocketTask, DefaultNodeSocketTaskMetadata,
             PeriodicDefaultNodeSocketTask,
         },
         port::NodePort,
     },
-    route::{DefaultRouteHandler, HashMapRouteStorage, NodeSocketRouteId},
+    route::{DefaultRouteHandler, HashMapRouteStorage, NodeSocketRouteId, RouteTask},
 };
 use protocol::Protocol;
 use runtime::time::TokioPeriodTimeUnit;
@@ -81,15 +81,9 @@ pub struct HintedHandoffReplicationProtocolTaskMetadata {}
 impl NodeSocketTaskMetadata for HintedHandoffReplicationProtocolTaskMetadata {}
 
 #[async_trait]
-impl NodeSocketTask<HintedHandoffReplicationProtocolTaskMetadata>
-    for HintedHandoffReplicationProtocolTask
-{
-    async fn run(&self) {
-        println!("Running HintedHandoffReplicationProtocolTask");
-    }
-
-    fn metadata(&self) -> Arc<HintedHandoffReplicationProtocolTaskMetadata> {
-        Arc::new(HintedHandoffReplicationProtocolTaskMetadata {})
+impl RouteTask for HintedHandoffReplicationProtocolTask {
+    fn run(&self) {
+        println!("Running hinted handoff replication protocol task");
     }
 }
 

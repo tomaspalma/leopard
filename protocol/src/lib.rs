@@ -2,11 +2,8 @@ use async_trait::async_trait;
 
 use uuid::Uuid;
 
-use connection::node::{
-    NodeSocket, NodeSocketTask, NodeSocketTaskMetadata, PeriodicNodeSocketTask,
-    port::ConnectionInfo,
-};
-use connection::route::{RouteHandler, RouteStorage};
+use connection::node::{NodeSocketTaskMetadata, PeriodicNodeSocketTask, port::ConnectionInfo};
+use connection::route::{RouteHandler, RouteStorage, RouteTask};
 use membership::{Membership, MembershipNeighbor, MembershipNeighbors};
 use message::MessageType;
 use runtime::time::PeriodTimeUnit;
@@ -16,7 +13,7 @@ use state::node::NodeState;
 pub trait Protocol<S, T, M, R, N, MN, CI, CV, PTU, PT, MType, RHandler, RStorage>
 where
     S: NodeState<T, M, N, R, MN, CI, CV, PTU, PT, MType, RHandler, RStorage>,
-    T: NodeSocketTask<M>,
+    T: RouteTask,
     M: NodeSocketTaskMetadata,
     R: MembershipNeighbors<MN>,
     N: Membership<R, MN>,
