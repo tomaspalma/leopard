@@ -1,5 +1,5 @@
 use dashmap::DashMap;
-use message::{DefaultMessageType, Message, MessageType};
+use message::{Message, MessageType};
 use std::sync::Arc;
 
 use crate::node::port::NodePort;
@@ -99,14 +99,13 @@ impl RouteStorage for HashMapRouteStorage {
     }
 }
 
-pub trait RouteHandler<MType, RStorage>
+pub trait RouteHandler<RStorage>
 where
-    MType: MessageType,
     RStorage: RouteStorage,
 {
     type RouteId;
 
-    fn handle(&self, message: Box<dyn Message<MType>>, port: NodePort);
+    fn handle(&self, message: Box<dyn Message>, port: NodePort);
     fn add_route(&self, id: Self::RouteId, route: Arc<dyn Route + Send + Sync>);
 }
 
@@ -123,13 +122,12 @@ impl DefaultRouteHandler {
 }
 
 // aqui vai ser preciso mudar isto, não me está a fazer muito sentido ter um "DefaultMessageType" aqui
-impl RouteHandler<DefaultMessageType, HashMapRouteStorage> for DefaultRouteHandler {
+impl RouteHandler<HashMapRouteStorage> for DefaultRouteHandler {
     type RouteId = NodeSocketRouteId;
 
-    fn handle(&self, message: Box<dyn Message<DefaultMessageType>>, port: NodePort) {
+    fn handle(&self, message: Box<dyn Message>, port: NodePort) {
         // aqui é só correr a task e passar a mensagem
         // self.storage.get()
-        
 
         println!("Handling route");
     }

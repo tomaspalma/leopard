@@ -2,7 +2,6 @@ use async_trait::async_trait;
 use membership::{
     DefaultMembership, DefaultMembershipNeighbor, DefaultMembershipNeighborRepresentation,
 };
-use message::DefaultMessageType;
 use std::sync::Arc;
 
 use connection::{
@@ -42,7 +41,6 @@ impl
             DefaultMembershipNeighbor,
             NodePort,
             u16,
-            DefaultMessageType,
             DefaultRouteHandler,
             HashMapRouteStorage,
         >,
@@ -59,7 +57,6 @@ impl
                 DefaultMembershipNeighbor,
                 NodePort,
                 u16,
-                DefaultMessageType,
                 DefaultRouteHandler,
                 HashMapRouteStorage,
             >,
@@ -98,7 +95,6 @@ impl
             DefaultMembershipNeighbor,
             NodePort,
             u16,
-            DefaultMessageType,
             DefaultRouteHandler,
             HashMapRouteStorage,
         >,
@@ -111,7 +107,6 @@ impl
         u16,
         TokioPeriodTimeUnit,
         PeriodicDefaultNodeSocketTask,
-        DefaultMessageType,
         DefaultRouteHandler,
         HashMapRouteStorage,
     >
@@ -124,7 +119,6 @@ impl
             DefaultMembershipNeighbor,
             NodePort,
             u16,
-            DefaultMessageType,
             DefaultRouteHandler,
             HashMapRouteStorage,
         >,

@@ -7,7 +7,6 @@ use connection::route::{DefaultRouteHandler, HashMapRouteStorage};
 use membership::{
     DefaultMembership, DefaultMembershipNeighbor, DefaultMembershipNeighborRepresentation,
 };
-use message::DefaultMessageType;
 use protocol::Protocol;
 use runtime::time::TokioPeriodTimeUnit;
 use state::node::DefaultNodeState;
@@ -25,7 +24,6 @@ impl
             DefaultMembershipNeighbor,
             NodePort,
             u16,
-            DefaultMessageType,
             DefaultRouteHandler,
             HashMapRouteStorage,
         >,
@@ -38,7 +36,6 @@ impl
         u16,
         TokioPeriodTimeUnit,
         PeriodicDefaultNodeSocketTask,
-        DefaultMessageType,
         DefaultRouteHandler,
         HashMapRouteStorage,
     > for DefaultMembershipProtocol

@@ -3,7 +3,7 @@ use config::node::NodeConfig;
 use connection::node::default::NodeSocketRoute;
 use dashmap::DashMap;
 use errors::node::NodeInitError;
-use message::{DefaultMessageType, MessageType};
+use message::MessageType;
 use runtime::time::TokioPeriodTimeUnit;
 use runtime::{Runtime, time::PeriodTimeUnit};
 
@@ -31,7 +31,7 @@ use membership::{
 use taints::NodePortTaint;
 
 #[async_trait]
-pub trait NodeState<T, M, N, R, MN, CI, CV, PTU, PT, MType, RHandler, RStorage>
+pub trait NodeState<T, M, N, R, MN, CI, CV, PTU, PT, RHandler, RStorage>
 where
     T: RouteTask,
     M: NodeSocketTaskMetadata,
@@ -42,8 +42,7 @@ where
     CV: Sized,
     PTU: PeriodTimeUnit + Send + Sync,
     PT: PeriodicNodeSocketTask<PTU>,
-    MType: MessageType,
-    RHandler: RouteHandler<MType, RStorage> + Send + Sync,
+    RHandler: RouteHandler<RStorage> + Send + Sync,
     RStorage: RouteStorage,
 {
     type RouteId;
@@ -57,7 +56,6 @@ where
                     PeriodicDefaultNodeSocketTask,
                     PTU,
                     M,
-                    MType,
                     RStorage,
                     RouteId = Self::RouteId,
                 > + Send
@@ -78,7 +76,6 @@ where
                         PeriodicDefaultNodeSocketTask,
                         PTU,
                         M,
-                        MType,
                         RStorage,
                         RouteId = Self::RouteId,
                     > + Send
@@ -102,7 +99,7 @@ where
     async fn init(&self) -> Result<(), NodeInitError>;
 }
 
-pub struct DefaultNodeState<T, M, R, N, MN, CI, CV, MType, RHandler, RStorage>
+pub struct DefaultNodeState<T, M, R, N, MN, CI, CV, RHandler, RStorage>
 where
     T: RouteTask,
     M: NodeSocketTaskMetadata,
@@ -111,8 +108,7 @@ where
     MN: MembershipNeighbor + Send + Sync,
     CI: ConnectionInfo<CV> + Send + Sync,
     CV: Sized,
-    MType: MessageType,
-    RHandler: RouteHandler<MType, RStorage> + Send + Sync,
+    RHandler: RouteHandler<RStorage> + Send + Sync,
     RStorage: RouteStorage,
 {
     sockets: DashMap<
@@ -123,7 +119,6 @@ where
                     PeriodicDefaultNodeSocketTask,
                     TokioPeriodTimeUnit,
                     M,
-                    MType,
                     RStorage,
                     RouteId = NodeSocketRouteId,
                 > + Send
@@ -151,22 +146,9 @@ impl<T, M, R, N, MN>
         u16,
         TokioPeriodTimeUnit,
         PeriodicDefaultNodeSocketTask,
-        DefaultMessageType,
         DefaultRouteHandler,
         HashMapRouteStorage,
-    >
-    for DefaultNodeState<
-        T,
-        M,
-        R,
-        N,
-        MN,
-        NodePort,
-        u16,
-        DefaultMessageType,
-        DefaultRouteHandler,
-        HashMapRouteStorage,
-    >
+    > for DefaultNodeState<T, M, R, N, MN, NodePort, u16, DefaultRouteHandler, HashMapRouteStorage>
 where
     T: RouteTask + Send + Sync + 'static,
     M: NodeSocketTaskMetadata + Send + Sync,
@@ -185,7 +167,6 @@ where
                     PeriodicDefaultNodeSocketTask,
                     TokioPeriodTimeUnit,
                     M,
-                    DefaultMessageType,
                     HashMapRouteStorage,
                     RouteId = NodeSocketRouteId,
                 > + Send
@@ -225,7 +206,6 @@ where
                         PeriodicDefaultNodeSocketTask,
                         TokioPeriodTimeUnit,
                         M,
-                        DefaultMessageType,
                         HashMapRouteStorage,
                         RouteId = NodeSocketRouteId,
                     > + Send
@@ -318,7 +298,6 @@ impl
         DefaultMembershipNeighbor,
         NodePort,
         u16,
-        DefaultMessageType,
         DefaultRouteHandler,
         HashMapRouteStorage,
     >

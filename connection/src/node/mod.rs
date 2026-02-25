@@ -6,7 +6,7 @@ use crate::request::handler::RequestHandler;
 use crate::route::{RouteHandler, RouteStorage, RouteTask};
 
 use async_trait::async_trait;
-use message::{DefaultMessage, DefaultMessageType, MessageType};
+use message::MessageType;
 use runtime::{Task, time::PeriodTimeUnit};
 
 use std::net::TcpStream;
@@ -33,23 +33,20 @@ where
 }
 
 #[async_trait]
-pub trait NodeSocket<T, PT, PTU, M, MType, RStorage>
+pub trait NodeSocket<T, PT, PTU, M, RStorage>
 where
     T: RouteTask,
     PT: PeriodicNodeSocketTask<PTU>,
     M: NodeSocketTaskMetadata,
     PTU: PeriodTimeUnit + Send + Sync,
-    MType: MessageType,
     RStorage: RouteStorage,
 {
     type RouteId;
 
-    fn request_handler(
-        &self,
-    ) -> Arc<dyn RequestHandler<DefaultMessage, DefaultMessageType, TcpStream>>;
+    fn request_handler(&self) -> Arc<dyn RequestHandler<TcpStream>>;
     fn route_handler(
         &self,
-    ) -> Arc<dyn RouteHandler<MType, RStorage, RouteId = Self::RouteId> + Send + Sync>;
+    ) -> Arc<dyn RouteHandler<RStorage, RouteId = Self::RouteId> + Send + Sync>;
     async fn add_periodic_task(&mut self, task: Arc<PT>);
     async fn bind(&mut self) -> Result<(), std::io::Error>;
     async fn send(&self);
