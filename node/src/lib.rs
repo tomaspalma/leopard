@@ -10,7 +10,7 @@ use connection::node::{
 };
 use state::node::NodeState;
 
-use runtime::Runtime;
+use runtime::{Runtime, RUNTIME};
 
 use std::marker::PhantomData;
 use std::sync::Arc;
@@ -31,15 +31,10 @@ where
     RStorage: RouteStorage,
 {
     identifier: Box<dyn NodeIdentifier<CI, CV> + Send + Sync>,
-    runtime: Arc<dyn Runtime + Send + Sync>,
     config: Arc<dyn NodeConfig<R, MN> + Send + Sync>,
     state: Arc<S>,
     protocols: Vec<
-        Box<
-            dyn Protocol<S, T, M, R, N, MN, CI, CV, PTU, PT, RHandler, RStorage>
-                + Send
-                + Sync,
-        >,
+        Box<dyn Protocol<S, T, M, R, N, MN, CI, CV, PTU, PT, RHandler, RStorage> + Send + Sync>,
     >,
     _marker: PhantomData<T>,
 }
@@ -48,10 +43,7 @@ impl<T, S, M, R, N, MN, CI, CV, PTU, PT, RHandler, RStorage>
     Node<T, S, M, R, N, MN, CI, CV, PTU, PT, RHandler, RStorage>
 where
     T: RouteTask + Send + Sync,
-    S: NodeState<T, M, N, R, MN, CI, CV, PTU, PT, RHandler, RStorage>
-        + Send
-        + Sync
-        + 'static,
+    S: NodeState<T, M, N, R, MN, CI, CV, PTU, PT, RHandler, RStorage> + Send + Sync + 'static,
     M: NodeSocketTaskMetadata,
     N: Membership<R, MN>,
     R: MembershipNeighbors<MN>,
@@ -64,7 +56,6 @@ where
     RStorage: RouteStorage,
 {
     pub fn new(
-        runtime: Arc<dyn Runtime + Send + Sync>,
         state: Arc<S>,
         config: Arc<dyn NodeConfig<R, MN> + Send + Sync>,
         identifier: Box<dyn NodeIdentifier<CI, CV> + Send + Sync>,
@@ -74,7 +65,6 @@ where
             config,
             protocols: vec![],
             state,
-            runtime,
             _marker: PhantomData,
         }
     }
@@ -82,9 +72,7 @@ where
     pub fn add_protocol(
         &mut self,
         protocol: Box<
-            dyn Protocol<S, T, M, R, N, MN, CI, CV, PTU, PT,RHandler, RStorage>
-                + Send
-                + Sync,
+            dyn Protocol<S, T, M, R, N, MN, CI, CV, PTU, PT, RHandler, RStorage> + Send + Sync,
         >,
     ) {
         self.protocols.push(protocol);
@@ -96,8 +84,13 @@ where
         }
 
         let state_clone = self.state.clone();
-        self.runtime
-            .clone()
+
+        let rt_handle = {
+            let guard = RUNTIME.read().unwrap();
+            Arc::clone(&*guard)
+        };
+
+        rt_handle
             .spawn(Box::new(move || {
                 let state = state_clone.clone();
                 Box::pin(async move {

@@ -5,6 +5,7 @@ use crate::route::{
 };
 
 use async_trait::async_trait;
+use runtime::RUNTIME;
 use runtime::{
     Runtime, Task,
     time::{PeriodTimeUnit, TokioPeriodTimeUnit},
@@ -87,7 +88,6 @@ impl PeriodicNodeSocketTask<TokioPeriodTimeUnit> for PeriodicDefaultNodeSocketTa
 }
 
 pub struct DefaultNodeSocket {
-    runtime: Arc<dyn Runtime + Send + Sync>,
     port: NodePort,
     listener: Option<TcpListener>,
     request_handler: Arc<dyn RequestHandler<TcpStream> + Send + Sync>,
@@ -96,9 +96,8 @@ pub struct DefaultNodeSocket {
 }
 
 impl DefaultNodeSocket {
-    pub fn new(port: NodePort, runtime: Arc<dyn Runtime + Send + Sync>) -> Self {
+    pub fn new(port: NodePort) -> Self {
         Self {
-            runtime,
             port,
             listener: None,
             request_handler: Arc::new(DefaultRequestHandler::new()),
@@ -130,7 +129,12 @@ impl
     }
 
     async fn add_periodic_task(&mut self, task: Arc<PeriodicDefaultNodeSocketTask>) {
-        self.runtime
+        let rt_handle = {
+            let rt_guard = RUNTIME.read().unwrap();
+            Arc::clone(&*rt_guard)
+        };
+
+        rt_handle
             .spawn(Box::new(move || {
                 Box::pin({
                     let value = task.clone();

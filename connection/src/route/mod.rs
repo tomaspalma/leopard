@@ -126,8 +126,19 @@ impl RouteHandler<HashMapRouteStorage> for DefaultRouteHandler {
     type RouteId = NodeSocketRouteId;
 
     fn handle(&self, message: Box<dyn Message>, port: NodePort) {
-        // aqui é só correr a task e passar a mensagem
-        // self.storage.get()
+        let route = self
+            .storage
+            .get(NodeSocketRouteId::new(port.clone(), String::new()));
+
+        match route {
+            Some(route) => {
+                let task = route.task();
+                task.run();
+            }
+            None => {
+                println!("No route found for port: {}", port.value());
+            }
+        }
 
         println!("Handling route");
     }

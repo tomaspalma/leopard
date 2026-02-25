@@ -84,8 +84,6 @@ where
         >,
     ) -> Result<(), String>;
 
-    fn runtime(&self) -> Arc<dyn Runtime + Send + Sync>;
-
     fn route_handler(&self) -> Arc<RHandler>;
 
     fn add_socket_task(&self, id: Self::RouteId, task: Box<T>) -> Result<(), String>;
@@ -127,7 +125,6 @@ where
     >,
     membership: Arc<RwLock<N>>,
     config: Arc<dyn NodeConfig<R, MN> + Send + Sync>,
-    runtime: Arc<dyn Runtime + Sync + Send>,
     identifier: Arc<dyn NodeIdentifier<CI, CV> + Send + Sync>,
     route_handler: Arc<RHandler>,
     _marker_r: PhantomData<R>,
@@ -189,10 +186,6 @@ where
         self.membership.clone()
     }
 
-    fn runtime(&self) -> Arc<dyn Runtime + Send + Sync> {
-        self.runtime.clone()
-    }
-
     fn add_socket_task_and_create(
         &self,
         id: NodeSocketRouteId,
@@ -241,6 +234,7 @@ where
     fn add_socket_task(&self, id: NodeSocketRouteId, task: Box<T>) -> Result<(), String> {
         self.route_handler()
             .add_route(id, Arc::new(NodeSocketRoute::new(task)));
+
         Ok(())
     }
 
@@ -303,7 +297,6 @@ impl
     >
 {
     pub fn new(
-        runtime: Arc<dyn Runtime + Sync + Send>,
         config: Arc<
             dyn NodeConfig<
                     DefaultMembershipNeighborRepresentation<DefaultMembershipNeighbor>,
@@ -318,7 +311,6 @@ impl
             sockets: DashMap::new(),
             membership: Arc::new(RwLock::new(DefaultMembership::new())),
             config,
-            runtime,
             identifier,
             route_handler,
             _marker_r: PhantomData,

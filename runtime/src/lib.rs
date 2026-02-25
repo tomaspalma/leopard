@@ -1,12 +1,15 @@
 use async_trait::async_trait;
 use std::future::Future;
 use std::pin::Pin;
-use std::sync::{LockResult, PoisonError, RwLock};
+use std::sync::{Arc, LazyLock, LockResult, PoisonError, RwLock};
 
 use tokio;
 
 pub mod builder;
 pub mod time;
+
+pub static RUNTIME: LazyLock<RwLock<Arc<dyn Runtime + Send + Sync>>> =
+    LazyLock::new(|| RwLock::new(Arc::new(TokioRuntime::new())));
 
 pub type Task = dyn Fn() -> Pin<Box<dyn Future<Output = Result<(), String>> + Send>> + Send + Sync;
 
