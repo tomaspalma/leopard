@@ -1,5 +1,7 @@
+use async_trait::async_trait;
 use dashmap::DashMap;
 use message::{Message, MessageType};
+use runtime::RUNTIME;
 use std::sync::Arc;
 
 use crate::node::port::NodePort;
@@ -99,13 +101,14 @@ impl RouteStorage for HashMapRouteStorage {
     }
 }
 
+#[async_trait]
 pub trait RouteHandler<RStorage>
 where
     RStorage: RouteStorage,
 {
     type RouteId;
 
-    fn handle(&self, message: Box<dyn Message>, port: NodePort);
+    async fn handle(&self, message: Box<dyn Message + Send + Sync>, port: NodePort);
     fn add_route(&self, id: Self::RouteId, route: Arc<dyn Route + Send + Sync>);
 }
 
@@ -121,23 +124,34 @@ impl DefaultRouteHandler {
     }
 }
 
-// aqui vai ser preciso mudar isto, não me está a fazer muito sentido ter um "DefaultMessageType" aqui
+#[async_trait]
 impl RouteHandler<HashMapRouteStorage> for DefaultRouteHandler {
     type RouteId = NodeSocketRouteId;
 
-    fn handle(&self, message: Box<dyn Message>, port: NodePort) {
+    async fn handle(&self, message: Box<dyn Message + Send + Sync>, port: NodePort) {
         let route = self
             .storage
             .get(NodeSocketRouteId::new(port.clone(), String::new()));
 
-        match route {
-            Some(route) => {
-                let task = route.task();
-                task.run();
-            }
-            None => {
-                println!("No route found for port: {}", port.value());
-            }
+        if let Some(route) = route {
+            let rt_handle = {
+                let guard = RUNTIME.read().unwrap();
+                std::sync::Arc::clone(&*guard)
+            };
+
+            rt_handle
+                .spawn(Box::new(move || {
+                    Box::pin({
+                        let value = route.clone();
+                        async move {
+                            value.task().run();
+                            Ok(())
+                        }
+                    })
+                }))
+                .await;
+        } else {
+            println!("No route found for port: {}", port.value());
         }
 
         println!("Handling route");

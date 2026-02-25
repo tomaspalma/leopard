@@ -1,4 +1,4 @@
-use std::rc::Rc;
+use std::sync::Arc;
 
 pub trait MessageTypeValues {}
 
@@ -11,6 +11,6 @@ pub enum DefaultMessageTypes {
 }
 
 pub trait Message {
-    fn content(&self) -> Rc<Vec<u8>>;
-    fn get_type(&self) -> Rc<dyn MessageType>;
+    fn content(&self) -> Arc<Vec<u8>>;
+    fn get_type(&self) -> Arc<dyn MessageType + Send + Sync>;
 }

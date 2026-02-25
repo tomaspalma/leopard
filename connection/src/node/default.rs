@@ -165,7 +165,7 @@ impl
                     Ok((stream, addr)) => {
                         let msg = self.request_handler().handle(stream.bytes());
 
-                        self.route_handler().handle(msg, self.port.clone());
+                        self.route_handler().handle(msg, self.port.clone()).await;
                     }
                     Err(e) => {
                         eprintln!("Failed to accept connection: {}", e);

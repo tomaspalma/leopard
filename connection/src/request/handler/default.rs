@@ -1,7 +1,5 @@
-use std::io::Bytes;
 use std::net::TcpStream;
-
-use std::rc::Rc;
+use std::{io::Bytes, sync::Arc};
 
 use message::{Message, MessageType, MessageTypeValues};
 
@@ -16,7 +14,7 @@ impl DefaultRequestHandler {
 }
 
 pub struct TestMessage {
-    _type: Rc<dyn MessageType>,
+    _type: Arc<dyn MessageType + Send + Sync>,
 }
 
 pub struct TestMessageTypeValues {}
@@ -44,23 +42,23 @@ impl MessageType for TestMessageType {
 }
 
 impl TestMessage {
-    pub fn new(_type: Rc<dyn MessageType>) -> Self {
+    pub fn new(_type: Arc<dyn MessageType + Send + Sync>) -> Self {
         Self { _type }
     }
 }
 
 impl Message for TestMessage {
-    fn content(&self) -> Rc<Vec<u8>> {
-        Rc::new(vec![])
+    fn content(&self) -> Arc<Vec<u8>> {
+        Arc::new(vec![])
     }
 
-    fn get_type(&self) -> Rc<dyn MessageType> {
+    fn get_type(&self) -> Arc<dyn MessageType + Send + Sync> {
         self._type.clone()
     }
 }
 
 impl RequestHandler<TcpStream> for DefaultRequestHandler {
-    fn handle(&self, stream: Bytes<TcpStream>) -> Box<dyn Message> {
-        Box::new(TestMessage::new(Rc::new(TestMessageType::new())))
+    fn handle(&self, stream: Bytes<TcpStream>) -> Box<dyn Message + Send + Sync> {
+        Box::new(TestMessage::new(Arc::new(TestMessageType::new())))
     }
 }
