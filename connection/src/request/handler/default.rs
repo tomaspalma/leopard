@@ -58,7 +58,7 @@ impl Message for TestMessage {
 }
 
 impl RequestHandler<TcpStream> for DefaultRequestHandler {
-    fn handle(&self, stream: Bytes<TcpStream>) -> Box<dyn Message + Send + Sync> {
-        Box::new(TestMessage::new(Arc::new(TestMessageType::new())))
+    fn handle(&self, stream: Bytes<TcpStream>) -> Arc<dyn Message + Send + Sync> {
+        Arc::new(TestMessage::new(Arc::new(TestMessageType::new())))
     }
 }

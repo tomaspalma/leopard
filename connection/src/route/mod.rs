@@ -58,7 +58,7 @@ pub trait Route {
 }
 
 pub trait RouteTask {
-    fn run(&self);
+    fn run(&self, message: Arc<dyn Message + Send + Sync>);
 }
 
 pub trait RouterHandlerInfo {
@@ -108,7 +108,7 @@ where
 {
     type RouteId;
 
-    async fn handle(&self, message: Box<dyn Message + Send + Sync>, port: NodePort);
+    async fn handle(&self, message: Arc<dyn Message + Send + Sync>, port: NodePort);
     fn add_route(&self, id: Self::RouteId, route: Arc<dyn Route + Send + Sync>);
 }
 
@@ -128,7 +128,7 @@ impl DefaultRouteHandler {
 impl RouteHandler<HashMapRouteStorage> for DefaultRouteHandler {
     type RouteId = NodeSocketRouteId;
 
-    async fn handle(&self, message: Box<dyn Message + Send + Sync>, port: NodePort) {
+    async fn handle(&self, message: Arc<dyn Message + Send + Sync>, port: NodePort) {
         let route = self
             .storage
             .get(NodeSocketRouteId::new(port.clone(), String::new()));
@@ -143,8 +143,9 @@ impl RouteHandler<HashMapRouteStorage> for DefaultRouteHandler {
                 .spawn(Box::new(move || {
                     Box::pin({
                         let value = route.clone();
+                        let message_clone = message.clone();
                         async move {
-                            value.task().run();
+                            value.task().run(message_clone);
                             Ok(())
                         }
                     })

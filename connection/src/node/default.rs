@@ -5,6 +5,7 @@ use crate::route::{
 };
 
 use async_trait::async_trait;
+use message::Message;
 use runtime::RUNTIME;
 use runtime::{
     Runtime, Task,
@@ -59,7 +60,7 @@ impl DefaultNodeSocketTaskMetadata {
 }
 
 impl RouteTask for DefaultNodeSocketTask {
-    fn run(&self) {
+    fn run(&self, message: Arc<dyn Message + Send + Sync>) {
         println!("Running task");
     }
 }

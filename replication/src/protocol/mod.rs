@@ -2,6 +2,7 @@ use async_trait::async_trait;
 use membership::{
     DefaultMembership, DefaultMembershipNeighbor, DefaultMembershipNeighborRepresentation,
 };
+use message::Message;
 use std::sync::Arc;
 
 use connection::{
@@ -79,7 +80,7 @@ impl NodeSocketTaskMetadata for HintedHandoffReplicationProtocolTaskMetadata {}
 
 #[async_trait]
 impl RouteTask for HintedHandoffReplicationProtocolTask {
-    fn run(&self) {
+    fn run(&self, message: Arc<dyn Message + Send + Sync>) {
         println!("Running hinted handoff replication protocol task");
     }
 }
