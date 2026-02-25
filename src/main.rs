@@ -19,7 +19,7 @@ async fn main() {
         info!("Starting logging");
     });
 
-    let task: Box<Task> = Box::new(move || {
+    let task_node1: Box<Task> = Box::new(move || {
         Box::pin(async move {
             let config = Arc::new(DefaultNodeConfig::new());
             let node1_id = DefaultNodeIdentifier::new(NodePort::new(9000));
@@ -47,7 +47,66 @@ async fn main() {
         })
     });
 
-    RUNTIME.write().unwrap().add_task(task).unwrap();
+    let task_node2: Box<Task> = Box::new(move || {
+        Box::pin(async move {
+            let config = Arc::new(DefaultNodeConfig::new());
+            let node1_id = DefaultNodeIdentifier::new(NodePort::new(9001));
+            let node_state = Arc::new(DefaultNodeState::new(
+                config.clone(),
+                Arc::new(node1_id),
+                Arc::new(DefaultRouteHandler::new()),
+            ));
+
+            let mut node = Node::new(
+                node_state.clone(),
+                config.clone(),
+                Box::new(DefaultNodeIdentifier::new(NodePort::new(9001))),
+            );
+
+            node.add_protocol(Box::new(HintedHandoffReplicationProtocol::new(
+                node_state.clone(),
+                NodePort::new(9001),
+            )));
+            node.add_protocol(Box::new(DefaultMembershipProtocol::new()));
+
+            node.init().await.unwrap();
+
+            Ok(())
+        })
+    });
+
+    let task_node3: Box<Task> = Box::new(move || {
+        Box::pin(async move {
+            let config = Arc::new(DefaultNodeConfig::new());
+            let node1_id = DefaultNodeIdentifier::new(NodePort::new(9002));
+            let node_state = Arc::new(DefaultNodeState::new(
+                config.clone(),
+                Arc::new(node1_id),
+                Arc::new(DefaultRouteHandler::new()),
+            ));
+
+            let mut node = Node::new(
+                node_state.clone(),
+                config.clone(),
+                Box::new(DefaultNodeIdentifier::new(NodePort::new(9002))),
+            );
+
+            node.add_protocol(Box::new(HintedHandoffReplicationProtocol::new(
+                node_state.clone(),
+                NodePort::new(9002),
+            )));
+            node.add_protocol(Box::new(DefaultMembershipProtocol::new()));
+
+            node.init().await.unwrap();
+
+            Ok(())
+        })
+    });
+
+    RUNTIME.write().unwrap().add_task(task_node1).unwrap();
+    RUNTIME.write().unwrap().add_task(task_node2).unwrap();
+    RUNTIME.write().unwrap().add_task(task_node3).unwrap();
+
     RUNTIME.write().unwrap().init().unwrap();
 
     loop {}
