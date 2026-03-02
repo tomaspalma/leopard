@@ -12,6 +12,7 @@ use runtime::{
     time::{PeriodTimeUnit, TokioPeriodTimeUnit},
 };
 use std::net::TcpStream;
+use zeromq::Socket;
 
 use std::io::Read;
 use std::{net::TcpListener, sync::Arc};
@@ -118,6 +119,7 @@ impl
     > for DefaultNodeSocket
 {
     type RouteId = NodeSocketRouteId;
+    type ConnectionInfo = NodePort;
 
     fn request_handler(&self) -> Arc<dyn RequestHandler<TcpStream>> {
         self.request_handler.clone()
@@ -149,6 +151,8 @@ impl
     }
 
     async fn bind(&mut self) -> Result<(), std::io::Error> {
+        let mut socket = zeromq::RepSocket::new();
+
         let listener = TcpListener::bind(format!("127.0.0.1:{}", self.port.value()))?;
 
         self.listener = Some(listener);
@@ -176,7 +180,7 @@ impl
         }
     }
 
-    async fn send(&self) {}
+    async fn send(&self, target: Box<NodePort>) {}
 
     async fn disconnect(&self) {}
 }

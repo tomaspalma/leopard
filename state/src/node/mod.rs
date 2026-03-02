@@ -46,6 +46,7 @@ where
     RStorage: RouteStorage,
 {
     type RouteId;
+    type ConnectionInfo;
 
     fn add_socket(
         &self,
@@ -58,6 +59,7 @@ where
                     M,
                     RStorage,
                     RouteId = Self::RouteId,
+                    ConnectionInfo = Self::ConnectionInfo,
                 > + Send
                 + Sync,
         >,
@@ -78,6 +80,7 @@ where
                         M,
                         RStorage,
                         RouteId = Self::RouteId,
+                        ConnectionInfo = Self::ConnectionInfo,
                     > + Send
                     + Sync,
             >,
@@ -119,6 +122,7 @@ where
                     M,
                     RStorage,
                     RouteId = NodeSocketRouteId,
+                    ConnectionInfo = NodePort,
                 > + Send
                 + Sync,
         >,
@@ -154,6 +158,7 @@ where
     MN: MembershipNeighbor + Send + Sync,
 {
     type RouteId = NodeSocketRouteId;
+    type ConnectionInfo = NodePort;
 
     fn add_socket(
         &self,
@@ -166,6 +171,7 @@ where
                     M,
                     HashMapRouteStorage,
                     RouteId = NodeSocketRouteId,
+                    ConnectionInfo = NodePort,
                 > + Send
                 + Sync,
         >,
@@ -201,6 +207,7 @@ where
                         M,
                         HashMapRouteStorage,
                         RouteId = NodeSocketRouteId,
+                        ConnectionInfo = NodePort,
                     > + Send
                     + Sync,
             >,

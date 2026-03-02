@@ -42,6 +42,7 @@ where
     RStorage: RouteStorage,
 {
     type RouteId;
+    type ConnectionInfo;
 
     fn request_handler(&self) -> Arc<dyn RequestHandler<TcpStream>>;
     fn route_handler(
@@ -49,7 +50,7 @@ where
     ) -> Arc<dyn RouteHandler<RStorage, RouteId = Self::RouteId> + Send + Sync>;
     async fn add_periodic_task(&mut self, task: Arc<PT>);
     async fn bind(&mut self) -> Result<(), std::io::Error>;
-    async fn send(&self);
+    async fn send(&self, target: Box<Self::ConnectionInfo>);
     async fn receive(&self);
     async fn disconnect(&self);
 }

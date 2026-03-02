@@ -10,3 +10,4 @@ runtime = { path = "../runtime" }
 message = { path = "../message" }
 tokio = { version = "1.28.2" }
 dashmap = "5.5.3"
+zeromq = "0.5.0"
