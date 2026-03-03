@@ -47,6 +47,7 @@ where
 {
     type RouteId;
     type ConnectionInfo;
+    type StreamType;
 
     fn add_socket(
         &self,
@@ -60,6 +61,7 @@ where
                     RStorage,
                     RouteId = Self::RouteId,
                     ConnectionInfo = Self::ConnectionInfo,
+                    StreamType = Self::StreamType,
                 > + Send
                 + Sync,
         >,
@@ -81,6 +83,7 @@ where
                         RStorage,
                         RouteId = Self::RouteId,
                         ConnectionInfo = Self::ConnectionInfo,
+                        StreamType = Self::StreamType,
                     > + Send
                     + Sync,
             >,
@@ -123,6 +126,7 @@ where
                     RStorage,
                     RouteId = NodeSocketRouteId,
                     ConnectionInfo = NodePort,
+                    StreamType = Vec<u8>,
                 > + Send
                 + Sync,
         >,
@@ -159,6 +163,7 @@ where
 {
     type RouteId = NodeSocketRouteId;
     type ConnectionInfo = NodePort;
+    type StreamType = Vec<u8>;
 
     fn add_socket(
         &self,
@@ -172,6 +177,7 @@ where
                     HashMapRouteStorage,
                     RouteId = NodeSocketRouteId,
                     ConnectionInfo = NodePort,
+                    StreamType = Vec<u8>,
                 > + Send
                 + Sync,
         >,
@@ -208,6 +214,7 @@ where
                         HashMapRouteStorage,
                         RouteId = NodeSocketRouteId,
                         ConnectionInfo = NodePort,
+                        StreamType = Vec<u8>,
                     > + Send
                     + Sync,
             >,

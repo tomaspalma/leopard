@@ -11,11 +11,12 @@ use runtime::{
     Runtime, Task,
     time::{PeriodTimeUnit, TokioPeriodTimeUnit},
 };
-use std::net::TcpStream;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::{TcpListener, TcpStream};
 use zeromq::Socket;
 
-use std::io::Read;
-use std::{net::TcpListener, sync::Arc};
+use std::io::{Bytes, Read};
+use std::sync::Arc;
 
 pub struct PeriodicDefaultNodeSocketTask {
     metadata: Arc<DefaultNodeSocketTaskMetadata>,
@@ -92,7 +93,7 @@ impl PeriodicNodeSocketTask<TokioPeriodTimeUnit> for PeriodicDefaultNodeSocketTa
 pub struct DefaultNodeSocket {
     port: NodePort,
     listener: Option<TcpListener>,
-    request_handler: Arc<dyn RequestHandler<TcpStream> + Send + Sync>,
+    request_handler: Arc<dyn RequestHandler<Vec<u8>> + Send + Sync>,
     route_handler:
         Arc<dyn RouteHandler<HashMapRouteStorage, RouteId = NodeSocketRouteId> + Send + Sync>,
 }
@@ -120,8 +121,9 @@ impl
 {
     type RouteId = NodeSocketRouteId;
     type ConnectionInfo = NodePort;
+    type StreamType = Vec<u8>;
 
-    fn request_handler(&self) -> Arc<dyn RequestHandler<TcpStream>> {
+    fn request_handler(&self) -> Arc<dyn RequestHandler<Vec<u8>>> {
         self.request_handler.clone()
     }
 
@@ -153,7 +155,7 @@ impl
     async fn bind(&mut self) -> Result<(), std::io::Error> {
         let mut socket = zeromq::RepSocket::new();
 
-        let listener = TcpListener::bind(format!("127.0.0.1:{}", self.port.value()))?;
+        let listener = TcpListener::bind(format!("127.0.0.1:{}", self.port.value())).await?;
 
         self.listener = Some(listener);
 
@@ -165,10 +167,20 @@ impl
     async fn receive(&self) {
         if let Some(listener) = &self.listener {
             loop {
-                println!("Waiting for connection");
-                match listener.accept() {
-                    Ok((stream, addr)) => {
-                        let msg = self.request_handler().handle(stream.bytes());
+                println!("Waiting for connection on port {}...", self.port.value());
+
+                match listener.accept().await {
+                    Ok((mut stream, addr)) => {
+                        println!("Accepted connection from {}", addr);
+
+                        let mut buffer = Vec::new();
+
+                        if let Err(e) = stream.read_to_end(&mut buffer).await {
+                            eprintln!("Failed to read from stream: {}", e);
+                            continue;
+                        }
+
+                        let msg = self.request_handler().handle(buffer);
 
                         self.route_handler().handle(msg, self.port.clone()).await;
                     }
@@ -180,7 +192,27 @@ impl
         }
     }
 
-    async fn send(&self, target: Box<NodePort>) {}
+    async fn send(&self, target: Box<NodePort>, message: Box<dyn Message + Send + Sync>) {
+        let addr = format!("127.0.0.1:{}", target.value());
+
+        match TcpStream::connect(&addr).await {
+            Ok(mut stream) => {
+                println!("Successfully connected to {}", addr);
+
+                let message_to_send = b"Hello from NodeSocket";
+
+                if let Err(e) = stream.write_all(message_to_send).await {
+                    eprintln!("Failed to send data to {}: {}", addr, e);
+                } else {
+                    let _ = stream.flush().await;
+                    println!("Message sent to {}", addr);
+                }
+            }
+            Err(e) => {
+                eprintln!("Could not connect to target {}: {}", addr, e);
+            }
+        }
+    }
 
     async fn disconnect(&self) {}
 }

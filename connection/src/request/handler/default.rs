@@ -1,5 +1,5 @@
-use std::net::TcpStream;
 use std::{io::Bytes, sync::Arc};
+use tokio::net::TcpStream;
 
 use message::{Message, MessageType, MessageTypeValues};
 
@@ -57,8 +57,8 @@ impl Message for TestMessage {
     }
 }
 
-impl RequestHandler<TcpStream> for DefaultRequestHandler {
-    fn handle(&self, stream: Bytes<TcpStream>) -> Arc<dyn Message + Send + Sync> {
+impl RequestHandler<Vec<u8>> for DefaultRequestHandler {
+    fn handle(&self, stream: Vec<u8>) -> Arc<dyn Message + Send + Sync> {
         Arc::new(TestMessage::new(Arc::new(TestMessageType::new())))
     }
 }

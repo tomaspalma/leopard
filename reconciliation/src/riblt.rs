@@ -1,9 +1,2 @@
-pub struct Riblt {
-    iblt: Iblt
-}
+pub struct RIBLTProtocol {}
 
-impl Protocol for Riblt {
-    fn init(&self, config: ProtocolConfig) -> Self {
-        Self {}
-    }
-}

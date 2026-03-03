@@ -6,10 +6,10 @@ use crate::request::handler::RequestHandler;
 use crate::route::{RouteHandler, RouteStorage, RouteTask};
 
 use async_trait::async_trait;
-use message::MessageType;
+use message::{Message, MessageType};
 use runtime::{Task, time::PeriodTimeUnit};
 
-use std::net::TcpStream;
+use tokio::net::TcpStream;
 
 use std::sync::Arc;
 
@@ -43,14 +43,19 @@ where
 {
     type RouteId;
     type ConnectionInfo;
+    type StreamType;
 
-    fn request_handler(&self) -> Arc<dyn RequestHandler<TcpStream>>;
+    fn request_handler(&self) -> Arc<dyn RequestHandler<Self::StreamType>>;
     fn route_handler(
         &self,
     ) -> Arc<dyn RouteHandler<RStorage, RouteId = Self::RouteId> + Send + Sync>;
     async fn add_periodic_task(&mut self, task: Arc<PT>);
     async fn bind(&mut self) -> Result<(), std::io::Error>;
-    async fn send(&self, target: Box<Self::ConnectionInfo>);
+    async fn send(
+        &self,
+        target: Box<Self::ConnectionInfo>,
+        message: Box<dyn Message + Send + Sync>,
+    );
     async fn receive(&self);
     async fn disconnect(&self);
 }
