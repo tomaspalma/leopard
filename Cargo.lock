@@ -2436,6 +2436,14 @@ dependencies = [
 [[package]]
 name = "reconciliation"
 version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "connection",
+ "membership",
+ "protocol",
+ "runtime",
+ "state",
+]
 
 [[package]]
 name = "redox_syscall"
@@ -2500,6 +2508,7 @@ dependencies = [
  "log",
  "membership-protocols",
  "node",
+ "reconciliation",
  "replication",
  "runtime",
  "state",

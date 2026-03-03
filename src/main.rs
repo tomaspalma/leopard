@@ -1,6 +1,7 @@
 use connection::node::port::NodePort;
 use connection::{node::id::DefaultNodeIdentifier, route::DefaultRouteHandler};
 use membership_protocols::DefaultMembershipProtocol;
+use reconciliation::riblt::RIBLT;
 use replication::protocol::HintedHandoffReplicationProtocol;
 use runtime::{RUNTIME, Runtime, Task, TokioRuntime};
 use state::node::DefaultNodeState;
@@ -40,6 +41,10 @@ async fn main() {
                 NodePort::new(9000),
             )));
             node.add_protocol(Box::new(DefaultMembershipProtocol::new()));
+            node.add_protocol(Box::new(RIBLT::new(
+                node_state.clone(),
+                NodePort::new(9000),
+            )));
 
             node.init().await.unwrap();
 
@@ -68,6 +73,10 @@ async fn main() {
                 NodePort::new(9001),
             )));
             node.add_protocol(Box::new(DefaultMembershipProtocol::new()));
+            node.add_protocol(Box::new(RIBLT::new(
+                node_state.clone(),
+                NodePort::new(9001),
+            )));
 
             node.init().await.unwrap();
 
@@ -96,6 +105,10 @@ async fn main() {
                 NodePort::new(9002),
             )));
             node.add_protocol(Box::new(DefaultMembershipProtocol::new()));
+            node.add_protocol(Box::new(RIBLT::new(
+                node_state.clone(),
+                NodePort::new(9002),
+            )));
 
             node.init().await.unwrap();
 

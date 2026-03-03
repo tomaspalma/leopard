@@ -4,3 +4,9 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+protocol = { path = "../protocol" }
+async-trait = "0.1.89"
+state = { path = "../state" }
+connection = { path = "../connection" }
+membership = { path = "../membership" }
+runtime = { path = "../runtime" }

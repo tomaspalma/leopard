@@ -32,3 +32,4 @@ state = { path = "./state" }
 connection = { path = "./connection" }
 membership-protocols = { path = "./membership/src/protocols" }
 config = { path = "./config" }
+reconciliation = { path = "./reconciliation" }

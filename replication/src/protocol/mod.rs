@@ -136,22 +136,5 @@ impl
                 Box::new(move |port: NodePort| Box::new(DefaultNodeSocket::new(port))),
             )
             .unwrap();
-
-        self.state
-            .add_periodic_socket_task(
-                self.port.clone(),
-                Arc::new(PeriodicDefaultNodeSocketTask::new(
-                    Arc::new(DefaultNodeSocketTaskMetadata::new(String::new())),
-                    Arc::new(move || {
-                        Box::pin(async move {
-                            println!("Processing connection");
-                            Ok(())
-                        })
-                    }),
-                    Arc::new(TokioPeriodTimeUnit::new(std::time::Duration::from_secs(5))),
-                )),
-            )
-            .await
-            .unwrap();
     }
 }
