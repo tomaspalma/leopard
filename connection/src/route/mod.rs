@@ -102,10 +102,7 @@ impl RouteStorage for HashMapRouteStorage {
 }
 
 #[async_trait]
-pub trait RouteHandler<RStorage>
-where
-    RStorage: RouteStorage,
-{
+pub trait RouteHandler {
     type RouteId;
 
     async fn handle(&self, message: Arc<dyn Message + Send + Sync>, port: NodeAddress);
@@ -125,7 +122,7 @@ impl DefaultRouteHandler {
 }
 
 #[async_trait]
-impl RouteHandler<HashMapRouteStorage> for DefaultRouteHandler {
+impl RouteHandler for DefaultRouteHandler {
     type RouteId = NodeSocketRouteId;
 
     async fn handle(&self, message: Arc<dyn Message + Send + Sync>, port: NodeAddress) {

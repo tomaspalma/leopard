@@ -18,7 +18,7 @@ impl DefaultNodeIdentifier {
     }
 }
 
-impl NodeIdentifier<NodeAddress, u16> for DefaultNodeIdentifier {
+impl NodeIdentifier<NodeAddress, NodeAddress> for DefaultNodeIdentifier {
     fn connection_info(&self) -> NodeAddress {
         self.port.clone()
     }

@@ -3,13 +3,11 @@ pub mod id;
 pub mod port;
 
 use crate::request::handler::RequestHandler;
-use crate::route::{RouteHandler, RouteStorage, RouteTask};
+use crate::route::RouteHandler;
 
 use async_trait::async_trait;
-use message::{Message, MessageType};
+use message::Message;
 use runtime::{Task, time::PeriodTimeUnit};
-
-use tokio::net::TcpStream;
 
 use std::sync::Arc;
 
@@ -33,23 +31,20 @@ where
 }
 
 #[async_trait]
-pub trait NodeSocket<T, PT, PTU, M, RStorage>
-where
-    T: RouteTask,
-    PT: PeriodicNodeSocketTask<PTU>,
-    M: NodeSocketTaskMetadata,
-    PTU: PeriodTimeUnit + Send + Sync,
-    RStorage: RouteStorage,
-{
+pub trait NodeSocket {
+    type RouteTask;
+    type PeriodicNodeSocketTask;
+    type NodeSocketTaskMetadata;
+    type PeriodTimeUnit;
+    type RouteStorage;
+
     type RouteId;
     type ConnectionInfo;
     type StreamType;
 
     fn request_handler(&self) -> Arc<dyn RequestHandler<Self::StreamType>>;
-    fn route_handler(
-        &self,
-    ) -> Arc<dyn RouteHandler<RStorage, RouteId = Self::RouteId> + Send + Sync>;
-    async fn add_periodic_task(&mut self, task: Arc<PT>);
+    fn route_handler(&self) -> Arc<dyn RouteHandler<RouteId = Self::RouteId> + Send + Sync>;
+    async fn add_periodic_task(&mut self, task: Arc<Self::PeriodicNodeSocketTask>);
     async fn bind(&mut self) -> Result<(), std::io::Error>;
     async fn send(
         &self,

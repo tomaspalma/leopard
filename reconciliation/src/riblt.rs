@@ -12,50 +12,20 @@ use connection::{
         port::{ConnectionInfo, NodeAddress},
         NodeSocketTaskMetadata, PeriodicNodeSocketTask,
     },
-    route::{DefaultRouteHandler, HashMapRouteStorage, RouteHandler, RouteStorage, RouteTask},
+    route::{RouteHandler, RouteStorage, RouteTask},
 };
-use membership::{
-    DefaultMembership, DefaultMembershipNeighbor, DefaultMembershipNeighborRepresentation,
-    Membership, MembershipNeighbor, MembershipNeighbors,
-};
+use membership::{Membership, MembershipNeighbor, MembershipNeighbors};
 use runtime::time::{PeriodTimeUnit, TokioPeriodTimeUnit};
 
 use crate::ReconciliationProtocol;
 
 pub struct RIBLT {
-    state: Arc<
-        DefaultNodeState<
-            DefaultNodeSocketTask,
-            DefaultNodeSocketTaskMetadata,
-            DefaultMembershipNeighborRepresentation<DefaultMembershipNeighbor>,
-            DefaultMembership,
-            DefaultMembershipNeighbor,
-            NodeAddress,
-            u16,
-            DefaultRouteHandler,
-            HashMapRouteStorage,
-        >,
-    >,
+    state: Arc<DefaultNodeState>,
     port: NodeAddress,
 }
 
 impl RIBLT {
-    pub fn new(
-        state: Arc<
-            DefaultNodeState<
-                DefaultNodeSocketTask,
-                DefaultNodeSocketTaskMetadata,
-                DefaultMembershipNeighborRepresentation<DefaultMembershipNeighbor>,
-                DefaultMembership,
-                DefaultMembershipNeighbor,
-                NodeAddress,
-                u16,
-                DefaultRouteHandler,
-                HashMapRouteStorage,
-            >,
-        >,
-        port: NodeAddress,
-    ) -> Self {
+    pub fn new(state: Arc<DefaultNodeState>, port: NodeAddress) -> Self {
         Self { state, port }
     }
 }
@@ -64,7 +34,7 @@ impl RIBLT {
 impl<S, T, M, R, N, MN, CI, CV, PTU, PT, RHandler, RStorage>
     Protocol<S, T, M, R, N, MN, CI, CV, PTU, PT, RHandler, RStorage> for RIBLT
 where
-    S: NodeState<T, M, N, R, MN, CI, CV, PTU, PT, RHandler, RStorage>,
+    S: NodeState,
     T: RouteTask,
     M: NodeSocketTaskMetadata,
     R: MembershipNeighbors<MN>,
@@ -74,7 +44,7 @@ where
     CV: Sized,
     PTU: PeriodTimeUnit + Send + Sync,
     PT: PeriodicNodeSocketTask<PTU>,
-    RHandler: RouteHandler<RStorage> + Send + Sync,
+    RHandler: RouteHandler + Send + Sync,
     RStorage: RouteStorage,
 {
     async fn init(&mut self) {
@@ -101,7 +71,7 @@ where
 impl<S, T, M, R, N, MN, CI, CV, PTU, PT, RHandler, RStorage>
     ReconciliationProtocol<S, T, M, R, N, MN, CI, CV, PTU, PT, RHandler, RStorage> for RIBLT
 where
-    S: NodeState<T, M, N, R, MN, CI, CV, PTU, PT, RHandler, RStorage>,
+    S: NodeState,
     T: RouteTask,
     M: NodeSocketTaskMetadata,
     R: MembershipNeighbors<MN>,
@@ -111,7 +81,7 @@ where
     CV: Sized,
     PTU: PeriodTimeUnit + Send + Sync,
     PT: PeriodicNodeSocketTask<PTU>,
-    RHandler: RouteHandler<RStorage> + Send + Sync,
+    RHandler: RouteHandler + Send + Sync,
     RStorage: RouteStorage,
 {
     fn state(&self) {}

@@ -5,6 +5,8 @@ edition = "2024"
 
 [dependencies]
 connection = { path = "../connection" }
+state = { path = "../state" }
+
 axum = "0.8.8"
 async-trait = "0.1.89"
 tokio = "1.50.0"

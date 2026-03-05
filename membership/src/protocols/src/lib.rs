@@ -16,24 +16,14 @@ pub struct DefaultMembershipProtocol {}
 #[async_trait]
 impl
     Protocol<
-        DefaultNodeState<
-            DefaultNodeSocketTask,
-            DefaultNodeSocketTaskMetadata,
-            DefaultMembershipNeighborRepresentation<DefaultMembershipNeighbor>,
-            DefaultMembership,
-            DefaultMembershipNeighbor,
-            NodeAddress,
-            u16,
-            DefaultRouteHandler,
-            HashMapRouteStorage,
-        >,
+        DefaultNodeState,
         DefaultNodeSocketTask,
         DefaultNodeSocketTaskMetadata,
         DefaultMembershipNeighborRepresentation<DefaultMembershipNeighbor>,
         DefaultMembership,
         DefaultMembershipNeighbor,
         NodeAddress,
-        u16,
+        NodeAddress,
         TokioPeriodTimeUnit,
         PeriodicDefaultNodeSocketTask,
         DefaultRouteHandler,

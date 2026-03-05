@@ -20,7 +20,7 @@ use std::sync::Arc;
 pub struct Node<T, S, M, R, N, MN, CI, CV, PTU, PT, RHandler, RStorage>
 where
     T: RouteTask,
-    S: NodeState<T, M, N, R, MN, CI, CV, PTU, PT, RHandler, RStorage>,
+    S: NodeState,
     M: NodeSocketTaskMetadata,
     N: Membership<R, MN>,
     R: MembershipNeighbors<MN>,
@@ -29,7 +29,7 @@ where
     CV: Sized,
     PTU: PeriodTimeUnit + Send + Sync,
     PT: PeriodicNodeSocketTask<PTU>,
-    RHandler: RouteHandler<RStorage> + Send + Sync,
+    RHandler: RouteHandler + Send + Sync,
     RStorage: RouteStorage,
 {
     identifier: Box<dyn NodeIdentifier<CI, CV> + Send + Sync>,
@@ -46,7 +46,7 @@ impl<T, S, M, R, N, MN, CI, CV, PTU, PT, RHandler, RStorage>
     Node<T, S, M, R, N, MN, CI, CV, PTU, PT, RHandler, RStorage>
 where
     T: RouteTask + Send + Sync,
-    S: NodeState<T, M, N, R, MN, CI, CV, PTU, PT, RHandler, RStorage> + Send + Sync + 'static,
+    S: NodeState + Send + Sync + 'static,
     M: NodeSocketTaskMetadata,
     N: Membership<R, MN>,
     R: MembershipNeighbors<MN>,
@@ -55,7 +55,7 @@ where
     CV: Sized,
     PTU: PeriodTimeUnit + Send + Sync,
     PT: PeriodicNodeSocketTask<PTU>,
-    RHandler: RouteHandler<RStorage> + Send + Sync,
+    RHandler: RouteHandler + Send + Sync,
     RStorage: RouteStorage,
 {
     pub fn new(

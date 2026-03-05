@@ -19,7 +19,7 @@ pub mod riblt;
 pub trait ReconciliationProtocol<S, T, M, R, N, MN, CI, CV, PTU, PT, RHandler, RStorage>:
     Protocol<S, T, M, R, N, MN, CI, CV, PTU, PT, RHandler, RStorage>
 where
-    S: NodeState<T, M, N, R, MN, CI, CV, PTU, PT, RHandler, RStorage>,
+    S: NodeState,
     T: RouteTask,
     M: NodeSocketTaskMetadata,
     R: MembershipNeighbors<MN>,
@@ -29,7 +29,7 @@ where
     CV: Sized,
     PTU: PeriodTimeUnit + Send + Sync,
     PT: PeriodicNodeSocketTask<PTU>,
-    RHandler: RouteHandler<RStorage> + Send + Sync,
+    RHandler: RouteHandler + Send + Sync,
     RStorage: RouteStorage,
 {
     fn state(&self);

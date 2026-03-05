@@ -94,8 +94,7 @@ pub struct DefaultNodeSocket {
     port: NodeAddress,
     listener: Option<TcpListener>,
     request_handler: Arc<dyn RequestHandler<Vec<u8>> + Send + Sync>,
-    route_handler:
-        Arc<dyn RouteHandler<HashMapRouteStorage, RouteId = NodeSocketRouteId> + Send + Sync>,
+    route_handler: Arc<dyn RouteHandler<RouteId = NodeSocketRouteId> + Send + Sync>,
 }
 
 impl DefaultNodeSocket {
@@ -110,15 +109,13 @@ impl DefaultNodeSocket {
 }
 
 #[async_trait]
-impl
-    NodeSocket<
-        DefaultNodeSocketTask,
-        PeriodicDefaultNodeSocketTask,
-        TokioPeriodTimeUnit,
-        DefaultNodeSocketTaskMetadata,
-        HashMapRouteStorage,
-    > for DefaultNodeSocket
-{
+impl NodeSocket for DefaultNodeSocket {
+    type RouteTask = DefaultNodeSocketTask;
+    type PeriodicNodeSocketTask = PeriodicDefaultNodeSocketTask;
+    type NodeSocketTaskMetadata = DefaultNodeSocketTaskMetadata;
+    type PeriodTimeUnit = TokioPeriodTimeUnit;
+    type RouteStorage = HashMapRouteStorage;
+
     type RouteId = NodeSocketRouteId;
     type ConnectionInfo = NodeAddress;
     type StreamType = Vec<u8>;
@@ -127,9 +124,7 @@ impl
         self.request_handler.clone()
     }
 
-    fn route_handler(
-        &self,
-    ) -> Arc<dyn RouteHandler<HashMapRouteStorage, RouteId = NodeSocketRouteId> + Send + Sync> {
+    fn route_handler(&self) -> Arc<dyn RouteHandler<RouteId = NodeSocketRouteId> + Send + Sync> {
         self.route_handler.clone()
     }
 

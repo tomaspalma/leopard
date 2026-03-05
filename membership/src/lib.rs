@@ -5,11 +5,11 @@ use taints::Taint;
 
 pub trait MembershipNeighbor {
     fn add_taint(&mut self, taint: Box<dyn Taint + Send + Sync>);
-    fn identifier(&self) -> Arc<dyn NodeIdentifier<NodeAddress, u16> + Send + Sync>;
+    fn identifier(&self) -> Arc<dyn NodeIdentifier<NodeAddress, NodeAddress> + Send + Sync>;
 }
 
 pub struct DefaultMembershipNeighbor {
-    identifier: Arc<dyn NodeIdentifier<NodeAddress, u16> + Send + Sync>,
+    identifier: Arc<dyn NodeIdentifier<NodeAddress, NodeAddress> + Send + Sync>,
     taints: Vec<Box<dyn Taint + Send + Sync>>,
 }
 
@@ -27,7 +27,7 @@ impl MembershipNeighbor for DefaultMembershipNeighbor {
         self.taints.push(taint);
     }
 
-    fn identifier(&self) -> Arc<dyn NodeIdentifier<NodeAddress, u16> + Send + Sync> {
+    fn identifier(&self) -> Arc<dyn NodeIdentifier<NodeAddress, NodeAddress> + Send + Sync> {
         Arc::new(connection::node::id::DefaultNodeIdentifier::new(
             NodeAddress::new("127.0.0.1".to_string(), 9000),
         ))

@@ -32,38 +32,8 @@ pub struct HintedHandoffReplicationProtocol<S, T> {
     _marker: PhantomData<T>,
 }
 
-impl
-    HintedHandoffReplicationProtocol<
-        DefaultNodeState<
-            DefaultNodeSocketTask,
-            DefaultNodeSocketTaskMetadata,
-            DefaultMembershipNeighborRepresentation<DefaultMembershipNeighbor>,
-            DefaultMembership,
-            DefaultMembershipNeighbor,
-            NodeAddress,
-            u16,
-            DefaultRouteHandler,
-            HashMapRouteStorage,
-        >,
-        DefaultNodeSocketTask,
-    >
-{
-    pub fn new(
-        state: Arc<
-            DefaultNodeState<
-                DefaultNodeSocketTask,
-                DefaultNodeSocketTaskMetadata,
-                DefaultMembershipNeighborRepresentation<DefaultMembershipNeighbor>,
-                DefaultMembership,
-                DefaultMembershipNeighbor,
-                NodeAddress,
-                u16,
-                DefaultRouteHandler,
-                HashMapRouteStorage,
-            >,
-        >,
-        port: NodeAddress,
-    ) -> Self {
+impl HintedHandoffReplicationProtocol<DefaultNodeState, DefaultNodeSocketTask> {
+    pub fn new(state: Arc<DefaultNodeState>, port: NodeAddress) -> Self {
         Self {
             state,
             port,
@@ -88,43 +58,19 @@ impl RouteTask for HintedHandoffReplicationProtocolTask {
 #[async_trait]
 impl
     Protocol<
-        DefaultNodeState<
-            DefaultNodeSocketTask,
-            DefaultNodeSocketTaskMetadata,
-            DefaultMembershipNeighborRepresentation<DefaultMembershipNeighbor>,
-            DefaultMembership,
-            DefaultMembershipNeighbor,
-            NodeAddress,
-            u16,
-            DefaultRouteHandler,
-            HashMapRouteStorage,
-        >,
+        DefaultNodeState,
         DefaultNodeSocketTask,
         DefaultNodeSocketTaskMetadata,
         DefaultMembershipNeighborRepresentation<DefaultMembershipNeighbor>,
         DefaultMembership,
         DefaultMembershipNeighbor,
         NodeAddress,
-        u16,
+        NodeAddress,
         TokioPeriodTimeUnit,
         PeriodicDefaultNodeSocketTask,
         DefaultRouteHandler,
         HashMapRouteStorage,
-    >
-    for HintedHandoffReplicationProtocol<
-        DefaultNodeState<
-            DefaultNodeSocketTask,
-            DefaultNodeSocketTaskMetadata,
-            DefaultMembershipNeighborRepresentation<DefaultMembershipNeighbor>,
-            DefaultMembership,
-            DefaultMembershipNeighbor,
-            NodeAddress,
-            u16,
-            DefaultRouteHandler,
-            HashMapRouteStorage,
-        >,
-        DefaultNodeSocketTask,
-    >
+    > for HintedHandoffReplicationProtocol<DefaultNodeState, DefaultNodeSocketTask>
 {
     async fn init(&mut self) {
         self.state

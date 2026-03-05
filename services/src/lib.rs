@@ -23,21 +23,16 @@ impl NodeHTTPService {
 
     async fn get_handler(Path(key): Path<String>) -> Json<Value> {
         println!("Fetching key: {}", key);
-        // Logic to fetch from your actual storage goes here
         Json(json!({ "key": key, "value": "example_value" }))
     }
 
-    // POST /key_name
     async fn post_handler(Path(key): Path<String>, Json(payload): Json<Value>) -> Json<Value> {
         println!("Setting key: {} to value: {}", key, payload);
-        // Logic to save to your actual storage goes here
         Json(json!({ "status": "success", "key": format!("/{}", key) }))
     }
 
-    // DELETE /key_name
     async fn delete_handler(Path(key): Path<String>) -> Json<Value> {
         println!("Deleting key: {}", key);
-        // Logic to delete from storage goes here
         Json(json!({ "status": "deleted", "key": key }))
     }
 }

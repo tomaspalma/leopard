@@ -33,20 +33,18 @@ use membership::{
 use taints::NodeAddressTaint;
 
 #[async_trait]
-pub trait NodeState<T, M, N, R, MN, CI, CV, PTU, PT, RHandler, RStorage>
-where
-    T: RouteTask,
-    M: NodeSocketTaskMetadata,
-    N: Membership<R, MN>,
-    R: MembershipNeighbors<MN>,
-    MN: MembershipNeighbor + Send + Sync,
-    CI: ConnectionInfo<CV>,
-    CV: Sized,
-    PTU: PeriodTimeUnit + Send + Sync,
-    PT: PeriodicNodeSocketTask<PTU>,
-    RHandler: RouteHandler<RStorage> + Send + Sync,
-    RStorage: RouteStorage,
-{
+pub trait NodeState {
+    type RouteTask;
+    type NodeSocketTaskMetadata;
+    type Membership;
+    type MembershipNeighbor;
+    type MembershipNeighborRepresentation;
+    type ConnectionValue;
+    type PeriodTimeUnit;
+    type PeriodicNodeSocketTask;
+    type RouteHandler;
+    type RouteStorage;
+
     type RouteId;
     type ConnectionInfo;
     type StreamType;
@@ -56,11 +54,11 @@ where
         port: NodeAddress,
         socket: Box<
             dyn NodeSocket<
-                    T,
-                    PeriodicDefaultNodeSocketTask,
-                    PTU,
-                    M,
-                    RStorage,
+                    RouteTask = Self::RouteTask,
+                    NodeSocketTaskMetadata = Self::NodeSocketTaskMetadata,
+                    PeriodicNodeSocketTask = Self::PeriodicNodeSocketTask,
+                    PeriodTimeUnit = Self::PeriodTimeUnit,
+                    RouteStorage = Self::RouteStorage,
                     RouteId = Self::RouteId,
                     ConnectionInfo = Self::ConnectionInfo,
                     StreamType = Self::StreamType,
@@ -68,21 +66,25 @@ where
                 + Sync,
         >,
     ) -> Result<(), String>;
-    async fn add_periodic_socket_task(&self, port: NodeAddress, task: Arc<PT>) -> Result<(), String>;
+    async fn add_periodic_socket_task(
+        &self,
+        port: NodeAddress,
+        task: Arc<Self::PeriodicNodeSocketTask>,
+    ) -> Result<(), String>;
     fn add_socket_task_and_create(
         &self,
         id: Self::RouteId,
-        task: Box<T>,
+        task: Box<Self::RouteTask>,
         socket_constructor: Box<
             dyn Fn(
                 NodeAddress,
             ) -> Box<
                 dyn NodeSocket<
-                        T,
-                        PeriodicDefaultNodeSocketTask,
-                        PTU,
-                        M,
-                        RStorage,
+                        RouteTask = Self::RouteTask,
+                        NodeSocketTaskMetadata = Self::NodeSocketTaskMetadata,
+                        PeriodicNodeSocketTask = Self::PeriodicNodeSocketTask,
+                        PeriodTimeUnit = Self::PeriodTimeUnit,
+                        RouteStorage = Self::RouteStorage,
                         RouteId = Self::RouteId,
                         ConnectionInfo = Self::ConnectionInfo,
                         StreamType = Self::StreamType,
@@ -92,13 +94,15 @@ where
         >,
     ) -> Result<(), String>;
 
-    fn route_handler(&self) -> Arc<RHandler>;
+    fn route_handler(&self) -> Arc<Self::RouteHandler>;
 
-    fn add_socket_task(&self, id: Self::RouteId, task: Box<T>) -> Result<(), String>;
+    fn add_socket_task(&self, id: Self::RouteId, task: Box<Self::RouteTask>) -> Result<(), String>;
 
-    fn node_identifier(&self) -> Arc<dyn NodeIdentifier<CI, CV> + Send + Sync>;
+    fn node_identifier(
+        &self,
+    ) -> Arc<dyn NodeIdentifier<Self::ConnectionInfo, Self::ConnectionValue> + Send + Sync>;
 
-    fn membership(&self) -> Arc<RwLock<N>>;
+    fn membership(&self) -> Arc<RwLock<Self::Membership>>;
 
     fn init_neighbors(&self);
 
@@ -107,27 +111,16 @@ where
     async fn init(&self) -> Result<(), NodeInitError>;
 }
 
-pub struct DefaultNodeState<T, M, R, N, MN, CI, CV, RHandler, RStorage>
-where
-    T: RouteTask,
-    M: NodeSocketTaskMetadata,
-    N: Membership<R, MN> + Send + Sync,
-    R: MembershipNeighbors<MN> + Send + Sync,
-    MN: MembershipNeighbor + Send + Sync,
-    CI: ConnectionInfo<CV> + Send + Sync,
-    CV: Sized,
-    RHandler: RouteHandler<RStorage> + Send + Sync,
-    RStorage: RouteStorage,
-{
+pub struct DefaultNodeState {
     sockets: DashMap<
         NodeAddress,
         Box<
             dyn NodeSocket<
-                    T,
-                    PeriodicDefaultNodeSocketTask,
-                    TokioPeriodTimeUnit,
-                    M,
-                    RStorage,
+                    RouteTask = DefaultNodeSocketTask,
+                    NodeSocketTaskMetadata = DefaultNodeSocketTaskMetadata,
+                    PeriodicNodeSocketTask = PeriodicDefaultNodeSocketTask,
+                    PeriodTimeUnit = TokioPeriodTimeUnit,
+                    RouteStorage = HashMapRouteStorage,
                     RouteId = NodeSocketRouteId,
                     ConnectionInfo = NodeAddress,
                     StreamType = Vec<u8>,
@@ -135,37 +128,33 @@ where
                 + Sync,
         >,
     >,
-    membership: Arc<RwLock<N>>,
+    membership: Arc<RwLock<DefaultMembership>>,
     data: Arc<DefaultDataState>,
-    config: Arc<dyn NodeConfig<R, MN> + Send + Sync>,
-    identifier: Arc<dyn NodeIdentifier<CI, CV> + Send + Sync>,
-    route_handler: Arc<RHandler>,
-    _marker_r: PhantomData<R>,
-    _marker_mn: PhantomData<MN>,
+    config: Arc<
+        dyn NodeConfig<
+                DefaultMembershipNeighborRepresentation<DefaultMembershipNeighbor>,
+                DefaultMembershipNeighbor,
+            > + Send
+            + Sync,
+    >,
+    identifier: Arc<dyn NodeIdentifier<NodeAddress, NodeAddress> + Send + Sync>,
+    route_handler: Arc<DefaultRouteHandler>,
 }
 
 #[async_trait]
-impl<T, M, R, N, MN>
-    NodeState<
-        T,
-        M,
-        N,
-        R,
-        MN,
-        NodeAddress,
-        u16,
-        TokioPeriodTimeUnit,
-        PeriodicDefaultNodeSocketTask,
-        DefaultRouteHandler,
-        HashMapRouteStorage,
-    > for DefaultNodeState<T, M, R, N, MN, NodeAddress, u16, DefaultRouteHandler, HashMapRouteStorage>
-where
-    T: RouteTask + Send + Sync + 'static,
-    M: NodeSocketTaskMetadata + Send + Sync,
-    N: Membership<R, MN> + Send + Sync,
-    R: MembershipNeighbors<MN> + Send + Sync,
-    MN: MembershipNeighbor + Send + Sync,
-{
+impl NodeState for DefaultNodeState {
+    type RouteTask = DefaultNodeSocketTask;
+    type NodeSocketTaskMetadata = DefaultNodeSocketTaskMetadata;
+    type Membership = DefaultMembership;
+    type MembershipNeighbor = DefaultMembershipNeighbor;
+    type MembershipNeighborRepresentation =
+        DefaultMembershipNeighborRepresentation<Self::MembershipNeighbor>;
+    type ConnectionValue = NodeAddress;
+    type PeriodTimeUnit = TokioPeriodTimeUnit;
+    type PeriodicNodeSocketTask = PeriodicDefaultNodeSocketTask;
+    type RouteHandler = DefaultRouteHandler;
+    type RouteStorage = HashMapRouteStorage;
+
     type RouteId = NodeSocketRouteId;
     type ConnectionInfo = NodeAddress;
     type StreamType = Vec<u8>;
@@ -175,14 +164,14 @@ where
         port: NodeAddress,
         socket: Box<
             dyn NodeSocket<
-                    T,
-                    PeriodicDefaultNodeSocketTask,
-                    TokioPeriodTimeUnit,
-                    M,
-                    HashMapRouteStorage,
-                    RouteId = NodeSocketRouteId,
-                    ConnectionInfo = NodeAddress,
-                    StreamType = Vec<u8>,
+                    RouteTask = Self::RouteTask,
+                    NodeSocketTaskMetadata = Self::NodeSocketTaskMetadata,
+                    PeriodicNodeSocketTask = Self::PeriodicNodeSocketTask,
+                    PeriodTimeUnit = Self::PeriodTimeUnit,
+                    RouteStorage = Self::RouteStorage,
+                    RouteId = Self::RouteId,
+                    ConnectionInfo = Self::ConnectionInfo,
+                    StreamType = Self::StreamType,
                 > + Send
                 + Sync,
         >,
@@ -195,31 +184,31 @@ where
         self.route_handler.clone()
     }
 
-    fn node_identifier(&self) -> Arc<dyn NodeIdentifier<NodeAddress, u16> + Send + Sync> {
+    fn node_identifier(&self) -> Arc<dyn NodeIdentifier<NodeAddress, NodeAddress> + Send + Sync> {
         self.identifier.clone()
     }
 
-    fn membership(&self) -> Arc<RwLock<N>> {
+    fn membership(&self) -> Arc<RwLock<Self::Membership>> {
         self.membership.clone()
     }
 
     fn add_socket_task_and_create(
         &self,
         id: NodeSocketRouteId,
-        task: Box<T>,
+        task: Box<Self::RouteTask>,
         socket_constructor: Box<
             dyn Fn(
                 NodeAddress,
             ) -> Box<
                 dyn NodeSocket<
-                        T,
-                        PeriodicDefaultNodeSocketTask,
-                        TokioPeriodTimeUnit,
-                        M,
-                        HashMapRouteStorage,
-                        RouteId = NodeSocketRouteId,
-                        ConnectionInfo = NodeAddress,
-                        StreamType = Vec<u8>,
+                        RouteTask = Self::RouteTask,
+                        NodeSocketTaskMetadata = Self::NodeSocketTaskMetadata,
+                        PeriodicNodeSocketTask = Self::PeriodicNodeSocketTask,
+                        PeriodTimeUnit = Self::PeriodTimeUnit,
+                        RouteStorage = Self::RouteStorage,
+                        RouteId = Self::RouteId,
+                        ConnectionInfo = Self::ConnectionInfo,
+                        StreamType = Self::StreamType,
                     > + Send
                     + Sync,
             >,
@@ -250,7 +239,11 @@ where
         }
     }
 
-    fn add_socket_task(&self, id: NodeSocketRouteId, task: Box<T>) -> Result<(), String> {
+    fn add_socket_task(
+        &self,
+        id: NodeSocketRouteId,
+        task: Box<Self::RouteTask>,
+    ) -> Result<(), String> {
         self.route_handler()
             .add_route(id, Arc::new(NodeSocketRoute::new(task)));
 
@@ -306,19 +299,7 @@ where
     }
 }
 
-impl
-    DefaultNodeState<
-        DefaultNodeSocketTask,
-        DefaultNodeSocketTaskMetadata,
-        DefaultMembershipNeighborRepresentation<DefaultMembershipNeighbor>,
-        DefaultMembership,
-        DefaultMembershipNeighbor,
-        NodeAddress,
-        u16,
-        DefaultRouteHandler,
-        HashMapRouteStorage,
-    >
-{
+impl DefaultNodeState {
     pub fn new(
         config: Arc<
             dyn NodeConfig<
@@ -327,7 +308,7 @@ impl
                 > + Send
                 + Sync,
         >,
-        identifier: Arc<dyn NodeIdentifier<NodeAddress, u16> + Send + Sync>,
+        identifier: Arc<dyn NodeIdentifier<NodeAddress, NodeAddress> + Send + Sync>,
         route_handler: Arc<DefaultRouteHandler>,
         data: Arc<DefaultDataState>,
     ) -> Self {
@@ -338,8 +319,6 @@ impl
             data,
             identifier,
             route_handler,
-            _marker_r: PhantomData,
-            _marker_mn: PhantomData,
         }
     }
 }
