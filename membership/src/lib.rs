@@ -1,20 +1,20 @@
 use std::sync::{Arc, RwLock};
 
-use connection::node::{id::NodeIdentifier, port::NodePort};
+use connection::node::{id::NodeIdentifier, port::NodeAddress};
 use taints::Taint;
 
 pub trait MembershipNeighbor {
     fn add_taint(&mut self, taint: Box<dyn Taint + Send + Sync>);
-    fn identifier(&self) -> Arc<dyn NodeIdentifier<NodePort, u16> + Send + Sync>;
+    fn identifier(&self) -> Arc<dyn NodeIdentifier<NodeAddress, u16> + Send + Sync>;
 }
 
 pub struct DefaultMembershipNeighbor {
-    identifier: Arc<dyn NodeIdentifier<NodePort, u16> + Send + Sync>,
+    identifier: Arc<dyn NodeIdentifier<NodeAddress, u16> + Send + Sync>,
     taints: Vec<Box<dyn Taint + Send + Sync>>,
 }
 
 impl DefaultMembershipNeighbor {
-    pub fn new(port: NodePort) -> Self {
+    pub fn new(port: NodeAddress) -> Self {
         Self {
             identifier: Arc::new(connection::node::id::DefaultNodeIdentifier::new(port)),
             taints: Vec::new(),
@@ -27,9 +27,9 @@ impl MembershipNeighbor for DefaultMembershipNeighbor {
         self.taints.push(taint);
     }
 
-    fn identifier(&self) -> Arc<dyn NodeIdentifier<NodePort, u16> + Send + Sync> {
+    fn identifier(&self) -> Arc<dyn NodeIdentifier<NodeAddress, u16> + Send + Sync> {
         Arc::new(connection::node::id::DefaultNodeIdentifier::new(
-            NodePort::new(9000),
+            NodeAddress::new("127.0.0.1".to_string(), 9000),
         ))
     }
 }

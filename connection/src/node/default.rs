@@ -1,4 +1,4 @@
-use crate::node::{NodeSocket, NodeSocketTaskMetadata, PeriodicNodeSocketTask, port::NodePort};
+use crate::node::{NodeSocket, NodeSocketTaskMetadata, PeriodicNodeSocketTask, port::NodeAddress};
 use crate::request::handler::{RequestHandler, default::DefaultRequestHandler};
 use crate::route::{
     DefaultRouteHandler, HashMapRouteStorage, NodeSocketRouteId, Route, RouteHandler, RouteTask,
@@ -91,7 +91,7 @@ impl PeriodicNodeSocketTask<TokioPeriodTimeUnit> for PeriodicDefaultNodeSocketTa
 }
 
 pub struct DefaultNodeSocket {
-    port: NodePort,
+    port: NodeAddress,
     listener: Option<TcpListener>,
     request_handler: Arc<dyn RequestHandler<Vec<u8>> + Send + Sync>,
     route_handler:
@@ -99,7 +99,7 @@ pub struct DefaultNodeSocket {
 }
 
 impl DefaultNodeSocket {
-    pub fn new(port: NodePort) -> Self {
+    pub fn new(port: NodeAddress) -> Self {
         Self {
             port,
             listener: None,
@@ -120,7 +120,7 @@ impl
     > for DefaultNodeSocket
 {
     type RouteId = NodeSocketRouteId;
-    type ConnectionInfo = NodePort;
+    type ConnectionInfo = NodeAddress;
     type StreamType = Vec<u8>;
 
     fn request_handler(&self) -> Arc<dyn RequestHandler<Vec<u8>>> {
@@ -155,7 +155,7 @@ impl
     async fn bind(&mut self) -> Result<(), std::io::Error> {
         let mut socket = zeromq::RepSocket::new();
 
-        let listener = TcpListener::bind(format!("127.0.0.1:{}", self.port.value())).await?;
+        let listener = TcpListener::bind(format!("127.0.0.1:{}", self.port.port())).await?;
 
         self.listener = Some(listener);
 
@@ -167,7 +167,7 @@ impl
     async fn receive(&self) {
         if let Some(listener) = &self.listener {
             loop {
-                println!("Waiting for connection on port {}...", self.port.value());
+                println!("Waiting for connection on port {}...", self.port.port());
 
                 match listener.accept().await {
                     Ok((mut stream, addr)) => {
@@ -192,8 +192,8 @@ impl
         }
     }
 
-    async fn send(&self, target: Box<NodePort>, message: Box<dyn Message + Send + Sync>) {
-        let addr = format!("127.0.0.1:{}", target.value());
+    async fn send(&self, target: Box<NodeAddress>, message: Box<dyn Message + Send + Sync>) {
+        let addr = format!("127.0.0.1:{}", target.port());
 
         match TcpStream::connect(&addr).await {
             Ok(mut stream) => {

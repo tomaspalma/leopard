@@ -9,7 +9,7 @@ use connection::{
         default::{
             DefaultNodeSocketTask, DefaultNodeSocketTaskMetadata, PeriodicDefaultNodeSocketTask,
         },
-        port::{ConnectionInfo, NodePort},
+        port::{ConnectionInfo, NodeAddress},
         NodeSocketTaskMetadata, PeriodicNodeSocketTask,
     },
     route::{DefaultRouteHandler, HashMapRouteStorage, RouteHandler, RouteStorage, RouteTask},
@@ -32,13 +32,13 @@ pub struct HybridReconciliationProtocol {
             DefaultMembershipNeighborRepresentation<DefaultMembershipNeighbor>,
             DefaultMembership,
             DefaultMembershipNeighbor,
-            NodePort,
+            NodeAddress,
             u16,
             DefaultRouteHandler,
             HashMapRouteStorage,
         >,
     >,
-    port: NodePort,
+    port: NodeAddress,
     similarity_level_detector:
         Arc<dyn SimilarityLevelDetector<DefaultSimilarityLevel> + Send + Sync>,
 }
@@ -52,13 +52,13 @@ impl HybridReconciliationProtocol {
                 DefaultMembershipNeighborRepresentation<DefaultMembershipNeighbor>,
                 DefaultMembership,
                 DefaultMembershipNeighbor,
-                NodePort,
+                NodeAddress,
                 u16,
                 DefaultRouteHandler,
                 HashMapRouteStorage,
             >,
         >,
-        port: NodePort,
+        port: NodeAddress,
     ) -> Self {
         Self {
             state,

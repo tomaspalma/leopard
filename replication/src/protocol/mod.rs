@@ -12,7 +12,7 @@ use connection::{
             DefaultNodeSocket, DefaultNodeSocketTask, DefaultNodeSocketTaskMetadata,
             PeriodicDefaultNodeSocketTask,
         },
-        port::NodePort,
+        port::NodeAddress,
     },
     route::{DefaultRouteHandler, HashMapRouteStorage, NodeSocketRouteId, RouteTask},
 };
@@ -23,12 +23,12 @@ use state::node::{DefaultNodeState, NodeState};
 use std::marker::PhantomData;
 
 pub struct HintedHandoffReplicationProtocolConfig {
-    port: NodePort,
+    port: NodeAddress,
 }
 
 pub struct HintedHandoffReplicationProtocol<S, T> {
     state: Arc<S>,
-    port: NodePort,
+    port: NodeAddress,
     _marker: PhantomData<T>,
 }
 
@@ -40,7 +40,7 @@ impl
             DefaultMembershipNeighborRepresentation<DefaultMembershipNeighbor>,
             DefaultMembership,
             DefaultMembershipNeighbor,
-            NodePort,
+            NodeAddress,
             u16,
             DefaultRouteHandler,
             HashMapRouteStorage,
@@ -56,13 +56,13 @@ impl
                 DefaultMembershipNeighborRepresentation<DefaultMembershipNeighbor>,
                 DefaultMembership,
                 DefaultMembershipNeighbor,
-                NodePort,
+                NodeAddress,
                 u16,
                 DefaultRouteHandler,
                 HashMapRouteStorage,
             >,
         >,
-        port: NodePort,
+        port: NodeAddress,
     ) -> Self {
         Self {
             state,
@@ -94,7 +94,7 @@ impl
             DefaultMembershipNeighborRepresentation<DefaultMembershipNeighbor>,
             DefaultMembership,
             DefaultMembershipNeighbor,
-            NodePort,
+            NodeAddress,
             u16,
             DefaultRouteHandler,
             HashMapRouteStorage,
@@ -104,7 +104,7 @@ impl
         DefaultMembershipNeighborRepresentation<DefaultMembershipNeighbor>,
         DefaultMembership,
         DefaultMembershipNeighbor,
-        NodePort,
+        NodeAddress,
         u16,
         TokioPeriodTimeUnit,
         PeriodicDefaultNodeSocketTask,
@@ -118,7 +118,7 @@ impl
             DefaultMembershipNeighborRepresentation<DefaultMembershipNeighbor>,
             DefaultMembership,
             DefaultMembershipNeighbor,
-            NodePort,
+            NodeAddress,
             u16,
             DefaultRouteHandler,
             HashMapRouteStorage,
@@ -133,7 +133,7 @@ impl
                 Box::new(DefaultNodeSocketTask::new(Arc::new(
                     DefaultNodeSocketTaskMetadata::new(String::new()),
                 ))),
-                Box::new(move |port: NodePort| Box::new(DefaultNodeSocket::new(port))),
+                Box::new(move |port: NodeAddress| Box::new(DefaultNodeSocket::new(port))),
             )
             .unwrap();
     }

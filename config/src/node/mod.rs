@@ -1,4 +1,4 @@
-use connection::node::port::NodePort;
+use connection::node::port::NodeAddress;
 use membership::{
     DefaultMembershipNeighbor, DefaultMembershipNeighborRepresentation, Membership,
     MembershipNeighbor, MembershipNeighbors,
@@ -30,15 +30,15 @@ impl
     fn neighbors(&self) -> Arc<DefaultMembershipNeighborRepresentation<DefaultMembershipNeighbor>> {
         Arc::new(DefaultMembershipNeighborRepresentation::new(Arc::new(
             RwLock::new(vec![
-                Arc::new(RwLock::new(DefaultMembershipNeighbor::new(NodePort::new(
-                    9000,
-                )))),
-                Arc::new(RwLock::new(DefaultMembershipNeighbor::new(NodePort::new(
-                    9001,
-                )))),
-                Arc::new(RwLock::new(DefaultMembershipNeighbor::new(NodePort::new(
-                    9002,
-                )))),
+                Arc::new(RwLock::new(DefaultMembershipNeighbor::new(
+                    NodeAddress::new("127.0.0.1".to_string(), 9000),
+                ))),
+                Arc::new(RwLock::new(DefaultMembershipNeighbor::new(
+                    NodeAddress::new("127.0.0.1".to_string(), 9001),
+                ))),
+                Arc::new(RwLock::new(DefaultMembershipNeighbor::new(
+                    NodeAddress::new("127.0.0.1".to_string(), 9002),
+                ))),
             ]),
         )))
     }

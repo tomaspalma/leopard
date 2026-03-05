@@ -1,4 +1,4 @@
-use connection::node::port::NodePort;
+use connection::node::port::NodeAddress;
 use connection::{node::id::DefaultNodeIdentifier, route::DefaultRouteHandler};
 use membership_protocols::DefaultMembershipProtocol;
 use reconciliation::riblt::RIBLT;
@@ -25,7 +25,7 @@ async fn main() {
     let task_node1: Box<Task> = Box::new(move || {
         Box::pin(async move {
             let config = Arc::new(DefaultNodeConfig::new());
-            let node1_id = DefaultNodeIdentifier::new(NodePort::new(9000));
+            let node1_id = DefaultNodeIdentifier::new(NodeAddress::new("127.0.0.1".to_string(), 9000));
             let node_state = Arc::new(DefaultNodeState::new(
                 config.clone(),
                 Arc::new(node1_id),
@@ -36,17 +36,17 @@ async fn main() {
             let mut node = Node::new(
                 node_state.clone(),
                 config.clone(),
-                Box::new(DefaultNodeIdentifier::new(NodePort::new(9000))),
+                Box::new(DefaultNodeIdentifier::new(NodeAddress::new("127.0.0.1".to_string(), 9000))),
             );
 
             node.add_protocol(Box::new(HintedHandoffReplicationProtocol::new(
                 node_state.clone(),
-                NodePort::new(9000),
+                NodeAddress::new("127.0.0.1".to_string(), 9000),
             )));
             node.add_protocol(Box::new(DefaultMembershipProtocol::new()));
             node.add_protocol(Box::new(RIBLT::new(
                 node_state.clone(),
-                NodePort::new(9000),
+                NodeAddress::new("127.0.0.1".to_string(), 9000),
             )));
 
             node.add_service(Box::new(NodeHTTPService::new()));
@@ -60,7 +60,7 @@ async fn main() {
     let task_node2: Box<Task> = Box::new(move || {
         Box::pin(async move {
             let config = Arc::new(DefaultNodeConfig::new());
-            let node1_id = DefaultNodeIdentifier::new(NodePort::new(9001));
+            let node1_id = DefaultNodeIdentifier::new(NodeAddress::new("127.0.0.1".to_string(), 9001));
             let node_state = Arc::new(DefaultNodeState::new(
                 config.clone(),
                 Arc::new(node1_id),
@@ -71,17 +71,17 @@ async fn main() {
             let mut node = Node::new(
                 node_state.clone(),
                 config.clone(),
-                Box::new(DefaultNodeIdentifier::new(NodePort::new(9001))),
+                Box::new(DefaultNodeIdentifier::new(NodeAddress::new("127.0.0.1".to_string(), 9001))),
             );
 
             node.add_protocol(Box::new(HintedHandoffReplicationProtocol::new(
                 node_state.clone(),
-                NodePort::new(9001),
+                NodeAddress::new("127.0.0.1".to_string(), 9001),
             )));
             node.add_protocol(Box::new(DefaultMembershipProtocol::new()));
             node.add_protocol(Box::new(RIBLT::new(
                 node_state.clone(),
-                NodePort::new(9001),
+                NodeAddress::new("127.0.0.1".to_string(), 9001),
             )));
 
             node.init().await.unwrap();
@@ -93,7 +93,7 @@ async fn main() {
     let task_node3: Box<Task> = Box::new(move || {
         Box::pin(async move {
             let config = Arc::new(DefaultNodeConfig::new());
-            let node1_id = DefaultNodeIdentifier::new(NodePort::new(9002));
+            let node1_id = DefaultNodeIdentifier::new(NodeAddress::new("127.0.0.1".to_string(), 9002));
             let node_state = Arc::new(DefaultNodeState::new(
                 config.clone(),
                 Arc::new(node1_id),
@@ -104,17 +104,17 @@ async fn main() {
             let mut node = Node::new(
                 node_state.clone(),
                 config.clone(),
-                Box::new(DefaultNodeIdentifier::new(NodePort::new(9002))),
+                Box::new(DefaultNodeIdentifier::new(NodeAddress::new("127.0.0.1".to_string(), 9002))),
             );
 
             node.add_protocol(Box::new(HintedHandoffReplicationProtocol::new(
                 node_state.clone(),
-                NodePort::new(9002),
+                NodeAddress::new("127.0.0.1".to_string(), 9002),
             )));
             node.add_protocol(Box::new(DefaultMembershipProtocol::new()));
             node.add_protocol(Box::new(RIBLT::new(
                 node_state.clone(),
-                NodePort::new(9002),
+                NodeAddress::new("127.0.0.1".to_string(), 9002),
             )));
 
             node.init().await.unwrap();

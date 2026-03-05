@@ -1,21 +1,21 @@
-use connection::node::port::NodePort;
+use connection::node::port::NodeAddress;
 
 pub trait Taint {
     fn tainted(&self) -> bool;
 }
 
-pub struct NodePortTaint {
-    port: NodePort,
-    other_port: NodePort,
+pub struct NodeAddressTaint {
+    port: NodeAddress,
+    other_port: NodeAddress,
 }
 
-impl NodePortTaint {
-    pub fn new(port: NodePort, other_port: NodePort) -> Self {
+impl NodeAddressTaint {
+    pub fn new(port: NodeAddress, other_port: NodeAddress) -> Self {
         Self { port, other_port }
     }
 }
 
-impl Taint for NodePortTaint {
+impl Taint for NodeAddressTaint {
     fn tainted(&self) -> bool {
         self.port == self.other_port
     }

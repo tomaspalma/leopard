@@ -4,7 +4,7 @@ use message::{Message, MessageType};
 use runtime::RUNTIME;
 use std::sync::Arc;
 
-use crate::node::port::NodePort;
+use crate::node::port::NodeAddress;
 
 pub trait RouteId<V> {
     fn id(&self) -> V;
@@ -12,16 +12,16 @@ pub trait RouteId<V> {
 
 #[derive(Clone, Hash, Eq, PartialEq)]
 pub struct NodeSocketRouteIdInfo {
-    port: NodePort,
+    port: NodeAddress,
     protocol: String,
 }
 
 impl NodeSocketRouteIdInfo {
-    pub fn new(port: NodePort, protocol: String) -> Self {
+    pub fn new(port: NodeAddress, protocol: String) -> Self {
         Self { port, protocol }
     }
 
-    pub fn port(&self) -> NodePort {
+    pub fn port(&self) -> NodeAddress {
         self.port.clone()
     }
 
@@ -36,7 +36,7 @@ pub struct NodeSocketRouteId {
 }
 
 impl NodeSocketRouteId {
-    pub fn new(port: NodePort, protocol: String) -> Self {
+    pub fn new(port: NodeAddress, protocol: String) -> Self {
         Self {
             info: NodeSocketRouteIdInfo { port, protocol },
         }
@@ -108,7 +108,7 @@ where
 {
     type RouteId;
 
-    async fn handle(&self, message: Arc<dyn Message + Send + Sync>, port: NodePort);
+    async fn handle(&self, message: Arc<dyn Message + Send + Sync>, port: NodeAddress);
     fn add_route(&self, id: Self::RouteId, route: Arc<dyn Route + Send + Sync>);
 }
 
@@ -128,7 +128,7 @@ impl DefaultRouteHandler {
 impl RouteHandler<HashMapRouteStorage> for DefaultRouteHandler {
     type RouteId = NodeSocketRouteId;
 
-    async fn handle(&self, message: Arc<dyn Message + Send + Sync>, port: NodePort) {
+    async fn handle(&self, message: Arc<dyn Message + Send + Sync>, port: NodeAddress) {
         let route = self
             .storage
             .get(NodeSocketRouteId::new(port.clone(), String::new()));
@@ -152,7 +152,7 @@ impl RouteHandler<HashMapRouteStorage> for DefaultRouteHandler {
                 }))
                 .await;
         } else {
-            println!("No route found for port: {}", port.value());
+            println!("No route found for port: {}", port.port());
         }
 
         println!("Handling route");

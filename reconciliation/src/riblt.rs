@@ -9,7 +9,7 @@ use connection::{
         default::{
             DefaultNodeSocketTask, DefaultNodeSocketTaskMetadata, PeriodicDefaultNodeSocketTask,
         },
-        port::{ConnectionInfo, NodePort},
+        port::{ConnectionInfo, NodeAddress},
         NodeSocketTaskMetadata, PeriodicNodeSocketTask,
     },
     route::{DefaultRouteHandler, HashMapRouteStorage, RouteHandler, RouteStorage, RouteTask},
@@ -30,13 +30,13 @@ pub struct RIBLT {
             DefaultMembershipNeighborRepresentation<DefaultMembershipNeighbor>,
             DefaultMembership,
             DefaultMembershipNeighbor,
-            NodePort,
+            NodeAddress,
             u16,
             DefaultRouteHandler,
             HashMapRouteStorage,
         >,
     >,
-    port: NodePort,
+    port: NodeAddress,
 }
 
 impl RIBLT {
@@ -48,13 +48,13 @@ impl RIBLT {
                 DefaultMembershipNeighborRepresentation<DefaultMembershipNeighbor>,
                 DefaultMembership,
                 DefaultMembershipNeighbor,
-                NodePort,
+                NodeAddress,
                 u16,
                 DefaultRouteHandler,
                 HashMapRouteStorage,
             >,
         >,
-        port: NodePort,
+        port: NodeAddress,
     ) -> Self {
         Self { state, port }
     }

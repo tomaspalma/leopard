@@ -1,5 +1,5 @@
 use crate::node::port::ConnectionInfo;
-use crate::node::port::NodePort;
+use crate::node::port::NodeAddress;
 
 pub trait NodeIdentifier<T, V>
 where
@@ -9,17 +9,17 @@ where
 }
 
 pub struct DefaultNodeIdentifier {
-    port: NodePort,
+    port: NodeAddress,
 }
 
 impl DefaultNodeIdentifier {
-    pub fn new(port: NodePort) -> Self {
+    pub fn new(port: NodeAddress) -> Self {
         Self { port }
     }
 }
 
-impl NodeIdentifier<NodePort, u16> for DefaultNodeIdentifier {
-    fn connection_info(&self) -> NodePort {
+impl NodeIdentifier<NodeAddress, u16> for DefaultNodeIdentifier {
+    fn connection_info(&self) -> NodeAddress {
         self.port.clone()
     }
 }

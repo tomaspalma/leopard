@@ -24,13 +24,13 @@ use connection::node::{
         DefaultNodeSocketTask, DefaultNodeSocketTaskMetadata, PeriodicDefaultNodeSocketTask,
     },
     id::NodeIdentifier,
-    port::{ConnectionInfo, NodePort},
+    port::{ConnectionInfo, NodeAddress},
 };
 use membership::{
     DefaultMembership, DefaultMembershipNeighbor, DefaultMembershipNeighborRepresentation,
     Membership, MembershipNeighbor, MembershipNeighbors,
 };
-use taints::NodePortTaint;
+use taints::NodeAddressTaint;
 
 #[async_trait]
 pub trait NodeState<T, M, N, R, MN, CI, CV, PTU, PT, RHandler, RStorage>
@@ -53,7 +53,7 @@ where
 
     fn add_socket(
         &self,
-        port: NodePort,
+        port: NodeAddress,
         socket: Box<
             dyn NodeSocket<
                     T,
@@ -68,14 +68,14 @@ where
                 + Sync,
         >,
     ) -> Result<(), String>;
-    async fn add_periodic_socket_task(&self, port: NodePort, task: Arc<PT>) -> Result<(), String>;
+    async fn add_periodic_socket_task(&self, port: NodeAddress, task: Arc<PT>) -> Result<(), String>;
     fn add_socket_task_and_create(
         &self,
         id: Self::RouteId,
         task: Box<T>,
         socket_constructor: Box<
             dyn Fn(
-                NodePort,
+                NodeAddress,
             ) -> Box<
                 dyn NodeSocket<
                         T,
@@ -120,7 +120,7 @@ where
     RStorage: RouteStorage,
 {
     sockets: DashMap<
-        NodePort,
+        NodeAddress,
         Box<
             dyn NodeSocket<
                     T,
@@ -129,7 +129,7 @@ where
                     M,
                     RStorage,
                     RouteId = NodeSocketRouteId,
-                    ConnectionInfo = NodePort,
+                    ConnectionInfo = NodeAddress,
                     StreamType = Vec<u8>,
                 > + Send
                 + Sync,
@@ -152,13 +152,13 @@ impl<T, M, R, N, MN>
         N,
         R,
         MN,
-        NodePort,
+        NodeAddress,
         u16,
         TokioPeriodTimeUnit,
         PeriodicDefaultNodeSocketTask,
         DefaultRouteHandler,
         HashMapRouteStorage,
-    > for DefaultNodeState<T, M, R, N, MN, NodePort, u16, DefaultRouteHandler, HashMapRouteStorage>
+    > for DefaultNodeState<T, M, R, N, MN, NodeAddress, u16, DefaultRouteHandler, HashMapRouteStorage>
 where
     T: RouteTask + Send + Sync + 'static,
     M: NodeSocketTaskMetadata + Send + Sync,
@@ -167,12 +167,12 @@ where
     MN: MembershipNeighbor + Send + Sync,
 {
     type RouteId = NodeSocketRouteId;
-    type ConnectionInfo = NodePort;
+    type ConnectionInfo = NodeAddress;
     type StreamType = Vec<u8>;
 
     fn add_socket(
         &self,
-        port: NodePort,
+        port: NodeAddress,
         socket: Box<
             dyn NodeSocket<
                     T,
@@ -181,7 +181,7 @@ where
                     M,
                     HashMapRouteStorage,
                     RouteId = NodeSocketRouteId,
-                    ConnectionInfo = NodePort,
+                    ConnectionInfo = NodeAddress,
                     StreamType = Vec<u8>,
                 > + Send
                 + Sync,
@@ -195,7 +195,7 @@ where
         self.route_handler.clone()
     }
 
-    fn node_identifier(&self) -> Arc<dyn NodeIdentifier<NodePort, u16> + Send + Sync> {
+    fn node_identifier(&self) -> Arc<dyn NodeIdentifier<NodeAddress, u16> + Send + Sync> {
         self.identifier.clone()
     }
 
@@ -209,7 +209,7 @@ where
         task: Box<T>,
         socket_constructor: Box<
             dyn Fn(
-                NodePort,
+                NodeAddress,
             ) -> Box<
                 dyn NodeSocket<
                         T,
@@ -218,7 +218,7 @@ where
                         M,
                         HashMapRouteStorage,
                         RouteId = NodeSocketRouteId,
-                        ConnectionInfo = NodePort,
+                        ConnectionInfo = NodeAddress,
                         StreamType = Vec<u8>,
                     > + Send
                     + Sync,
@@ -238,7 +238,7 @@ where
 
     async fn add_periodic_socket_task(
         &self,
-        port: NodePort,
+        port: NodeAddress,
         task: Arc<PeriodicDefaultNodeSocketTask>,
     ) -> Result<(), String> {
         match self.sockets.get_mut(&port) {
@@ -246,7 +246,7 @@ where
                 socket.add_periodic_task(task).await;
                 Ok(())
             }
-            None => Err(format!("Socket with port {} not found", port.value())),
+            None => Err(format!("Socket with port {} not found", port.port())),
         }
     }
 
@@ -265,8 +265,8 @@ where
 
             let neighbor_info = self.node_identifier().connection_info();
 
-            if self.node_identifier().connection_info().value() == neighbor_info.value() {
-                n.add_taint(Box::new(NodePortTaint::new(
+            if self.node_identifier().connection_info().port() == neighbor_info.port() {
+                n.add_taint(Box::new(NodeAddressTaint::new(
                     self.node_identifier().connection_info(),
                     neighbor_info,
                 )));
@@ -286,7 +286,7 @@ where
             .sockets
             .iter()
             .map(|x| x.key().clone())
-            .collect::<Vec<NodePort>>();
+            .collect::<Vec<NodeAddress>>();
 
         for key in keys {
             let socket = self.sockets.get_mut(&key);
@@ -313,7 +313,7 @@ impl
         DefaultMembershipNeighborRepresentation<DefaultMembershipNeighbor>,
         DefaultMembership,
         DefaultMembershipNeighbor,
-        NodePort,
+        NodeAddress,
         u16,
         DefaultRouteHandler,
         HashMapRouteStorage,
@@ -327,7 +327,7 @@ impl
                 > + Send
                 + Sync,
         >,
-        identifier: Arc<dyn NodeIdentifier<NodePort, u16> + Send + Sync>,
+        identifier: Arc<dyn NodeIdentifier<NodeAddress, u16> + Send + Sync>,
         route_handler: Arc<DefaultRouteHandler>,
         data: Arc<DefaultDataState>,
     ) -> Self {

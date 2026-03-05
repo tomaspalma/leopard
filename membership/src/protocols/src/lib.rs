@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use connection::node::default::{
     DefaultNodeSocketTask, DefaultNodeSocketTaskMetadata, PeriodicDefaultNodeSocketTask,
 };
-use connection::node::port::NodePort;
+use connection::node::port::NodeAddress;
 use connection::route::{DefaultRouteHandler, HashMapRouteStorage};
 use membership::{
     DefaultMembership, DefaultMembershipNeighbor, DefaultMembershipNeighborRepresentation,
@@ -22,7 +22,7 @@ impl
             DefaultMembershipNeighborRepresentation<DefaultMembershipNeighbor>,
             DefaultMembership,
             DefaultMembershipNeighbor,
-            NodePort,
+            NodeAddress,
             u16,
             DefaultRouteHandler,
             HashMapRouteStorage,
@@ -32,7 +32,7 @@ impl
         DefaultMembershipNeighborRepresentation<DefaultMembershipNeighbor>,
         DefaultMembership,
         DefaultMembershipNeighbor,
-        NodePort,
+        NodeAddress,
         u16,
         TokioPeriodTimeUnit,
         PeriodicDefaultNodeSocketTask,
