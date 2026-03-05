@@ -25,7 +25,8 @@ async fn main() {
     let task_node1: Box<Task> = Box::new(move || {
         Box::pin(async move {
             let config = Arc::new(DefaultNodeConfig::new());
-            let node1_id = DefaultNodeIdentifier::new(NodeAddress::new("127.0.0.1".to_string(), 9000));
+            let node1_id =
+                DefaultNodeIdentifier::new(NodeAddress::new("127.0.0.1".to_string(), 9000));
             let node_state = Arc::new(DefaultNodeState::new(
                 config.clone(),
                 Arc::new(node1_id),
@@ -36,7 +37,10 @@ async fn main() {
             let mut node = Node::new(
                 node_state.clone(),
                 config.clone(),
-                Box::new(DefaultNodeIdentifier::new(NodeAddress::new("127.0.0.1".to_string(), 9000))),
+                Box::new(DefaultNodeIdentifier::new(NodeAddress::new(
+                    "127.0.0.1".to_string(),
+                    9000,
+                ))),
             );
 
             node.add_protocol(Box::new(HintedHandoffReplicationProtocol::new(
@@ -49,7 +53,10 @@ async fn main() {
                 NodeAddress::new("127.0.0.1".to_string(), 9000),
             )));
 
-            node.add_service(Box::new(NodeHTTPService::new()));
+            node.add_service(Box::new(NodeHTTPService::new(NodeAddress::new(
+                "127.0.0.1".to_string(),
+                3000,
+            ))));
 
             node.init().await.unwrap();
 
@@ -60,7 +67,8 @@ async fn main() {
     let task_node2: Box<Task> = Box::new(move || {
         Box::pin(async move {
             let config = Arc::new(DefaultNodeConfig::new());
-            let node1_id = DefaultNodeIdentifier::new(NodeAddress::new("127.0.0.1".to_string(), 9001));
+            let node1_id =
+                DefaultNodeIdentifier::new(NodeAddress::new("127.0.0.1".to_string(), 9001));
             let node_state = Arc::new(DefaultNodeState::new(
                 config.clone(),
                 Arc::new(node1_id),
@@ -71,7 +79,10 @@ async fn main() {
             let mut node = Node::new(
                 node_state.clone(),
                 config.clone(),
-                Box::new(DefaultNodeIdentifier::new(NodeAddress::new("127.0.0.1".to_string(), 9001))),
+                Box::new(DefaultNodeIdentifier::new(NodeAddress::new(
+                    "127.0.0.1".to_string(),
+                    9001,
+                ))),
             );
 
             node.add_protocol(Box::new(HintedHandoffReplicationProtocol::new(
@@ -83,6 +94,11 @@ async fn main() {
                 node_state.clone(),
                 NodeAddress::new("127.0.0.1".to_string(), 9001),
             )));
+
+            node.add_service(Box::new(NodeHTTPService::new(NodeAddress::new(
+                "127.0.0.1".to_string(),
+                3001,
+            ))));
 
             node.init().await.unwrap();
 
@@ -93,7 +109,8 @@ async fn main() {
     let task_node3: Box<Task> = Box::new(move || {
         Box::pin(async move {
             let config = Arc::new(DefaultNodeConfig::new());
-            let node1_id = DefaultNodeIdentifier::new(NodeAddress::new("127.0.0.1".to_string(), 9002));
+            let node1_id =
+                DefaultNodeIdentifier::new(NodeAddress::new("127.0.0.1".to_string(), 9002));
             let node_state = Arc::new(DefaultNodeState::new(
                 config.clone(),
                 Arc::new(node1_id),
@@ -104,7 +121,10 @@ async fn main() {
             let mut node = Node::new(
                 node_state.clone(),
                 config.clone(),
-                Box::new(DefaultNodeIdentifier::new(NodeAddress::new("127.0.0.1".to_string(), 9002))),
+                Box::new(DefaultNodeIdentifier::new(NodeAddress::new(
+                    "127.0.0.1".to_string(),
+                    9002,
+                ))),
             );
 
             node.add_protocol(Box::new(HintedHandoffReplicationProtocol::new(
@@ -116,6 +136,11 @@ async fn main() {
                 node_state.clone(),
                 NodeAddress::new("127.0.0.1".to_string(), 9002),
             )));
+
+            node.add_service(Box::new(NodeHTTPService::new(NodeAddress::new(
+                "127.0.0.1".to_string(),
+                3002,
+            ))));
 
             node.init().await.unwrap();
 

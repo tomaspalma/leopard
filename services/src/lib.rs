@@ -4,6 +4,7 @@ use axum::{
     Json, Router,
     routing::{delete, get, post},
 };
+use connection::node::port::NodeAddress;
 use serde_json::{Value, json};
 
 #[async_trait]
@@ -11,11 +12,13 @@ pub trait NodeService {
     async fn init(&self);
 }
 
-pub struct NodeHTTPService {}
+pub struct NodeHTTPService {
+    address: NodeAddress,
+}
 
 impl NodeHTTPService {
-    pub fn new() -> Self {
-        Self {}
+    pub fn new(address: NodeAddress) -> Self {
+        Self { address }
     }
 
     async fn get_handler(Path(key): Path<String>) -> Json<Value> {
@@ -47,7 +50,13 @@ impl NodeService for NodeHTTPService {
             .route("/{key}", post(Self::post_handler))
             .route("/{key}", delete(Self::delete_handler));
 
-        let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
+        let listener = tokio::net::TcpListener::bind(format!(
+            "{}:{}",
+            self.address.host(),
+            self.address.port()
+        ))
+        .await
+        .unwrap();
         axum::serve(listener, app).await.unwrap();
     }
 }
