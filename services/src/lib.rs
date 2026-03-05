@@ -6,6 +6,8 @@ use axum::{
 };
 use connection::node::port::NodeAddress;
 use serde_json::{Value, json};
+use state::node::DefaultNodeState;
+use std::sync::Arc;
 
 #[async_trait]
 pub trait NodeService {
@@ -14,11 +16,12 @@ pub trait NodeService {
 
 pub struct NodeHTTPService {
     address: NodeAddress,
+    state: Arc<DefaultNodeState>,
 }
 
 impl NodeHTTPService {
-    pub fn new(address: NodeAddress) -> Self {
-        Self { address }
+    pub fn new(address: NodeAddress, state: Arc<DefaultNodeState>) -> Self {
+        Self { address, state }
     }
 
     async fn get_handler(Path(key): Path<String>) -> Json<Value> {
