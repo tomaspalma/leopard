@@ -9,6 +9,8 @@ use protocol::Protocol;
 use runtime::time::PeriodTimeUnit;
 use state::node::NodeState;
 
+pub mod algorithms;
+pub mod hybrid;
 pub mod pbs;
 pub mod pin_sketch;
 pub mod riblt;

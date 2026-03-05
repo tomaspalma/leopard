@@ -16,3 +16,4 @@ membership = { path = "../membership/" }
 errors = { path = "../errors/" }
 config = { path = "../config/" }
 message = { path = "../message/" }
+services = { path = "../services" }

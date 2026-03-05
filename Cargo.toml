@@ -13,9 +13,10 @@ members = [
   "reconciliation",
   "replication", 
   "state", 
+  "services",
   "connection",
   "membership/src/protocols"
-, "errors", "taints", "message"]
+, "errors", "taints", "message", "services"]
 
 [dependencies]
 tokio = { version = "1.48.0", features = ["full"] }
@@ -33,3 +34,4 @@ connection = { path = "./connection" }
 membership-protocols = { path = "./membership/src/protocols" }
 config = { path = "./config" }
 reconciliation = { path = "./reconciliation" }
+services = { path = "./services" }

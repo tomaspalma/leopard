@@ -12,6 +12,8 @@ use state::node::NodeState;
 
 use runtime::{Runtime, RUNTIME};
 
+use services::NodeService;
+
 use std::marker::PhantomData;
 use std::sync::Arc;
 
@@ -36,6 +38,7 @@ where
     protocols: Vec<
         Box<dyn Protocol<S, T, M, R, N, MN, CI, CV, PTU, PT, RHandler, RStorage> + Send + Sync>,
     >,
+    services: Vec<Box<dyn NodeService + Send + Sync>>,
     _marker: PhantomData<T>,
 }
 
@@ -64,6 +67,7 @@ where
             identifier,
             config,
             protocols: vec![],
+            services: vec![],
             state,
             _marker: PhantomData,
         }
@@ -78,9 +82,17 @@ where
         self.protocols.push(protocol);
     }
 
+    pub fn add_service(&mut self, service: Box<dyn NodeService + Send + Sync>) {
+        self.services.push(service);
+    }
+
     pub async fn init(&mut self) -> Result<(), NodeInitError> {
         for protocol in self.protocols.iter_mut() {
             protocol.init().await;
+        }
+
+        for service in self.services.iter_mut() {
+            service.init().await;
         }
 
         let state_clone = self.state.clone();

@@ -1,3 +1,5 @@
+use crate::storage::{DataState, DefaultDataState, DefaultDataStateItem};
+
 use async_trait::async_trait;
 use config::node::NodeConfig;
 use connection::node::default::NodeSocketRoute;
@@ -100,6 +102,8 @@ where
 
     fn init_neighbors(&self);
 
+    fn data(&self) -> Arc<impl DataState + Send + Sync>;
+
     async fn init(&self) -> Result<(), NodeInitError>;
 }
 
@@ -132,6 +136,7 @@ where
         >,
     >,
     membership: Arc<RwLock<N>>,
+    data: Arc<DefaultDataState>,
     config: Arc<dyn NodeConfig<R, MN> + Send + Sync>,
     identifier: Arc<dyn NodeIdentifier<CI, CV> + Send + Sync>,
     route_handler: Arc<RHandler>,
@@ -295,6 +300,10 @@ where
 
         Ok(())
     }
+
+    fn data(&self) -> Arc<impl DataState + Send + Sync> {
+        Arc::new(DefaultDataState {})
+    }
 }
 
 impl
@@ -320,11 +329,13 @@ impl
         >,
         identifier: Arc<dyn NodeIdentifier<NodePort, u16> + Send + Sync>,
         route_handler: Arc<DefaultRouteHandler>,
+        data: Arc<DefaultDataState>,
     ) -> Self {
         Self {
             sockets: DashMap::new(),
             membership: Arc::new(RwLock::new(DefaultMembership::new())),
             config,
+            data,
             identifier,
             route_handler,
             _marker_r: PhantomData,

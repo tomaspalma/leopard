@@ -4,11 +4,13 @@ use membership_protocols::DefaultMembershipProtocol;
 use reconciliation::riblt::RIBLT;
 use replication::protocol::HintedHandoffReplicationProtocol;
 use runtime::{RUNTIME, Runtime, Task, TokioRuntime};
+use services::NodeHTTPService;
 use state::node::DefaultNodeState;
 
 use config::node::DefaultNodeConfig;
 use node::Node;
 
+use state::storage::DefaultDataState;
 use tracing::info;
 use tracing_subscriber;
 
@@ -28,6 +30,7 @@ async fn main() {
                 config.clone(),
                 Arc::new(node1_id),
                 Arc::new(DefaultRouteHandler::new()),
+                Arc::new(DefaultDataState::new()),
             ));
 
             let mut node = Node::new(
@@ -46,6 +49,8 @@ async fn main() {
                 NodePort::new(9000),
             )));
 
+            node.add_service(Box::new(NodeHTTPService::new()));
+
             node.init().await.unwrap();
 
             Ok(())
@@ -60,6 +65,7 @@ async fn main() {
                 config.clone(),
                 Arc::new(node1_id),
                 Arc::new(DefaultRouteHandler::new()),
+                Arc::new(DefaultDataState::new()),
             ));
 
             let mut node = Node::new(
@@ -92,6 +98,7 @@ async fn main() {
                 config.clone(),
                 Arc::new(node1_id),
                 Arc::new(DefaultRouteHandler::new()),
+                Arc::new(DefaultDataState {}),
             ));
 
             let mut node = Node::new(
