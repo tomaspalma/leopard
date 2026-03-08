@@ -1,15 +1,9 @@
-use std::collections::HashMap;
+pub mod item;
+pub mod state;
+
+use item::{DataStateItem, DefaultDataStateItem};
 
 use dashmap::DashMap;
-
-pub trait DataState {
-    type Item: DataStateItem;
-    type Storage: DataStateStorage;
-
-    fn store(&self, item: Box<Self::Item>);
-    fn get(&self, key: &str) -> Option<Box<Self::Item>>;
-    fn items(&self) -> Vec<Box<Self::Item>>;
-}
 
 pub trait DataStateStorage {
     type Item: DataStateItem;
@@ -34,7 +28,8 @@ impl DataStateStorage for KeyValueDataStateStorage {
     type Item = DefaultDataStateItem;
 
     fn save(&self, item: Box<Self::Item>) {
-        self.storage.insert(item.key, item.value);
+        self.storage
+            .insert(item.key().to_string(), item.value().to_string());
     }
 
     fn get(&self, key: &str) -> Option<Box<Self::Item>> {
@@ -44,57 +39,5 @@ impl DataStateStorage for KeyValueDataStateStorage {
                 value.to_string(),
             ))
         })
-    }
-}
-
-pub trait DataStateItem {}
-
-pub struct DefaultDataState {
-    storage: KeyValueDataStateStorage,
-}
-
-impl DefaultDataState {
-    pub fn new() -> Self {
-        Self {
-            storage: KeyValueDataStateStorage::new(),
-        }
-    }
-}
-
-pub struct DefaultDataStateItem {
-    key: String,
-    value: String,
-}
-
-impl DefaultDataStateItem {
-    pub fn new(key: String, value: String) -> Self {
-        Self { key, value }
-    }
-
-    pub fn value(&self) -> &str {
-        &self.value
-    }
-
-    pub fn key(&self) -> &str {
-        &self.key
-    }
-}
-
-impl DataStateItem for DefaultDataStateItem {}
-
-impl DataState for DefaultDataState {
-    type Item = DefaultDataStateItem;
-    type Storage = KeyValueDataStateStorage;
-
-    fn store(&self, _item: Box<Self::Item>) {
-        self.storage.save(_item);
-    }
-
-    fn get(&self, _key: &str) -> Option<Box<Self::Item>> {
-        self.storage.get(_key)
-    }
-
-    fn items(&self) -> Vec<Box<Self::Item>> {
-        vec![]
     }
 }

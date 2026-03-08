@@ -8,7 +8,10 @@ use connection::node::port::NodeAddress;
 use serde::Deserialize;
 use serde_json::{Value, json};
 use state::node::{DefaultNodeState, NodeState};
-use state::storage::{DataState, DefaultDataState, DefaultDataStateItem};
+use state::storage::{
+    item::DefaultDataStateItem,
+    state::{DataState, DefaultDataState},
+};
 use std::sync::Arc;
 
 #[async_trait]

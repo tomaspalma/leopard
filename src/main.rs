@@ -10,7 +10,7 @@ use state::node::DefaultNodeState;
 use config::node::DefaultNodeConfig;
 use node::Node;
 
-use state::storage::DefaultDataState;
+use state::storage::state::DefaultDataState;
 use tracing::info;
 use tracing_subscriber;
 
