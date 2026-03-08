@@ -1,5 +1,8 @@
-use std::{io::Bytes, sync::Arc};
-use tokio::net::TcpStream;
+use rkyv::rancor::Error;
+use rkyv::{Archive, Deserialize, Serialize};
+use std::sync::Arc;
+
+use std::mem::size_of;
 
 use message::{Message, MessageType, MessageTypeValues};
 
@@ -13,10 +16,12 @@ impl DefaultRequestHandler {
     }
 }
 
+#[derive(Archive, Serialize, Deserialize)]
 pub struct TestMessage {
-    _type: Arc<dyn MessageType + Send + Sync>,
+    _type: Arc<TestMessageType>,
 }
 
+#[derive(Archive, Serialize, Deserialize)]
 pub struct TestMessageTypeValues {}
 
 impl TestMessageTypeValues {
@@ -27,6 +32,7 @@ impl TestMessageTypeValues {
 
 impl MessageTypeValues for TestMessageTypeValues {}
 
+#[derive(Archive, Serialize, Deserialize)]
 pub struct TestMessageType {}
 
 impl TestMessageType {
@@ -42,7 +48,7 @@ impl MessageType for TestMessageType {
 }
 
 impl TestMessage {
-    pub fn new(_type: Arc<dyn MessageType + Send + Sync>) -> Self {
+    pub fn new(_type: Arc<TestMessageType>) -> Self {
         Self { _type }
     }
 }
@@ -54,6 +60,15 @@ impl Message for TestMessage {
 
     fn get_type(&self) -> Arc<dyn MessageType + Send + Sync> {
         self._type.clone()
+    }
+
+    fn serialize(&self) -> Result<Vec<u8>, ()> {
+        let _bytes = rkyv::to_bytes::<Error>(self);
+
+        match _bytes {
+            Ok(bytes) => Ok(bytes.to_vec()),
+            Err(_) => Err(()),
+        }
     }
 }
 

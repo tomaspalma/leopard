@@ -48,14 +48,27 @@ where
     RStorage: RouteStorage,
 {
     async fn init(&mut self) {
+        let state_handle = self.state.clone();
         self.state
             .add_periodic_socket_task(
                 self.port.clone(),
                 Arc::new(PeriodicDefaultNodeSocketTask::new(
                     Arc::new(DefaultNodeSocketTaskMetadata::new(String::new())),
                     Arc::new(move || {
+                        let state = state_handle.clone();
                         Box::pin(async move {
-                            println!("Processing connection");
+                            println!("Running RIBLT");
+
+                            let w = state
+                                .membership()
+                                .read()
+                                .unwrap()
+                                .neighbors()
+                                .neighbors()
+                                .read()
+                                .unwrap()
+                                .len();
+
                             Ok(())
                         })
                     }),

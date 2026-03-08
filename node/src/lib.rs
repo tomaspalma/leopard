@@ -87,20 +87,17 @@ where
     }
 
     pub async fn init(&mut self) -> Result<(), NodeInitError> {
+        println!("bruv");
         for protocol in self.protocols.iter_mut() {
             protocol.init().await;
         }
-
-        for service in self.services.iter_mut() {
-            service.init().await;
-        }
-
-        let state_clone = self.state.clone();
 
         let rt_handle = {
             let guard = RUNTIME.read().unwrap();
             Arc::clone(&*guard)
         };
+
+        let state_clone = self.state.clone();
 
         rt_handle
             .spawn(Box::new(move || {
@@ -111,6 +108,10 @@ where
                 })
             }))
             .await;
+
+        for service in self.services.iter_mut() {
+            service.init().await;
+        }
 
         Ok(())
     }
