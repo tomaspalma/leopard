@@ -63,7 +63,7 @@ where
                                 .membership()
                                 .read()
                                 .unwrap()
-                                .neighbors()
+                                .representation()
                                 .neighbors()
                                 .read()
                                 .unwrap()

@@ -38,7 +38,7 @@ where
     protocols: Vec<
         Box<dyn Protocol<S, T, M, R, N, MN, CI, CV, PTU, PT, RHandler, RStorage> + Send + Sync>,
     >,
-    services: Vec<Box<dyn NodeService + Send + Sync>>,
+    services: Vec<Arc<dyn NodeService + Send + Sync>>,
     _marker: PhantomData<T>,
 }
 
@@ -82,12 +82,11 @@ where
         self.protocols.push(protocol);
     }
 
-    pub fn add_service(&mut self, service: Box<dyn NodeService + Send + Sync>) {
+    pub fn add_service(&mut self, service: Arc<dyn NodeService + Send + Sync>) {
         self.services.push(service);
     }
 
     pub async fn init(&mut self) -> Result<(), NodeInitError> {
-        println!("bruv");
         for protocol in self.protocols.iter_mut() {
             protocol.init().await;
         }
@@ -110,7 +109,17 @@ where
             .await;
 
         for service in self.services.iter_mut() {
-            service.init().await;
+            let s = service.clone();
+            rt_handle
+                .spawn(Box::new(move || {
+                    let b = s.clone();
+                    Box::pin(async move {
+                        b.clone().init().await;
+
+                        Ok(())
+                    })
+                }))
+                .await;
         }
 
         Ok(())

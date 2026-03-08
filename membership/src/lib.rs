@@ -70,7 +70,7 @@ where
     R: MembershipNeighbors<N>,
     N: MembershipNeighbor + Send + Sync,
 {
-    fn neighbors(&self) -> Arc<R>;
+    fn representation(&self) -> Arc<R>;
     fn add_neighbor(&self, neighbor: Arc<RwLock<N>>);
     fn add_multiple_neighbors(&self, new_neighbors: Vec<Arc<RwLock<N>>>) {
         for i in 0..new_neighbors.len() {
@@ -99,11 +99,17 @@ impl
         DefaultMembershipNeighbor,
     > for DefaultMembership
 {
-    fn neighbors(&self) -> Arc<DefaultMembershipNeighborRepresentation<DefaultMembershipNeighbor>> {
+    fn representation(
+        &self,
+    ) -> Arc<DefaultMembershipNeighborRepresentation<DefaultMembershipNeighbor>> {
         self.neighbors.clone()
     }
 
     fn add_neighbor(&self, neighbor: Arc<RwLock<DefaultMembershipNeighbor>>) {
-        self.neighbors().neighbors().write().unwrap().push(neighbor);
+        self.representation()
+            .neighbors()
+            .write()
+            .unwrap()
+            .push(neighbor);
     }
 }

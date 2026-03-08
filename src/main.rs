@@ -53,7 +53,7 @@ async fn main() {
                 NodeAddress::new("127.0.0.1".to_string(), 9000),
             )));
 
-            node.add_service(Box::new(NodeHTTPService::new(
+            node.add_service(Arc::new(NodeHTTPService::new(
                 NodeAddress::new("127.0.0.1".to_string(), 3000),
                 node_state.clone(),
             )));
@@ -95,7 +95,7 @@ async fn main() {
                 NodeAddress::new("127.0.0.1".to_string(), 9001),
             )));
 
-            node.add_service(Box::new(NodeHTTPService::new(
+            node.add_service(Arc::new(NodeHTTPService::new(
                 NodeAddress::new("127.0.0.1".to_string(), 3001),
                 node_state.clone(),
             )));
@@ -137,7 +137,7 @@ async fn main() {
                 NodeAddress::new("127.0.0.1".to_string(), 9002),
             )));
 
-            node.add_service(Box::new(NodeHTTPService::new(
+            node.add_service(Arc::new(NodeHTTPService::new(
                 NodeAddress::new("127.0.0.1".to_string(), 3002),
                 node_state.clone(),
             )));
