@@ -5,8 +5,10 @@ use axum::{
     routing::{delete, get, post},
 };
 use connection::node::port::NodeAddress;
+use serde::Deserialize;
 use serde_json::{Value, json};
 use state::node::{DefaultNodeState, NodeState};
+use state::storage::{DataState, DefaultDataState, DefaultDataStateItem};
 use std::sync::Arc;
 
 #[async_trait]
@@ -19,32 +21,41 @@ pub struct NodeHTTPService {
     state: Arc<DefaultNodeState>,
 }
 
+#[derive(Deserialize)]
+pub struct PostRequestPayload {
+    value: String,
+}
+
 impl NodeHTTPService {
     pub fn new(address: NodeAddress, state: Arc<DefaultNodeState>) -> Self {
         Self { address, state }
     }
 
     async fn get_handler(
-        State(state): State<Arc<DefaultNodeState>>,
+        State(state): State<Arc<DefaultDataState>>,
         Path(key): Path<String>,
     ) -> Json<Value> {
-        // state.data().
-
-        println!("Fetching key: {}", key);
-        Json(json!({ "key": key, "value": "example_value" }))
+        match state.get(&key) {
+            Some(value) => Json(json!({ "key": key, "value": value.value() })),
+            None => Json(json!({ "error": "Key not found" })),
+        }
     }
 
     async fn post_handler(
-        State(state): State<Arc<DefaultNodeState>>,
+        State(state): State<Arc<DefaultDataState>>,
         Path(key): Path<String>,
-        Json(payload): Json<Value>,
+        Json(payload): Json<PostRequestPayload>,
     ) -> Json<Value> {
-        println!("Setting key: {} to value: {}", key, payload);
-        Json(json!({ "status": "success", "key": format!("/{}", key) }))
+        state.store(Box::new(DefaultDataStateItem::new(
+            key.clone(),
+            payload.value.clone(),
+        )));
+
+        Json(json!({"key": key, "value": payload.value}))
     }
 
     async fn delete_handler(
-        State(state): State<Arc<DefaultNodeState>>,
+        State(state): State<Arc<DefaultDataState>>,
         Path(key): Path<String>,
     ) -> Json<Value> {
         println!("Deleting key: {}", key);
@@ -55,11 +66,13 @@ impl NodeHTTPService {
 #[async_trait]
 impl NodeService for NodeHTTPService {
     async fn init(&self) {
+        let data = self.state.data().clone();
+
         let app: Router = Router::new()
             .route("/{key}", get(Self::get_handler))
             .route("/{key}", post(Self::post_handler))
             .route("/{key}", delete(Self::delete_handler))
-            .with_state(self.state.clone());
+            .with_state(data);
 
         let listener = tokio::net::TcpListener::bind(format!(
             "{}:{}",

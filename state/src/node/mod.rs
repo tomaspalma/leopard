@@ -294,8 +294,8 @@ impl NodeState for DefaultNodeState {
         Ok(())
     }
 
-    fn data(&self) -> Arc<impl DataState + Send + Sync> {
-        Arc::new(DefaultDataState::new())
+    fn data(&self) -> Arc<DefaultDataState> {
+        self.data.clone()
     }
 }
 

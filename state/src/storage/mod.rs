@@ -6,7 +6,7 @@ pub trait DataState {
     type Item: DataStateItem;
     type Storage: DataStateStorage;
 
-    fn store(&mut self, item: Box<Self::Item>);
+    fn store(&self, item: Box<Self::Item>);
     fn get(&self, key: &str) -> Option<Box<Self::Item>>;
     fn items(&self) -> Vec<Box<Self::Item>>;
 }
@@ -70,6 +70,14 @@ impl DefaultDataStateItem {
     pub fn new(key: String, value: String) -> Self {
         Self { key, value }
     }
+
+    pub fn value(&self) -> &str {
+        &self.value
+    }
+
+    pub fn key(&self) -> &str {
+        &self.key
+    }
 }
 
 impl DataStateItem for DefaultDataStateItem {}
@@ -78,7 +86,7 @@ impl DataState for DefaultDataState {
     type Item = DefaultDataStateItem;
     type Storage = KeyValueDataStateStorage;
 
-    fn store(&mut self, _item: Box<Self::Item>) {
+    fn store(&self, _item: Box<Self::Item>) {
         self.storage.save(_item);
     }
 
