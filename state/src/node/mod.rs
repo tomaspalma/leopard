@@ -295,7 +295,7 @@ impl NodeState for DefaultNodeState {
     }
 
     fn data(&self) -> Arc<impl DataState + Send + Sync> {
-        Arc::new(DefaultDataState {})
+        Arc::new(DefaultDataState::new())
     }
 }
 

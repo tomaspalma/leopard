@@ -3,7 +3,7 @@ use connection::{node::id::DefaultNodeIdentifier, route::DefaultRouteHandler};
 use membership_protocols::DefaultMembershipProtocol;
 use reconciliation::riblt::RIBLT;
 use replication::protocol::HintedHandoffReplicationProtocol;
-use runtime::{RUNTIME, Runtime, Task, TokioRuntime};
+use runtime::{RUNTIME, Task};
 use services::NodeHTTPService;
 use state::node::DefaultNodeState;
 
@@ -115,7 +115,7 @@ async fn main() {
                 config.clone(),
                 Arc::new(node1_id),
                 Arc::new(DefaultRouteHandler::new()),
-                Arc::new(DefaultDataState {}),
+                Arc::new(DefaultDataState::new()),
             ));
 
             let mut node = Node::new(
