@@ -1,6 +1,9 @@
 use std::sync::{Arc, RwLock};
 
-use connection::node::{id::NodeIdentifier, port::NodeAddress};
+use connection::node::{
+    id::{DefaultNodeIdentifier, NodeIdentifier},
+    port::NodeAddress,
+};
 use taints::Taint;
 
 pub trait MembershipNeighbor {
@@ -16,7 +19,7 @@ pub struct DefaultMembershipNeighbor {
 impl DefaultMembershipNeighbor {
     pub fn new(port: NodeAddress) -> Self {
         Self {
-            identifier: Arc::new(connection::node::id::DefaultNodeIdentifier::new(port)),
+            identifier: Arc::new(DefaultNodeIdentifier::new(port)),
             taints: Vec::new(),
         }
     }
@@ -28,9 +31,7 @@ impl MembershipNeighbor for DefaultMembershipNeighbor {
     }
 
     fn identifier(&self) -> Arc<dyn NodeIdentifier<NodeAddress, NodeAddress> + Send + Sync> {
-        Arc::new(connection::node::id::DefaultNodeIdentifier::new(
-            NodeAddress::new("127.0.0.1".to_string(), 9000),
-        ))
+        self.identifier.clone()
     }
 }
 

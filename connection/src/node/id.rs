@@ -9,17 +9,21 @@ where
 }
 
 pub struct DefaultNodeIdentifier {
-    port: NodeAddress,
+    address: NodeAddress,
 }
 
 impl DefaultNodeIdentifier {
-    pub fn new(port: NodeAddress) -> Self {
-        Self { port }
+    pub fn new(address: NodeAddress) -> Self {
+        Self { address }
+    }
+
+    pub fn address(&self) -> NodeAddress {
+        self.address.clone()
     }
 }
 
 impl NodeIdentifier<NodeAddress, NodeAddress> for DefaultNodeIdentifier {
     fn connection_info(&self) -> NodeAddress {
-        self.port.clone()
+        self.address.clone()
     }
 }

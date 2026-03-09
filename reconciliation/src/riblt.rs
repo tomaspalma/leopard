@@ -59,15 +59,22 @@ where
                         Box::pin(async move {
                             println!("Running RIBLT");
 
-                            let w = state
+                            let neighbors = state
                                 .membership()
                                 .read()
                                 .unwrap()
                                 .representation()
-                                .neighbors()
-                                .read()
-                                .unwrap()
-                                .len();
+                                .neighbors();
+
+                            println!("what the hell: {}", neighbors.read().unwrap().len());
+
+                            for neighbor in neighbors.read().unwrap().iter() {
+                                let neighbor = neighbor.read().unwrap();
+                                println!(
+                                    "Neighbor: {}",
+                                    neighbor.identifier().connection_info().port()
+                                );
+                            }
 
                             Ok(())
                         })
