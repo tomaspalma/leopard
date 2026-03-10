@@ -368,14 +368,16 @@ impl NodeState for DefaultNodeState {
 
                                     let mut buffer = Vec::new();
 
-                                    if let Err(e) = stream.read_to_end(&mut buffer).await {
-                                        eprintln!("Failed to read from stream: {}", e);
-                                        continue;
+                                    match stream.read_to_end(&mut buffer).await {
+                                        Ok(_) => {
+                                            println!("Buffers length: {}", buffer.len());
+                                            let msg = request_handler.handle(buffer);
+                                            route_handler.handle(msg, address.clone()).await;
+                                        }
+                                        Err(e) => {
+                                            eprintln!("Failed to read from stream: {}", e);
+                                        }
                                     }
-
-                                    let msg = request_handler.handle(buffer);
-
-                                    route_handler.handle(msg, address.clone()).await;
                                 }
                                 Err(e) => {
                                     eprintln!("Failed to accept connection: {}", e);

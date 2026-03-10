@@ -166,20 +166,19 @@ impl NodeSocket for DefaultNodeSocket {
     }
 
     async fn send(&self, target: Box<NodeAddress>, message: Box<dyn Message + Send + Sync>) {
-        println!("Trying to send!");
-        let addr = format!("127.0.0.1:{}", target.port());
+        let addr = format!("{}:{}", target.host(), target.port());
 
         match TcpStream::connect(&addr).await {
             Ok(mut stream) => {
-                println!("Successfully connected to {}", addr);
+                let message_to_send = message.serialize().unwrap();
 
-                let message_to_send = b"Hello from NodeSocket";
-
-                if let Err(e) = stream.write_all(message_to_send).await {
-                    eprintln!("Failed to send data to {}: {}", addr, e);
-                } else {
-                    let _ = stream.flush().await;
-                    println!("Message sent to {}", addr);
+                match stream.write_all(&message_to_send).await {
+                    Ok(_) => {
+                        let _ = stream.flush().await;
+                    }
+                    Err(e) => {
+                        eprintln!("Failed to send data to {}: {}", addr, e);
+                    }
                 }
             }
             Err(e) => {
