@@ -15,7 +15,10 @@ use connection::{
         },
         port::NodeAddress,
     },
-    route::{DefaultRouteHandler, HashMapRouteStorage, NodeSocketRouteId, RouteTask},
+    route::{
+        RouteTask,
+        default::{DefaultRouteHandler, HashMapRouteStorage, NodeSocketRouteId},
+    },
 };
 use protocol::Protocol;
 use runtime::time::TokioPeriodTimeUnit;

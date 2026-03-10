@@ -1,5 +1,5 @@
 use connection::node::port::NodeAddress;
-use connection::{node::id::DefaultNodeIdentifier, route::DefaultRouteHandler};
+use connection::{node::id::DefaultNodeIdentifier, route::default::DefaultRouteHandler};
 use membership_protocols::DefaultMembershipProtocol;
 use reconciliation::riblt::RIBLT;
 use replication::protocol::HintedHandoffReplicationProtocol;

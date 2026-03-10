@@ -15,7 +15,8 @@ use std::{
 };
 
 use connection::route::{
-    DefaultRouteHandler, HashMapRouteStorage, NodeSocketRouteId, RouteHandler,
+    RouteHandler,
+    default::{DefaultRouteHandler, HashMapRouteStorage, NodeSocketRouteId},
 };
 
 use connection::node::{

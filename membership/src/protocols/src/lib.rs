@@ -3,7 +3,7 @@ use connection::node::default::{
     DefaultNodeSocketTask, DefaultNodeSocketTaskMetadata, PeriodicDefaultNodeSocketTask,
 };
 use connection::node::port::NodeAddress;
-use connection::route::{DefaultRouteHandler, HashMapRouteStorage};
+use connection::route::default::{DefaultRouteHandler, HashMapRouteStorage};
 use membership::{
     DefaultMembership, DefaultMembershipNeighbor, DefaultMembershipNeighborRepresentation,
 };

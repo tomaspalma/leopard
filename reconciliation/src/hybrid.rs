@@ -12,7 +12,10 @@ use connection::{
         port::{ConnectionInfo, NodeAddress},
         NodeSocketTaskMetadata, PeriodicNodeSocketTask,
     },
-    route::{DefaultRouteHandler, HashMapRouteStorage, RouteHandler, RouteStorage, RouteTask},
+    route::{
+        default::{DefaultRouteHandler, HashMapRouteStorage},
+        RouteHandler, RouteStorage, RouteTask,
+    },
 };
 use membership::{Membership, MembershipNeighbor, MembershipNeighbors};
 use runtime::time::{PeriodTimeUnit, TokioPeriodTimeUnit};
