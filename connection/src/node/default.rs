@@ -188,6 +188,7 @@ impl NodeSocket for DefaultNodeSocket {
     }
 
     async fn send(&self, target: Box<NodeAddress>, message: Box<dyn Message + Send + Sync>) {
+        println!("Trying to send!");
         let addr = format!("127.0.0.1:{}", target.port());
 
         match TcpStream::connect(&addr).await {

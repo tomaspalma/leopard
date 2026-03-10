@@ -1,16 +1,16 @@
-use crate::storage::{
-    item::DefaultDataStateItem,
-    state::{DataState, DefaultDataState},
-};
+use crate::storage::state::{DataState, DefaultDataState};
 
 use async_trait::async_trait;
 use config::node::NodeConfig;
 use connection::node::default::NodeSocketRoute;
-use dashmap::DashMap;
 use errors::node::NodeInitError;
+use message::Message;
 use runtime::time::TokioPeriodTimeUnit;
 
-use std::sync::{Arc, RwLock};
+use std::{
+    collections::HashMap,
+    sync::{Arc, RwLock},
+};
 
 use connection::route::{
     DefaultRouteHandler, HashMapRouteStorage, NodeSocketRouteId, RouteHandler,
@@ -22,7 +22,7 @@ use connection::node::{
         DefaultNodeSocketTask, DefaultNodeSocketTaskMetadata, PeriodicDefaultNodeSocketTask,
     },
     id::NodeIdentifier,
-    port::{ConnectionInfo, NodeAddress},
+    port::NodeAddress,
 };
 use membership::{
     DefaultMembership, DefaultMembershipNeighbor, DefaultMembershipNeighborRepresentation,
@@ -50,20 +50,30 @@ pub trait NodeState {
     fn add_socket(
         &self,
         port: NodeAddress,
-        socket: Box<
-            dyn NodeSocket<
-                    RouteTask = Self::RouteTask,
-                    NodeSocketTaskMetadata = Self::NodeSocketTaskMetadata,
-                    PeriodicNodeSocketTask = Self::PeriodicNodeSocketTask,
-                    PeriodTimeUnit = Self::PeriodTimeUnit,
-                    RouteStorage = Self::RouteStorage,
-                    RouteId = Self::RouteId,
-                    ConnectionInfo = Self::ConnectionInfo,
-                    StreamType = Self::StreamType,
-                > + Send
-                + Sync,
+        socket: Arc<
+            tokio::sync::Mutex<
+                dyn NodeSocket<
+                        RouteTask = Self::RouteTask,
+                        NodeSocketTaskMetadata = Self::NodeSocketTaskMetadata,
+                        PeriodicNodeSocketTask = Self::PeriodicNodeSocketTask,
+                        PeriodTimeUnit = Self::PeriodTimeUnit,
+                        RouteStorage = Self::RouteStorage,
+                        RouteId = Self::RouteId,
+                        ConnectionInfo = Self::ConnectionInfo,
+                        StreamType = Self::StreamType,
+                    > + Send
+                    + Sync,
+            >,
         >,
     ) -> Result<(), String>;
+
+    async fn send_through_socket(
+        &self,
+        port: NodeAddress,
+        target: Box<Self::ConnectionInfo>,
+        message: Box<dyn Message + Send + Sync>,
+    ) -> Result<(), String>;
+
     async fn add_periodic_socket_task(
         &self,
         port: NodeAddress,
@@ -76,18 +86,20 @@ pub trait NodeState {
         socket_constructor: Box<
             dyn Fn(
                 NodeAddress,
-            ) -> Box<
-                dyn NodeSocket<
-                        RouteTask = Self::RouteTask,
-                        NodeSocketTaskMetadata = Self::NodeSocketTaskMetadata,
-                        PeriodicNodeSocketTask = Self::PeriodicNodeSocketTask,
-                        PeriodTimeUnit = Self::PeriodTimeUnit,
-                        RouteStorage = Self::RouteStorage,
-                        RouteId = Self::RouteId,
-                        ConnectionInfo = Self::ConnectionInfo,
-                        StreamType = Self::StreamType,
-                    > + Send
-                    + Sync,
+            ) -> Arc<
+                tokio::sync::Mutex<
+                    dyn NodeSocket<
+                            RouteTask = Self::RouteTask,
+                            NodeSocketTaskMetadata = Self::NodeSocketTaskMetadata,
+                            PeriodicNodeSocketTask = Self::PeriodicNodeSocketTask,
+                            PeriodTimeUnit = Self::PeriodTimeUnit,
+                            RouteStorage = Self::RouteStorage,
+                            RouteId = Self::RouteId,
+                            ConnectionInfo = Self::ConnectionInfo,
+                            StreamType = Self::StreamType,
+                        > + Send
+                        + Sync,
+                >,
             >,
         >,
     ) -> Result<(), String>;
@@ -110,20 +122,26 @@ pub trait NodeState {
 }
 
 pub struct DefaultNodeState {
-    sockets: DashMap<
-        NodeAddress,
-        Box<
-            dyn NodeSocket<
-                    RouteTask = DefaultNodeSocketTask,
-                    NodeSocketTaskMetadata = DefaultNodeSocketTaskMetadata,
-                    PeriodicNodeSocketTask = PeriodicDefaultNodeSocketTask,
-                    PeriodTimeUnit = TokioPeriodTimeUnit,
-                    RouteStorage = HashMapRouteStorage,
-                    RouteId = NodeSocketRouteId,
-                    ConnectionInfo = NodeAddress,
-                    StreamType = Vec<u8>,
-                > + Send
-                + Sync,
+    sockets: Arc<
+        tokio::sync::Mutex<
+            HashMap<
+                NodeAddress,
+                Arc<
+                    tokio::sync::Mutex<
+                        dyn NodeSocket<
+                                RouteTask = DefaultNodeSocketTask,
+                                NodeSocketTaskMetadata = DefaultNodeSocketTaskMetadata,
+                                PeriodicNodeSocketTask = PeriodicDefaultNodeSocketTask,
+                                PeriodTimeUnit = TokioPeriodTimeUnit,
+                                RouteStorage = HashMapRouteStorage,
+                                RouteId = NodeSocketRouteId,
+                                ConnectionInfo = NodeAddress,
+                                StreamType = Vec<u8>,
+                            > + Send
+                            + Sync,
+                    >,
+                >,
+            >,
         >,
     >,
     membership: Arc<RwLock<DefaultMembership>>,
@@ -160,21 +178,39 @@ impl NodeState for DefaultNodeState {
     fn add_socket(
         &self,
         port: NodeAddress,
-        socket: Box<
-            dyn NodeSocket<
-                    RouteTask = Self::RouteTask,
-                    NodeSocketTaskMetadata = Self::NodeSocketTaskMetadata,
-                    PeriodicNodeSocketTask = Self::PeriodicNodeSocketTask,
-                    PeriodTimeUnit = Self::PeriodTimeUnit,
-                    RouteStorage = Self::RouteStorage,
-                    RouteId = Self::RouteId,
-                    ConnectionInfo = Self::ConnectionInfo,
-                    StreamType = Self::StreamType,
-                > + Send
-                + Sync,
+        socket: Arc<
+            tokio::sync::Mutex<
+                dyn NodeSocket<
+                        RouteTask = Self::RouteTask,
+                        NodeSocketTaskMetadata = Self::NodeSocketTaskMetadata,
+                        PeriodicNodeSocketTask = Self::PeriodicNodeSocketTask,
+                        PeriodTimeUnit = Self::PeriodTimeUnit,
+                        RouteStorage = Self::RouteStorage,
+                        RouteId = Self::RouteId,
+                        ConnectionInfo = Self::ConnectionInfo,
+                        StreamType = Self::StreamType,
+                    > + Send
+                    + Sync,
+            >,
         >,
     ) -> Result<(), String> {
-        self.sockets.insert(port.clone(), socket);
+        self.sockets
+            .try_lock()
+            .unwrap()
+            .insert(port.clone(), socket);
+        Ok(())
+    }
+
+    async fn send_through_socket(
+        &self,
+        port: NodeAddress,
+        target: Box<Self::ConnectionInfo>,
+        message: Box<dyn Message + Send + Sync>,
+    ) -> Result<(), String> {
+        self.sockets.try_lock().unwrap().get(&port).unwrap();
+
+        // socket.send(target, message).await;
+
         Ok(())
     }
 
@@ -197,22 +233,28 @@ impl NodeState for DefaultNodeState {
         socket_constructor: Box<
             dyn Fn(
                 NodeAddress,
-            ) -> Box<
-                dyn NodeSocket<
-                        RouteTask = Self::RouteTask,
-                        NodeSocketTaskMetadata = Self::NodeSocketTaskMetadata,
-                        PeriodicNodeSocketTask = Self::PeriodicNodeSocketTask,
-                        PeriodTimeUnit = Self::PeriodTimeUnit,
-                        RouteStorage = Self::RouteStorage,
-                        RouteId = Self::RouteId,
-                        ConnectionInfo = Self::ConnectionInfo,
-                        StreamType = Self::StreamType,
-                    > + Send
-                    + Sync,
+            ) -> Arc<
+                tokio::sync::Mutex<
+                    dyn NodeSocket<
+                            RouteTask = Self::RouteTask,
+                            NodeSocketTaskMetadata = Self::NodeSocketTaskMetadata,
+                            PeriodicNodeSocketTask = Self::PeriodicNodeSocketTask,
+                            PeriodTimeUnit = Self::PeriodTimeUnit,
+                            RouteStorage = Self::RouteStorage,
+                            RouteId = Self::RouteId,
+                            ConnectionInfo = Self::ConnectionInfo,
+                            StreamType = Self::StreamType,
+                        > + Send
+                        + Sync,
+                >,
             >,
         >,
     ) -> Result<(), String> {
-        let element_exists = self.sockets.contains_key(&id.info().port());
+        let element_exists = self
+            .sockets
+            .try_lock()
+            .unwrap()
+            .contains_key(&id.info().port());
 
         if !element_exists {
             self.add_socket(id.info().port(), socket_constructor(id.info().port()))?;
@@ -228,9 +270,9 @@ impl NodeState for DefaultNodeState {
         port: NodeAddress,
         task: Arc<PeriodicDefaultNodeSocketTask>,
     ) -> Result<(), String> {
-        match self.sockets.get_mut(&port) {
+        match self.sockets.lock().await.get_mut(&port) {
             Some(mut socket) => {
-                socket.add_periodic_task(task).await;
+                socket.lock().await.add_periodic_task(task).await;
                 Ok(())
             }
             None => Err(format!("Socket with port {} not found", port.port())),
@@ -254,7 +296,7 @@ impl NodeState for DefaultNodeState {
         for i in 0..neighbors.len() {
             let mut n = neighbors[i].write().unwrap();
 
-            let neighbor_info = self.node_identifier().connection_info();
+            let neighbor_info = n.identifier().connection_info();
 
             if self.node_identifier().connection_info().port() == neighbor_info.port() {
                 n.add_taint(Box::new(NodeAddressTaint::new(
@@ -275,18 +317,20 @@ impl NodeState for DefaultNodeState {
 
         let keys = self
             .sockets
+            .lock()
+            .await
             .iter()
-            .map(|x| x.key().clone())
+            .map(|x| x.0.clone())
             .collect::<Vec<NodeAddress>>();
 
         for key in keys {
-            let socket = self.sockets.get_mut(&key);
+            let socket_arc = {
+                let mut guard = self.sockets.lock().await;
+                guard.get(&key).cloned()
+            };
 
-            if let None = socket {
-                return Err(NodeInitError::SocketDoesNotExist());
-            }
-
-            let listener = socket.unwrap().bind().await?;
+            let socket = socket_arc.ok_or(NodeInitError::SocketDoesNotExist())?;
+            let listener = socket.lock().await.bind().await;
         }
 
         Ok(())
@@ -311,7 +355,7 @@ impl DefaultNodeState {
         data: Arc<DefaultDataState>,
     ) -> Self {
         Self {
-            sockets: DashMap::new(),
+            sockets: Arc::new(tokio::sync::Mutex::new(HashMap::new())),
             membership: Arc::new(RwLock::new(DefaultMembership::new())),
             config,
             data,

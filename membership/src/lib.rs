@@ -9,6 +9,10 @@ use taints::Taint;
 pub trait MembershipNeighbor {
     fn add_taint(&mut self, taint: Box<dyn Taint + Send + Sync>);
     fn identifier(&self) -> Arc<dyn NodeIdentifier<NodeAddress, NodeAddress> + Send + Sync>;
+    fn taints(&self) -> &Vec<Box<dyn Taint + Send + Sync>>;
+    fn tainted(&self) -> bool {
+        self.taints().iter().any(|x| x.tainted())
+    }
 }
 
 pub struct DefaultMembershipNeighbor {
@@ -32,6 +36,10 @@ impl MembershipNeighbor for DefaultMembershipNeighbor {
 
     fn identifier(&self) -> Arc<dyn NodeIdentifier<NodeAddress, NodeAddress> + Send + Sync> {
         self.identifier.clone()
+    }
+
+    fn taints(&self) -> &Vec<Box<dyn Taint + Send + Sync>> {
+        &self.taints
     }
 }
 

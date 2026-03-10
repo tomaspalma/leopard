@@ -4,6 +4,7 @@ use membership::{
 };
 use message::Message;
 use std::sync::Arc;
+use tokio::sync::Mutex;
 
 use connection::{
     node::{
@@ -79,7 +80,9 @@ impl
                 Box::new(DefaultNodeSocketTask::new(Arc::new(
                     DefaultNodeSocketTaskMetadata::new(String::new()),
                 ))),
-                Box::new(move |port: NodeAddress| Box::new(DefaultNodeSocket::new(port))),
+                Box::new(move |port: NodeAddress| {
+                    Arc::new(Mutex::new(DefaultNodeSocket::new(port)))
+                }),
             )
             .unwrap();
     }

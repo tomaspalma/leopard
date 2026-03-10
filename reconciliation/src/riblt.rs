@@ -12,6 +12,7 @@ use connection::{
         port::{ConnectionInfo, NodeAddress},
         NodeSocketTaskMetadata, PeriodicNodeSocketTask,
     },
+    request::handler::default::{TestMessage, TestMessageType},
     route::{RouteHandler, RouteStorage, RouteTask},
 };
 use membership::{Membership, MembershipNeighbor, MembershipNeighbors};
@@ -49,6 +50,8 @@ where
 {
     async fn init(&mut self) {
         let state_handle = self.state.clone();
+        let port_for_closure = self.port.clone();
+
         self.state
             .add_periodic_socket_task(
                 self.port.clone(),
@@ -56,24 +59,38 @@ where
                     Arc::new(DefaultNodeSocketTaskMetadata::new(String::new())),
                     Arc::new(move || {
                         let state = state_handle.clone();
+                        let port_clone = port_for_closure.clone();
+
                         Box::pin(async move {
                             println!("Running RIBLT");
 
-                            let neighbors = state
-                                .membership()
-                                .read()
-                                .unwrap()
-                                .representation()
-                                .neighbors();
+                            let connection_targets = {
+                                let membership_arc = state.membership();
+                                let membership_guard = membership_arc.read().unwrap();
 
-                            println!("what the hell: {}", neighbors.read().unwrap().len());
+                                let neighbors_arc = membership_guard.representation().neighbors();
+                                let neighbors_guard = neighbors_arc.read().unwrap();
 
-                            for neighbor in neighbors.read().unwrap().iter() {
-                                let neighbor = neighbor.read().unwrap();
-                                println!(
-                                    "Neighbor: {}",
-                                    neighbor.identifier().connection_info().port()
-                                );
+                                neighbors_guard
+                                    .iter()
+                                    .map(|n| n.read().unwrap())
+                                    .filter(|n| !n.tainted())
+                                    .map(|n| n.identifier().connection_info())
+                                    .collect::<Vec<_>>()
+                            };
+
+                            for info in connection_targets {
+                                state
+                                    .send_through_socket(
+                                        port_clone.clone(),
+                                        Box::new(info),
+                                        Box::new(TestMessage::new(
+                                            Arc::new(TestMessageType::new()),
+                                        )),
+                                    )
+                                    .await
+                                    .unwrap();
+                                println!("sent message");
                             }
 
                             Ok(())

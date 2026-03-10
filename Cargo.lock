@@ -2809,6 +2809,7 @@ dependencies = [
  "protocol",
  "runtime",
  "state",
+ "tokio",
  "tracing",
 ]
 
@@ -3485,6 +3486,7 @@ dependencies = [
  "message",
  "runtime",
  "taints",
+ "tokio",
 ]
 
 [[package]]
