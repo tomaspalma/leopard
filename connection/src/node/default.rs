@@ -92,7 +92,7 @@ impl PeriodicNodeSocketTask<TokioPeriodTimeUnit> for PeriodicDefaultNodeSocketTa
 
 pub struct DefaultNodeSocket {
     port: NodeAddress,
-    listener: Option<TcpListener>,
+    listener: Option<Arc<TcpListener>>,
     request_handler: Arc<dyn RequestHandler<Vec<u8>> + Send + Sync>,
     route_handler: Arc<dyn RouteHandler<RouteId = NodeSocketRouteId> + Send + Sync>,
 }
@@ -120,12 +120,20 @@ impl NodeSocket for DefaultNodeSocket {
     type ConnectionInfo = NodeAddress;
     type StreamType = Vec<u8>;
 
-    fn request_handler(&self) -> Arc<dyn RequestHandler<Vec<u8>>> {
+    fn connection_info(&self) -> NodeAddress {
+        self.port.clone()
+    }
+
+    fn request_handler(&self) -> Arc<dyn RequestHandler<Vec<u8>> + Send + Sync> {
         self.request_handler.clone()
     }
 
     fn route_handler(&self) -> Arc<dyn RouteHandler<RouteId = NodeSocketRouteId> + Send + Sync> {
         self.route_handler.clone()
+    }
+
+    fn listener(&self) -> Arc<TcpListener> {
+        self.listener.clone().expect("Listener not initialized")
     }
 
     async fn add_periodic_task(&mut self, task: Arc<PeriodicDefaultNodeSocketTask>) {
@@ -152,39 +160,9 @@ impl NodeSocket for DefaultNodeSocket {
 
         let listener = TcpListener::bind(format!("127.0.0.1:{}", self.port.port())).await?;
 
-        self.listener = Some(listener);
-
-        self.receive().await;
+        self.listener = Some(Arc::new(listener));
 
         Ok(())
-    }
-
-    async fn receive(&self) {
-        if let Some(listener) = &self.listener {
-            loop {
-                println!("Waiting for connection on port {}...", self.port.port());
-
-                match listener.accept().await {
-                    Ok((mut stream, addr)) => {
-                        println!("Accepted connection from {}", addr);
-
-                        let mut buffer = Vec::new();
-
-                        if let Err(e) = stream.read_to_end(&mut buffer).await {
-                            eprintln!("Failed to read from stream: {}", e);
-                            continue;
-                        }
-
-                        let msg = self.request_handler().handle(buffer);
-
-                        self.route_handler().handle(msg, self.port.clone()).await;
-                    }
-                    Err(e) => {
-                        eprintln!("Failed to accept connection: {}", e);
-                    }
-                }
-            }
-        }
     }
 
     async fn send(&self, target: Box<NodeAddress>, message: Box<dyn Message + Send + Sync>) {

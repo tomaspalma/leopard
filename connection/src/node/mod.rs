@@ -2,8 +2,8 @@ pub mod default;
 pub mod id;
 pub mod port;
 
-use crate::request::handler::RequestHandler;
 use crate::route::RouteHandler;
+use crate::{node::port::ConnectionInfo, request::handler::RequestHandler};
 
 use async_trait::async_trait;
 use message::Message;
@@ -42,7 +42,9 @@ pub trait NodeSocket {
     type ConnectionInfo;
     type StreamType;
 
-    fn request_handler(&self) -> Arc<dyn RequestHandler<Self::StreamType>>;
+    fn connection_info(&self) -> Self::ConnectionInfo;
+    fn listener(&self) -> Arc<tokio::net::TcpListener>;
+    fn request_handler(&self) -> Arc<dyn RequestHandler<Self::StreamType> + Send + Sync>;
     fn route_handler(&self) -> Arc<dyn RouteHandler<RouteId = Self::RouteId> + Send + Sync>;
     async fn add_periodic_task(&mut self, task: Arc<Self::PeriodicNodeSocketTask>);
     async fn bind(&mut self) -> Result<(), std::io::Error>;
@@ -51,6 +53,5 @@ pub trait NodeSocket {
         target: Box<Self::ConnectionInfo>,
         message: Box<dyn Message + Send + Sync>,
     );
-    async fn receive(&self);
     async fn disconnect(&self);
 }
