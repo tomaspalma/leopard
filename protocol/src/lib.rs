@@ -1,5 +1,8 @@
 use async_trait::async_trait;
 
+use rand::Rng;
+use rand::RngExt;
+
 use uuid::Uuid;
 
 use connection::node::{NodeSocketTaskMetadata, PeriodicNodeSocketTask, port::ConnectionInfo};
@@ -24,8 +27,10 @@ where
     RHandler: RouteHandler + Send + Sync,
     RStorage: RouteStorage,
 {
-    fn id(&self) -> String {
-        Uuid::new_v4().to_string()
+    fn id(&self) -> u64 {
+        let mut rng = rand::rng();
+
+        rng.random()
     }
     async fn init(&mut self);
 }

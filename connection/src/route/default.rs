@@ -10,11 +10,11 @@ use std::sync::Arc;
 #[derive(Clone, Hash, Eq, PartialEq)]
 pub struct NodeSocketRouteIdInfo {
     port: NodeAddress,
-    protocol: String,
+    protocol: u64,
 }
 
 impl NodeSocketRouteIdInfo {
-    pub fn new(port: NodeAddress, protocol: String) -> Self {
+    pub fn new(port: NodeAddress, protocol: u64) -> Self {
         Self { port, protocol }
     }
 
@@ -22,7 +22,7 @@ impl NodeSocketRouteIdInfo {
         self.port.clone()
     }
 
-    pub fn protocol(&self) -> String {
+    pub fn protocol(&self) -> u64 {
         self.protocol.clone()
     }
 }
@@ -33,7 +33,7 @@ pub struct NodeSocketRouteId {
 }
 
 impl NodeSocketRouteId {
-    pub fn new(port: NodeAddress, protocol: String) -> Self {
+    pub fn new(port: NodeAddress, protocol: u64) -> Self {
         Self {
             info: NodeSocketRouteIdInfo { port, protocol },
         }
@@ -93,9 +93,7 @@ impl RouteHandler for DefaultRouteHandler {
     type RouteId = NodeSocketRouteId;
 
     async fn handle(&self, message: Arc<dyn Message + Send + Sync>, port: NodeAddress) {
-        let route = self
-            .storage
-            .get(NodeSocketRouteId::new(port.clone(), String::new()));
+        let route = self.storage.get(NodeSocketRouteId::new(port.clone(), 0));
 
         if let Some(route) = route {
             let rt_handle = {
