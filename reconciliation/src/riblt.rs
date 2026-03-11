@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use tokio::sync::Mutex;
 
 use async_trait::async_trait;
 use protocol::{Protocol, ProtocolIDGenerator};
@@ -7,13 +8,14 @@ use state::node::{DefaultNodeState, NodeState};
 use connection::{
     node::{
         default::{
-            DefaultNodeSocketTask, DefaultNodeSocketTaskMetadata, PeriodicDefaultNodeSocketTask,
+            DefaultNodeSocket, DefaultNodeSocketTask, DefaultNodeSocketTaskMetadata,
+            PeriodicDefaultNodeSocketTask,
         },
         port::{ConnectionInfo, NodeAddress},
         NodeSocketTaskMetadata, PeriodicNodeSocketTask,
     },
     request::handler::default::{TestMessage, TestMessageType},
-    route::{RouteHandler, RouteStorage, RouteTask},
+    route::{default::NodeSocketRouteId, RouteHandler, RouteStorage, RouteTask},
 };
 use membership::{Membership, MembershipNeighbor, MembershipNeighbors};
 use runtime::time::{PeriodTimeUnit, TokioPeriodTimeUnit};
@@ -28,11 +30,7 @@ pub struct RIBLT {
 
 impl RIBLT {
     pub fn new(state: Arc<DefaultNodeState>, port: NodeAddress) -> Self {
-        Self {
-            id: ProtocolIDGenerator::generate(),
-            state,
-            port,
-        }
+        Self { id: 1, state, port }
     }
 }
 
@@ -60,20 +58,19 @@ where
     async fn init(&mut self) {
         let state_handle = self.state.clone();
         let port_for_closure = self.port.clone();
-        let protocol_id = Some(<RIBLT as Protocol<
-            S,
-            T,
-            M,
-            R,
-            N,
-            MN,
-            CI,
-            CV,
-            PTU,
-            PT,
-            RHandler,
-            RStorage,
-        >>::id(self));
+        let protocol_id = self.id;
+
+        self.state
+            .add_socket_task_and_create(
+                NodeSocketRouteId::new(self.port.clone(), protocol_id),
+                Box::new(DefaultNodeSocketTask::new(Arc::new(
+                    DefaultNodeSocketTaskMetadata::new(String::new()),
+                ))),
+                Box::new(move |port: NodeAddress| {
+                    Arc::new(Mutex::new(DefaultNodeSocket::new(port)))
+                }),
+            )
+            .unwrap();
 
         self.state
             .add_periodic_socket_task(
@@ -109,7 +106,7 @@ where
                                         Box::new(info),
                                         Box::new(TestMessage::new(
                                             Arc::new(TestMessageType::new()),
-                                            protocol_id,
+                                            Some(protocol_id),
                                         )),
                                     )
                                     .await

@@ -3,7 +3,6 @@ use crate::route::{Route, RouteHandler, RouteId, RouteStorage};
 
 use async_trait::async_trait;
 use dashmap::DashMap;
-use message::Message;
 use runtime::RUNTIME;
 use std::sync::Arc;
 
@@ -93,8 +92,11 @@ impl RouteHandler for DefaultRouteHandler {
     type RouteId = NodeSocketRouteId;
 
     async fn handle(&self, protocol: u64, port: NodeAddress) {
-        let route = self.storage.get(NodeSocketRouteId::new(port.clone(), 0));
+        let route = self
+            .storage
+            .get(NodeSocketRouteId::new(port.clone(), protocol));
 
+        println!("Never found route");
         if let Some(route) = route {
             let rt_handle = {
                 let guard = RUNTIME.read().unwrap();

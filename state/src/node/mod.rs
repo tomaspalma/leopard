@@ -377,11 +377,11 @@ impl NodeState for DefaultNodeState {
                                     match stream.read_to_end(&mut buffer).await {
                                         Ok(_) => {
                                             println!("Buffers length: {}", buffer.len());
-                                            let protocol_id = request_handler.handle(buffer); // aqui
-                                            // colocar a retornar o id do protocolo em vez da
-                                            // mensagem inteira
-                                            println!("Protocol id: {}", protocol_id);
-                                            route_handler.handle(0, address.clone()).await;
+                                            let protocol_id = request_handler.handle(buffer);
+
+                                            route_handler
+                                                .handle(protocol_id, address.clone())
+                                                .await;
                                         }
                                         Err(e) => {
                                             eprintln!("Failed to read from stream: {}", e);
