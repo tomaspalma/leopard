@@ -20,7 +20,7 @@ use connection::{
         default::{DefaultRouteHandler, HashMapRouteStorage, NodeSocketRouteId},
     },
 };
-use protocol::Protocol;
+use protocol::{Protocol, ProtocolIDGenerator};
 use runtime::time::TokioPeriodTimeUnit;
 use state::node::{DefaultNodeState, NodeState};
 
@@ -31,6 +31,7 @@ pub struct HintedHandoffReplicationProtocolConfig {
 }
 
 pub struct HintedHandoffReplicationProtocol<S, T> {
+    id: u64,
     state: Arc<S>,
     port: NodeAddress,
     _marker: PhantomData<T>,
@@ -39,6 +40,7 @@ pub struct HintedHandoffReplicationProtocol<S, T> {
 impl HintedHandoffReplicationProtocol<DefaultNodeState, DefaultNodeSocketTask> {
     pub fn new(state: Arc<DefaultNodeState>, port: NodeAddress) -> Self {
         Self {
+            id: ProtocolIDGenerator::generate(),
             state,
             port,
             _marker: PhantomData,
@@ -76,6 +78,10 @@ impl
         HashMapRouteStorage,
     > for HintedHandoffReplicationProtocol<DefaultNodeState, DefaultNodeSocketTask>
 {
+    fn id(&self) -> u64 {
+        self.id
+    }
+
     async fn init(&mut self) {
         self.state
             .add_socket_task_and_create(

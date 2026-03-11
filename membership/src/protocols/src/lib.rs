@@ -7,11 +7,21 @@ use connection::route::default::{DefaultRouteHandler, HashMapRouteStorage};
 use membership::{
     DefaultMembership, DefaultMembershipNeighbor, DefaultMembershipNeighborRepresentation,
 };
-use protocol::Protocol;
+use protocol::{Protocol, ProtocolIDGenerator};
 use runtime::time::TokioPeriodTimeUnit;
 use state::node::DefaultNodeState;
 
-pub struct DefaultMembershipProtocol {}
+pub struct DefaultMembershipProtocol {
+    id: u64,
+}
+
+impl DefaultMembershipProtocol {
+    pub fn new() -> Self {
+        Self {
+            id: ProtocolIDGenerator::generate(),
+        }
+    }
+}
 
 #[async_trait]
 impl
@@ -30,11 +40,8 @@ impl
         HashMapRouteStorage,
     > for DefaultMembershipProtocol
 {
-    async fn init(&mut self) {}
-}
-
-impl DefaultMembershipProtocol {
-    pub fn new() -> Self {
-        Self {}
+    fn id(&self) -> u64 {
+        self.id
     }
+    async fn init(&mut self) {}
 }

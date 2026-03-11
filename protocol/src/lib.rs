@@ -1,15 +1,22 @@
 use async_trait::async_trait;
 
-use rand::Rng;
 use rand::RngExt;
-
-use uuid::Uuid;
 
 use connection::node::{NodeSocketTaskMetadata, PeriodicNodeSocketTask, port::ConnectionInfo};
 use connection::route::{RouteHandler, RouteStorage, RouteTask};
 use membership::{Membership, MembershipNeighbor, MembershipNeighbors};
 use runtime::time::PeriodTimeUnit;
 use state::node::NodeState;
+
+pub struct ProtocolIDGenerator {}
+
+impl ProtocolIDGenerator {
+    pub fn generate() -> u64 {
+        let mut rng = rand::rng();
+
+        rng.random()
+    }
+}
 
 #[async_trait]
 pub trait Protocol<S, T, M, R, N, MN, CI, CV, PTU, PT, RHandler, RStorage>
@@ -27,10 +34,6 @@ where
     RHandler: RouteHandler + Send + Sync,
     RStorage: RouteStorage,
 {
-    fn id(&self) -> u64 {
-        let mut rng = rand::rng();
-
-        rng.random()
-    }
+    fn id(&self) -> u64;
     async fn init(&mut self);
 }

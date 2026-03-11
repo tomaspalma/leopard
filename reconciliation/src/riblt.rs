@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use protocol::Protocol;
+use protocol::{Protocol, ProtocolIDGenerator};
 use state::node::{DefaultNodeState, NodeState};
 
 use connection::{
@@ -21,13 +21,18 @@ use runtime::time::{PeriodTimeUnit, TokioPeriodTimeUnit};
 use crate::ReconciliationProtocol;
 
 pub struct RIBLT {
+    id: u64,
     state: Arc<DefaultNodeState>,
     port: NodeAddress,
 }
 
 impl RIBLT {
     pub fn new(state: Arc<DefaultNodeState>, port: NodeAddress) -> Self {
-        Self { state, port }
+        Self {
+            id: ProtocolIDGenerator::generate(),
+            state,
+            port,
+        }
     }
 }
 
@@ -48,6 +53,10 @@ where
     RHandler: RouteHandler + Send + Sync,
     RStorage: RouteStorage,
 {
+    fn id(&self) -> u64 {
+        self.id
+    }
+
     async fn init(&mut self) {
         let state_handle = self.state.clone();
         let port_for_closure = self.port.clone();

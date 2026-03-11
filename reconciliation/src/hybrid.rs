@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use protocol::Protocol;
+use protocol::{Protocol, ProtocolIDGenerator};
 use state::node::{DefaultNodeState, NodeState};
 
 use connection::{
@@ -25,6 +25,7 @@ use crate::algorithms::{DefaultSimilartyLevelDetector, SimilarityLevelDetector};
 use crate::ReconciliationProtocol;
 
 pub struct HybridReconciliationProtocol {
+    id: u64,
     state: Arc<DefaultNodeState>,
     port: NodeAddress,
     similarity_level_detector:
@@ -34,6 +35,7 @@ pub struct HybridReconciliationProtocol {
 impl HybridReconciliationProtocol {
     pub fn new(state: Arc<DefaultNodeState>, port: NodeAddress) -> Self {
         Self {
+            id: ProtocolIDGenerator::generate(),
             state,
             port,
             similarity_level_detector: Arc::new(DefaultSimilartyLevelDetector::new()),
@@ -76,6 +78,10 @@ where
             )
             .await
             .unwrap();
+    }
+
+    fn id(&self) -> u64 {
+        self.id
     }
 }
 
