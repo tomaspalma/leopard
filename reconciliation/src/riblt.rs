@@ -51,6 +51,20 @@ where
     async fn init(&mut self) {
         let state_handle = self.state.clone();
         let port_for_closure = self.port.clone();
+        let protocol_id = Some(<RIBLT as Protocol<
+            S,
+            T,
+            M,
+            R,
+            N,
+            MN,
+            CI,
+            CV,
+            PTU,
+            PT,
+            RHandler,
+            RStorage,
+        >>::id(self));
 
         self.state
             .add_periodic_socket_task(
@@ -86,6 +100,7 @@ where
                                         Box::new(info),
                                         Box::new(TestMessage::new(
                                             Arc::new(TestMessageType::new()),
+                                            protocol_id,
                                         )),
                                     )
                                     .await

@@ -41,10 +41,13 @@ pub trait NodeSocket {
     type RouteId;
     type ConnectionInfo;
     type StreamType;
+    type RequestHandlerReturn;
 
     fn connection_info(&self) -> Self::ConnectionInfo;
     fn listener(&self) -> Arc<tokio::net::TcpListener>;
-    fn request_handler(&self) -> Arc<dyn RequestHandler<Self::StreamType> + Send + Sync>;
+    fn request_handler(
+        &self,
+    ) -> Arc<dyn RequestHandler<Self::StreamType, Self::RequestHandlerReturn> + Send + Sync>;
     fn route_handler(&self) -> Arc<dyn RouteHandler<RouteId = Self::RouteId> + Send + Sync>;
     async fn add_periodic_task(&mut self, task: Arc<Self::PeriodicNodeSocketTask>);
     async fn bind(&mut self) -> Result<(), std::io::Error>;

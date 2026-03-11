@@ -19,6 +19,7 @@ impl DefaultRequestHandler {
 #[derive(Archive, Serialize, Deserialize)]
 pub struct TestMessage {
     _type: Arc<TestMessageType>,
+    protocol: Option<u64>,
 }
 
 #[derive(Archive, Serialize, Deserialize)]
@@ -48,8 +49,8 @@ impl MessageType for TestMessageType {
 }
 
 impl TestMessage {
-    pub fn new(_type: Arc<TestMessageType>) -> Self {
-        Self { _type }
+    pub fn new(_type: Arc<TestMessageType>, protocol: Option<u64>) -> Self {
+        Self { _type, protocol }
     }
 }
 
@@ -62,18 +63,33 @@ impl Message for TestMessage {
         self._type.clone()
     }
 
-    fn serialize(&self) -> Result<Vec<u8>, ()> {
-        let _bytes = rkyv::to_bytes::<Error>(self);
+    fn protocol(&self) -> Option<u64> {
+        self.protocol
+    }
 
-        match _bytes {
-            Ok(bytes) => Ok(bytes.to_vec()),
-            Err(_) => Err(()),
+    fn serialize(&self, protocol: Option<u64>) -> Result<Vec<u8>, ()> {
+        let body_bytes = rkyv::to_bytes::<Error>(self).map_err(|_| ())?;
+
+        let mut packet = Vec::with_capacity(body_bytes.len() + 8);
+
+        if let Some(id) = protocol {
+            packet.extend_from_slice(&id.to_be_bytes());
         }
+
+        packet.extend_from_slice(&body_bytes);
+
+        Ok(packet)
     }
 }
 
-impl RequestHandler<Vec<u8>> for DefaultRequestHandler {
-    fn handle(&self, stream: Vec<u8>) -> Arc<dyn Message + Send + Sync> {
-        Arc::new(TestMessage::new(Arc::new(TestMessageType::new())))
+impl RequestHandler<Vec<u8>, u64> for DefaultRequestHandler {
+    fn handle(&self, stream: Vec<u8>) -> u64 {
+        if stream.len() < size_of::<u64>() {
+            return 0;
+        }
+
+        let (header, _payload) = stream.split_at(8);
+
+        u64::from_be_bytes(header.try_into().unwrap())
     }
 }

@@ -15,5 +15,6 @@ pub enum DefaultMessageTypes {
 pub trait Message {
     fn content(&self) -> Arc<Vec<u8>>;
     fn get_type(&self) -> Arc<dyn MessageType + Send + Sync>;
-    fn serialize(&self) -> Result<Vec<u8>, ()>;
+    fn serialize(&self, protocol: Option<u64>) -> Result<Vec<u8>, ()>;
+    fn protocol(&self) -> Option<u64>;
 }

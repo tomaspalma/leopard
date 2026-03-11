@@ -94,7 +94,7 @@ impl PeriodicNodeSocketTask<TokioPeriodTimeUnit> for PeriodicDefaultNodeSocketTa
 pub struct DefaultNodeSocket {
     port: NodeAddress,
     listener: Option<Arc<TcpListener>>,
-    request_handler: Arc<dyn RequestHandler<Vec<u8>> + Send + Sync>,
+    request_handler: Arc<dyn RequestHandler<Vec<u8>, u64> + Send + Sync>,
     route_handler: Arc<dyn RouteHandler<RouteId = NodeSocketRouteId> + Send + Sync>,
 }
 
@@ -120,12 +120,13 @@ impl NodeSocket for DefaultNodeSocket {
     type RouteId = NodeSocketRouteId;
     type ConnectionInfo = NodeAddress;
     type StreamType = Vec<u8>;
+    type RequestHandlerReturn = u64;
 
     fn connection_info(&self) -> NodeAddress {
         self.port.clone()
     }
 
-    fn request_handler(&self) -> Arc<dyn RequestHandler<Vec<u8>> + Send + Sync> {
+    fn request_handler(&self) -> Arc<dyn RequestHandler<Vec<u8>, u64> + Send + Sync> {
         self.request_handler.clone()
     }
 
@@ -171,7 +172,7 @@ impl NodeSocket for DefaultNodeSocket {
 
         match TcpStream::connect(&addr).await {
             Ok(mut stream) => {
-                let message_to_send = message.serialize().unwrap();
+                let message_to_send = message.serialize(message.protocol()).unwrap();
 
                 match stream.write_all(&message_to_send).await {
                     Ok(_) => {

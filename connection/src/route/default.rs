@@ -92,7 +92,7 @@ impl DefaultRouteHandler {
 impl RouteHandler for DefaultRouteHandler {
     type RouteId = NodeSocketRouteId;
 
-    async fn handle(&self, message: Arc<dyn Message + Send + Sync>, port: NodeAddress) {
+    async fn handle(&self, protocol: u64, port: NodeAddress) {
         let route = self.storage.get(NodeSocketRouteId::new(port.clone(), 0));
 
         if let Some(route) = route {
@@ -105,9 +105,9 @@ impl RouteHandler for DefaultRouteHandler {
                 .spawn(Box::new(move || {
                     Box::pin({
                         let value = route.clone();
-                        let message_clone = message.clone();
+                        // let message_clone = message.clone();
                         async move {
-                            value.task().run(message_clone);
+                            // value.task().run(message_clone);
                             Ok(())
                         }
                     })

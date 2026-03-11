@@ -64,6 +64,7 @@ pub trait NodeState {
                         RouteId = Self::RouteId,
                         ConnectionInfo = Self::ConnectionInfo,
                         StreamType = Self::StreamType,
+                        RequestHandlerReturn = u64,
                     > + Send
                     + Sync,
             >,
@@ -100,6 +101,7 @@ pub trait NodeState {
                             RouteId = Self::RouteId,
                             ConnectionInfo = Self::ConnectionInfo,
                             StreamType = Self::StreamType,
+                            RequestHandlerReturn = u64,
                         > + Send
                         + Sync,
                 >,
@@ -140,6 +142,7 @@ pub struct DefaultNodeState {
                                 RouteId = NodeSocketRouteId,
                                 ConnectionInfo = NodeAddress,
                                 StreamType = Vec<u8>,
+                                RequestHandlerReturn = u64,
                             > + Send
                             + Sync,
                     >,
@@ -192,6 +195,7 @@ impl NodeState for DefaultNodeState {
                         RouteId = Self::RouteId,
                         ConnectionInfo = Self::ConnectionInfo,
                         StreamType = Self::StreamType,
+                        RequestHandlerReturn = u64,
                     > + Send
                     + Sync,
             >,
@@ -248,6 +252,7 @@ impl NodeState for DefaultNodeState {
                             RouteId = Self::RouteId,
                             ConnectionInfo = Self::ConnectionInfo,
                             StreamType = Self::StreamType,
+                            RequestHandlerReturn = u64,
                         > + Send
                         + Sync,
                 >,
@@ -372,8 +377,11 @@ impl NodeState for DefaultNodeState {
                                     match stream.read_to_end(&mut buffer).await {
                                         Ok(_) => {
                                             println!("Buffers length: {}", buffer.len());
-                                            let msg = request_handler.handle(buffer);
-                                            route_handler.handle(msg, address.clone()).await;
+                                            let protocol_id = request_handler.handle(buffer); // aqui
+                                            // colocar a retornar o id do protocolo em vez da
+                                            // mensagem inteira
+                                            println!("Protocol id: {}", protocol_id);
+                                            route_handler.handle(0, address.clone()).await;
                                         }
                                         Err(e) => {
                                             eprintln!("Failed to read from stream: {}", e);

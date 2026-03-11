@@ -4,6 +4,6 @@ use message::{Message, MessageType};
 
 pub mod default;
 
-pub trait RequestHandler<SType> {
-    fn handle(&self, stream: SType) -> Arc<dyn Message + Send + Sync>;
+pub trait RequestHandler<SType, RType> {
+    fn handle(&self, stream: SType) -> RType;
 }
