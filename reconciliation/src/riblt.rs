@@ -34,6 +34,20 @@ impl RIBLT {
     }
 }
 
+pub struct RibltTask {}
+
+impl RibltTask {
+    pub fn new() -> Self {
+        Self {}
+    }
+}
+
+impl RouteTask for RibltTask {
+    fn run(&self, message: Vec<u8>) {
+        println!("Running RIBLT task");
+    }
+}
+
 #[async_trait]
 impl<S, T, M, R, N, MN, CI, CV, PTU, PT, RHandler, RStorage>
     Protocol<S, T, M, R, N, MN, CI, CV, PTU, PT, RHandler, RStorage> for RIBLT
@@ -63,9 +77,7 @@ where
         self.state
             .add_socket_task_and_create(
                 NodeSocketRouteId::new(self.port.clone(), protocol_id),
-                Box::new(DefaultNodeSocketTask::new(Arc::new(
-                    DefaultNodeSocketTaskMetadata::new(String::new()),
-                ))),
+                Box::new(RibltTask::new()),
                 Box::new(move |port: NodeAddress| {
                     Arc::new(Mutex::new(DefaultNodeSocket::new(port)))
                 }),

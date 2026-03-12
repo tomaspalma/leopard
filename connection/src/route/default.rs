@@ -91,7 +91,7 @@ impl DefaultRouteHandler {
 impl RouteHandler for DefaultRouteHandler {
     type RouteId = NodeSocketRouteId;
 
-    async fn handle(&self, protocol: u64, port: NodeAddress) {
+    async fn handle(&self, request: Vec<u8>, protocol: u64, port: NodeAddress) {
         let route = self
             .storage
             .get(NodeSocketRouteId::new(port.clone(), protocol));
@@ -105,11 +105,11 @@ impl RouteHandler for DefaultRouteHandler {
 
             rt_handle
                 .spawn(Box::new(move || {
+                    let request_clone = request.clone();
                     Box::pin({
                         let value = route.clone();
-                        // let message_clone = message.clone();
                         async move {
-                            // value.task().run(message_clone);
+                            value.task().run(request_clone);
                             Ok(())
                         }
                     })

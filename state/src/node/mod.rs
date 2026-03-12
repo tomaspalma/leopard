@@ -2,7 +2,7 @@ use crate::storage::state::{DataState, DefaultDataState};
 
 use async_trait::async_trait;
 use config::node::NodeConfig;
-use connection::node::default::NodeSocketRoute;
+use connection::{node::default::NodeSocketRoute, route::RouteTask};
 use errors::node::NodeInitError;
 use message::Message;
 use runtime::{RUNTIME, time::TokioPeriodTimeUnit};
@@ -86,7 +86,7 @@ pub trait NodeState {
     fn add_socket_task_and_create(
         &self,
         id: Self::RouteId,
-        task: Box<Self::RouteTask>,
+        task: Box<dyn RouteTask + Send + Sync>,
         socket_constructor: Box<
             dyn Fn(
                 NodeAddress,
@@ -111,7 +111,11 @@ pub trait NodeState {
 
     fn route_handler(&self) -> Arc<Self::RouteHandler>;
 
-    fn add_socket_task(&self, id: Self::RouteId, task: Box<Self::RouteTask>) -> Result<(), String>;
+    fn add_socket_task(
+        &self,
+        id: Self::RouteId,
+        task: Box<dyn RouteTask + Send + Sync>,
+    ) -> Result<(), String>;
 
     fn node_identifier(
         &self,
@@ -237,7 +241,7 @@ impl NodeState for DefaultNodeState {
     fn add_socket_task_and_create(
         &self,
         id: NodeSocketRouteId,
-        task: Box<Self::RouteTask>,
+        task: Box<dyn RouteTask + Send + Sync>,
         socket_constructor: Box<
             dyn Fn(
                 NodeAddress,
@@ -291,7 +295,7 @@ impl NodeState for DefaultNodeState {
     fn add_socket_task(
         &self,
         id: NodeSocketRouteId,
-        task: Box<Self::RouteTask>,
+        task: Box<dyn RouteTask + Send + Sync>,
     ) -> Result<(), String> {
         self.route_handler()
             .add_route(id, Arc::new(NodeSocketRoute::new(task)));
@@ -377,10 +381,15 @@ impl NodeState for DefaultNodeState {
                                     match stream.read_to_end(&mut buffer).await {
                                         Ok(_) => {
                                             println!("Buffers length: {}", buffer.len());
-                                            let protocol_id = request_handler.handle(buffer);
+                                            let protocol_id =
+                                                request_handler.handle(buffer.clone());
 
                                             route_handler
-                                                .handle(protocol_id, address.clone())
+                                                .handle(
+                                                    buffer.clone(),
+                                                    protocol_id,
+                                                    address.clone(),
+                                                )
                                                 .await;
                                         }
                                         Err(e) => {

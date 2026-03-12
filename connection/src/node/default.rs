@@ -63,8 +63,8 @@ impl DefaultNodeSocketTaskMetadata {
 }
 
 impl RouteTask for DefaultNodeSocketTask {
-    fn run(&self, message: Arc<dyn Message + Send + Sync>) {
-        println!("Running task");
+    fn run(&self, message: Vec<u8>) {
+        println!("Running task!");
     }
 }
 
