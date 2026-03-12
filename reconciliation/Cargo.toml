@@ -6,6 +6,7 @@ edition = "2021"
 [dependencies]
 protocol = { path = "../protocol" }
 state = { path = "../state" }
+message = { path = "../message" }
 connection = { path = "../connection" }
 membership = { path = "../membership" }
 runtime = { path = "../runtime" }

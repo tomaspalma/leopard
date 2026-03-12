@@ -385,11 +385,7 @@ impl NodeState for DefaultNodeState {
                                                 request_handler.handle(buffer.clone());
 
                                             route_handler
-                                                .handle(
-                                                    buffer.clone(),
-                                                    protocol_id,
-                                                    address.clone(),
-                                                )
+                                                .handle(buffer, protocol_id, address.clone())
                                                 .await;
                                         }
                                         Err(e) => {

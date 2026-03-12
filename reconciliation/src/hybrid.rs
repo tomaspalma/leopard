@@ -1,7 +1,8 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use protocol::{Protocol, ProtocolIDGenerator};
+use message::Message;
+use protocol::{deserializer::ProtocolDeserializer, Protocol, ProtocolIDGenerator};
 use state::node::{DefaultNodeState, NodeState};
 
 use connection::{
@@ -12,6 +13,7 @@ use connection::{
         port::{ConnectionInfo, NodeAddress},
         NodeSocketTaskMetadata, PeriodicNodeSocketTask,
     },
+    request::handler::default::{TestMessage, TestMessageType},
     route::{
         default::{DefaultRouteHandler, HashMapRouteStorage},
         RouteHandler, RouteStorage, RouteTask,
@@ -24,8 +26,18 @@ use crate::algorithms::DefaultSimilarityLevel;
 use crate::algorithms::{DefaultSimilartyLevelDetector, SimilarityLevelDetector};
 use crate::ReconciliationProtocol;
 
+#[derive(Default)]
+pub struct HybridReconciliationProtocolDeserializer {}
+
+impl ProtocolDeserializer for HybridReconciliationProtocolDeserializer {
+    fn deserialize(&self, bytes: Vec<u8>) -> Arc<dyn Message> {
+        Arc::new(TestMessage::new(Arc::new(TestMessageType::new()), None))
+    }
+}
+
 pub struct HybridReconciliationProtocol {
     id: u64,
+    deserializer: Arc<HybridReconciliationProtocolDeserializer>,
     state: Arc<DefaultNodeState>,
     port: NodeAddress,
     similarity_level_detector:
@@ -38,6 +50,7 @@ impl HybridReconciliationProtocol {
             id: ProtocolIDGenerator::generate(),
             state,
             port,
+            deserializer: Arc::new(HybridReconciliationProtocolDeserializer::default()),
             similarity_level_detector: Arc::new(DefaultSimilartyLevelDetector::new()),
         }
     }
@@ -61,6 +74,14 @@ where
     RHandler: RouteHandler + Send + Sync,
     RStorage: RouteStorage,
 {
+    fn deserializer(&self) -> Arc<dyn ProtocolDeserializer> {
+        self.deserializer.clone()
+    }
+
+    fn deserialize_message(&self, bytes: Vec<u8>) -> Arc<dyn Message> {
+        self.deserializer.deserialize(bytes)
+    }
+
     async fn init(&mut self) {
         self.state
             .add_periodic_socket_task(

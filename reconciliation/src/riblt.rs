@@ -1,8 +1,9 @@
+use message::Message;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
 use async_trait::async_trait;
-use protocol::{Protocol, ProtocolIDGenerator};
+use protocol::{deserializer::ProtocolDeserializer, Protocol, ProtocolIDGenerator};
 use state::node::{DefaultNodeState, NodeState};
 
 use connection::{
@@ -26,11 +27,17 @@ pub struct RIBLT {
     id: u64,
     state: Arc<DefaultNodeState>,
     port: NodeAddress,
+    deserializer: Arc<RIBLTDeserializer>,
 }
 
 impl RIBLT {
     pub fn new(state: Arc<DefaultNodeState>, port: NodeAddress) -> Self {
-        Self { id: 1, state, port }
+        Self {
+            id: 1,
+            state,
+            port,
+            deserializer: Arc::new(RIBLTDeserializer::default()),
+        }
     }
 }
 
@@ -45,6 +52,15 @@ impl RibltTask {
 impl RouteTask for RibltTask {
     fn run(&self, message: Vec<u8>) {
         println!("Running RIBLT task");
+    }
+}
+
+#[derive(Default)]
+pub struct RIBLTDeserializer {}
+
+impl ProtocolDeserializer for RIBLTDeserializer {
+    fn deserialize(&self, bytes: Vec<u8>) -> Arc<dyn Message> {
+        Arc::new(TestMessage::new(Arc::new(TestMessageType::new()), None))
     }
 }
 
@@ -65,6 +81,14 @@ where
     RHandler: RouteHandler + Send + Sync,
     RStorage: RouteStorage,
 {
+    fn deserializer(&self) -> Arc<dyn ProtocolDeserializer> {
+        Arc::new(RIBLTDeserializer::default())
+    }
+
+    fn deserialize_message(&self, bytes: Vec<u8>) -> Arc<dyn Message> {
+        self.deserializer.deserialize(bytes)
+    }
+
     fn id(&self) -> u64 {
         self.id
     }

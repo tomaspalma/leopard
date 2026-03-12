@@ -96,7 +96,6 @@ impl RouteHandler for DefaultRouteHandler {
             .storage
             .get(NodeSocketRouteId::new(port.clone(), protocol));
 
-        println!("Never found route");
         if let Some(route) = route {
             let rt_handle = {
                 let guard = RUNTIME.read().unwrap();

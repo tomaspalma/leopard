@@ -15,12 +15,13 @@ use connection::{
         },
         port::NodeAddress,
     },
+    request::handler::default::{TestMessage, TestMessageType},
     route::{
         RouteTask,
         default::{DefaultRouteHandler, HashMapRouteStorage, NodeSocketRouteId},
     },
 };
-use protocol::{Protocol, ProtocolIDGenerator};
+use protocol::{Protocol, ProtocolIDGenerator, deserializer::ProtocolDeserializer};
 use runtime::time::TokioPeriodTimeUnit;
 use state::node::{DefaultNodeState, NodeState};
 
@@ -61,6 +62,20 @@ impl RouteTask for HintedHandoffReplicationProtocolTask {
     }
 }
 
+pub struct HintedHandoffDeserializer {}
+
+impl HintedHandoffDeserializer {
+    pub fn new() -> Self {
+        Self {}
+    }
+}
+
+impl ProtocolDeserializer for HintedHandoffDeserializer {
+    fn deserialize(&self, data: Vec<u8>) -> Arc<dyn Message> {
+        Arc::new(TestMessage::new(Arc::new(TestMessageType::new()), None))
+    }
+}
+
 #[async_trait]
 impl
     Protocol<
@@ -78,6 +93,17 @@ impl
         HashMapRouteStorage,
     > for HintedHandoffReplicationProtocol<DefaultNodeState, DefaultNodeSocketTask>
 {
+    // type ProtocolDeserializer = Arc<HintedHandoffDeserializer>;
+    // type ProtocolDeserializerMessage = TestMessage;
+
+    fn deserializer(&self) -> Arc<dyn ProtocolDeserializer> {
+        Arc::new(HintedHandoffDeserializer::new())
+    }
+
+    fn deserialize_message(&self, bytes: Vec<u8>) -> Arc<dyn Message> {
+        self.deserializer().deserialize(bytes)
+    }
+
     fn id(&self) -> u64 {
         self.id
     }
