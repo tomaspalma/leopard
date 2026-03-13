@@ -1,4 +1,4 @@
-use message::Message;
+use message::{Message, MessageType, MessageTypeValues};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
@@ -61,6 +61,56 @@ pub struct RIBLTDeserializer {}
 impl ProtocolDeserializer for RIBLTDeserializer {
     fn deserialize(&self, bytes: Vec<u8>) -> Arc<dyn Message> {
         Arc::new(TestMessage::new(Arc::new(TestMessageType::new()), None))
+    }
+}
+
+pub enum RIBLTMessageTypeValues {
+    SYMBOL,
+}
+
+impl MessageTypeValues for RIBLTMessageTypeValues {}
+
+pub struct RIBLTMessageType {
+    value: RIBLTMessageTypeValues,
+}
+
+impl RIBLTMessageType {
+    pub fn new() -> Self {
+        Self {
+            value: RIBLTMessageTypeValues::SYMBOL,
+        }
+    }
+}
+
+impl MessageType for RIBLTMessageType {
+    fn value(&self) -> Box<dyn MessageTypeValues> {
+        Box::new(RIBLTMessageTypeValues::SYMBOL)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct RIBLTSymbol {
+    key: String,
+    value: Vec<u8>,
+}
+
+impl riblt::Symbol for RIBLTSymbol {
+    const BYTE_ARRAY_LENGTH: usize = 128;
+
+    fn encode_to_bytes(&self) -> Vec<u8> {
+        let mut bytes = self.key.as_bytes().to_vec();
+        bytes.extend_from_slice(&self.value);
+        if bytes.len() < Self::BYTE_ARRAY_LENGTH {
+            bytes.resize(Self::BYTE_ARRAY_LENGTH, 0);
+        }
+        bytes
+    }
+
+    fn decode_from_bytes(bytes: &Vec<u8>) -> Self {
+        let key_end = bytes.iter().position(|&b| b == 0).unwrap_or(bytes.len());
+        let key = String::from_utf8_lossy(&bytes[..key_end]).to_string();
+        let value = bytes[key_end..].to_vec();
+        Self { key, value }
     }
 }
 

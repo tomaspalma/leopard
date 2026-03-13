@@ -43,10 +43,10 @@ async fn main() {
                 ))),
             );
 
-            node.add_protocol(Box::new(HintedHandoffReplicationProtocol::new(
-                node_state.clone(),
-                NodeAddress::new("127.0.0.1".to_string(), 9000),
-            )));
+            // node.add_protocol(Box::new(HintedHandoffReplicationProtocol::new(
+            //     node_state.clone(),
+            //     NodeAddress::new("127.0.0.1".to_string(), 9000),
+            // )));
             node.add_protocol(Box::new(DefaultMembershipProtocol::new()));
             node.add_protocol(Box::new(RIBLT::new(
                 node_state.clone(),
@@ -85,10 +85,10 @@ async fn main() {
                 ))),
             );
 
-            node.add_protocol(Box::new(HintedHandoffReplicationProtocol::new(
-                node_state.clone(),
-                NodeAddress::new("127.0.0.1".to_string(), 9001),
-            )));
+            // node.add_protocol(Box::new(HintedHandoffReplicationProtocol::new(
+            //     node_state.clone(),
+            //     NodeAddress::new("127.0.0.1".to_string(), 9001),
+            // )));
             node.add_protocol(Box::new(DefaultMembershipProtocol::new()));
             node.add_protocol(Box::new(RIBLT::new(
                 node_state.clone(),
@@ -127,10 +127,10 @@ async fn main() {
                 ))),
             );
 
-            node.add_protocol(Box::new(HintedHandoffReplicationProtocol::new(
-                node_state.clone(),
-                NodeAddress::new("127.0.0.1".to_string(), 9002),
-            )));
+            // node.add_protocol(Box::new(HintedHandoffReplicationProtocol::new(
+            //     node_state.clone(),
+            //     NodeAddress::new("127.0.0.1".to_string(), 9002),
+            // )));
             node.add_protocol(Box::new(DefaultMembershipProtocol::new()));
             node.add_protocol(Box::new(RIBLT::new(
                 node_state.clone(),
