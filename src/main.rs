@@ -4,7 +4,7 @@ use membership_protocols::DefaultMembershipProtocol;
 use reconciliation::riblt::RIBLT;
 use replication::protocol::HintedHandoffReplicationProtocol;
 use runtime::{RUNTIME, Task};
-use services::NodeHTTPService;
+use services::http::NodeHTTPService;
 use state::node::DefaultNodeState;
 
 use config::node::DefaultNodeConfig;
