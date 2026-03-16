@@ -91,11 +91,30 @@ impl DataStateStorage for KeyValueDataStateStorage {
     }
 
     async fn get(&self, key: &str) -> Option<Box<Self::Item>> {
-        self.memory_storage.get(key).map(|value| {
-            Box::new(DefaultDataStateItem::new(
+        if let Some(val) = self.memory_storage.get(key) {
+            return Some(Box::new(DefaultDataStateItem::new(
                 key.to_string(),
-                value.to_string(),
-            ))
-        })
+                val.to_string(),
+            )));
+        }
+
+        if self.persistent_storage.exists() {
+            if let Ok(disk_map) = self
+                .persistent_storage
+                .load::<DashMap<String, String>>()
+                .await
+            {
+                for entry in disk_map.iter() {
+                    self.memory_storage
+                        .insert(entry.key().clone(), entry.value().clone());
+                }
+
+                return self.memory_storage.get(key).map(|val| {
+                    Box::new(DefaultDataStateItem::new(key.to_string(), val.to_string()))
+                });
+            }
+        }
+
+        None
     }
 }
