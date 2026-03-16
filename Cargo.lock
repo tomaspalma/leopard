@@ -322,6 +322,7 @@ dependencies = [
  "lock_api",
  "once_cell",
  "parking_lot_core",
+ "serde",
 ]
 
 [[package]]
@@ -1520,6 +1521,8 @@ dependencies = [
  "membership",
  "message",
  "runtime",
+ "serde",
+ "serde_json",
  "taints",
  "tokio",
  "tracing",

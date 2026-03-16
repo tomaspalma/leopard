@@ -1,14 +1,17 @@
+use async_trait::async_trait;
+
 use crate::storage::{
     DataStateStorage, KeyValueDataStateStorage,
     item::{DataStateItem, DefaultDataStateItem},
 };
 
+#[async_trait]
 pub trait DataState {
     type Item: DataStateItem;
     type Storage: DataStateStorage;
 
-    fn store(&self, item: Box<Self::Item>);
-    fn get(&self, key: &str) -> Option<Box<Self::Item>>;
+    async fn store(&self, item: Box<Self::Item>);
+    async fn get(&self, key: &str) -> Option<Box<Self::Item>>;
     fn items(&self) -> Vec<Box<Self::Item>>;
 }
 
@@ -17,23 +20,24 @@ pub struct DefaultDataState {
 }
 
 impl DefaultDataState {
-    pub fn new() -> Self {
+    pub fn new(persistent_filename: String) -> Self {
         Self {
-            storage: KeyValueDataStateStorage::new(),
+            storage: KeyValueDataStateStorage::new(Some(persistent_filename)),
         }
     }
 }
 
+#[async_trait]
 impl DataState for DefaultDataState {
     type Item = DefaultDataStateItem;
     type Storage = KeyValueDataStateStorage;
 
-    fn store(&self, _item: Box<Self::Item>) {
-        self.storage.save(_item);
+    async fn store(&self, _item: Box<Self::Item>) {
+        self.storage.save(_item).await;
     }
 
-    fn get(&self, _key: &str) -> Option<Box<Self::Item>> {
-        self.storage.get(_key)
+    async fn get(&self, _key: &str) -> Option<Box<Self::Item>> {
+        self.storage.get(_key).await
     }
 
     fn items(&self) -> Vec<Box<Self::Item>> {

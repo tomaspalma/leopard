@@ -5,7 +5,7 @@ edition = "2024"
 
 [dependencies]
 async-trait = "0.1.83"
-dashmap = "6.1.0"
+dashmap = { version = "6.1.0", features = ["serde"] }
 connection = { path = "../connection" }
 membership = { path = "../membership" }
 message = { path = "../message" }
@@ -15,3 +15,5 @@ errors = { path = "../errors" }
 taints = { path = "../taints" }
 tokio = "1.50.0"
 tracing = "0.1.44"
+serde = "1.0.228"
+serde_json = "1.0.149"

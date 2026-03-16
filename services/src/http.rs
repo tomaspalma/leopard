@@ -35,7 +35,7 @@ impl NodeHTTPService {
         State(state): State<Arc<DefaultDataState>>,
         Path(key): Path<String>,
     ) -> Json<Value> {
-        match state.get(&key) {
+        match state.get(&key).await {
             Some(value) => Json(json!({ "key": key, "value": value.value() })),
             None => Json(json!({ "error": "Key not found" })),
         }
@@ -46,10 +46,12 @@ impl NodeHTTPService {
         Path(key): Path<String>,
         Json(payload): Json<PostRequestPayload>,
     ) -> Json<Value> {
-        state.store(Box::new(DefaultDataStateItem::new(
-            key.clone(),
-            payload.value.clone(),
-        )));
+        state
+            .store(Box::new(DefaultDataStateItem::new(
+                key.clone(),
+                payload.value.clone(),
+            )))
+            .await;
 
         Json(json!({"key": key, "value": payload.value}))
     }

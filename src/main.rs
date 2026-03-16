@@ -30,7 +30,7 @@ async fn main() {
                 config.clone(),
                 Arc::new(node1_id),
                 Arc::new(DefaultRouteHandler::new()),
-                Arc::new(DefaultDataState::new()),
+                Arc::new(DefaultDataState::new("node1_data.json".to_string())),
             ));
 
             let mut node = Node::new(
@@ -73,7 +73,7 @@ async fn main() {
                 config.clone(),
                 Arc::new(node1_id),
                 Arc::new(DefaultRouteHandler::new()),
-                Arc::new(DefaultDataState::new()),
+                Arc::new(DefaultDataState::new("node2_data.json".to_string())),
             ));
 
             let mut node = Node::new(
@@ -116,7 +116,7 @@ async fn main() {
                 config.clone(),
                 Arc::new(node1_id),
                 Arc::new(DefaultRouteHandler::new()),
-                Arc::new(DefaultDataState::new()),
+                Arc::new(DefaultDataState::new("node3_data.json".to_string())),
             ));
 
             let mut node = Node::new(
