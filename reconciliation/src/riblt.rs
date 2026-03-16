@@ -1,6 +1,7 @@
 use message::{Message, MessageType, MessageTypeValues};
 use std::sync::Arc;
 use tokio::sync::Mutex;
+use tracing::info;
 
 use async_trait::async_trait;
 use protocol::{deserializer::ProtocolDeserializer, Protocol, ProtocolIDGenerator};
@@ -168,7 +169,7 @@ where
                         let port_clone = port_for_closure.clone();
 
                         Box::pin(async move {
-                            println!("Running RIBLT");
+                            info!("Running RIBLT");
 
                             let connection_targets = {
                                 let membership_arc = state.membership();
@@ -197,7 +198,7 @@ where
                                     )
                                     .await
                                     .unwrap();
-                                println!("sent message");
+                                info!("sent message");
                             }
 
                             Ok(())

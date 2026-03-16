@@ -5,6 +5,12 @@ use item::{DataStateItem, DefaultDataStateItem};
 
 use dashmap::DashMap;
 
+pub struct PersistentDataStorage {
+    filename: String,
+}
+
+impl PersistentDataStorage {}
+
 pub trait DataStateStorage {
     type Item: DataStateItem;
 

@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use tracing::info;
 
 use async_trait::async_trait;
 use message::Message;
@@ -7,17 +8,12 @@ use state::node::{DefaultNodeState, NodeState};
 
 use connection::{
     node::{
-        default::{
-            DefaultNodeSocketTask, DefaultNodeSocketTaskMetadata, PeriodicDefaultNodeSocketTask,
-        },
+        default::{DefaultNodeSocketTaskMetadata, PeriodicDefaultNodeSocketTask},
         port::{ConnectionInfo, NodeAddress},
         NodeSocketTaskMetadata, PeriodicNodeSocketTask,
     },
     request::handler::default::{TestMessage, TestMessageType},
-    route::{
-        default::{DefaultRouteHandler, HashMapRouteStorage},
-        RouteHandler, RouteStorage, RouteTask,
-    },
+    route::{RouteHandler, RouteStorage, RouteTask},
 };
 use membership::{Membership, MembershipNeighbor, MembershipNeighbors};
 use runtime::time::{PeriodTimeUnit, TokioPeriodTimeUnit};
@@ -90,7 +86,7 @@ where
                     Arc::new(DefaultNodeSocketTaskMetadata::new(String::new())),
                     Arc::new(move || {
                         Box::pin(async move {
-                            println!("Processing connection");
+                            info!("Processing connection");
                             Ok(())
                         })
                     }),

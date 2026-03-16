@@ -14,3 +14,4 @@ runtime = { path = "../runtime" }
 errors = { path = "../errors" }
 taints = { path = "../taints" }
 tokio = "1.50.0"
+tracing = "0.1.44"

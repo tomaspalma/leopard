@@ -1090,6 +1090,7 @@ dependencies = [
  "runtime",
  "state",
  "tokio",
+ "tracing",
 ]
 
 [[package]]
@@ -1521,6 +1522,7 @@ dependencies = [
  "runtime",
  "taints",
  "tokio",
+ "tracing",
 ]
 
 [[package]]

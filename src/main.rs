@@ -18,12 +18,11 @@ use std::sync::Arc;
 
 #[tokio::main]
 async fn main() {
-    tracing::subscriber::with_default(tracing_subscriber::fmt().finish(), || {
-        info!("Starting logging");
-    });
+    tracing_subscriber::fmt::init();
 
     let task_node1: Box<Task> = Box::new(move || {
         Box::pin(async move {
+            info!("Starting node 1");
             let config = Arc::new(DefaultNodeConfig::new());
             let node1_id =
                 DefaultNodeIdentifier::new(NodeAddress::new("127.0.0.1".to_string(), 9000));
@@ -66,6 +65,7 @@ async fn main() {
 
     let task_node2: Box<Task> = Box::new(move || {
         Box::pin(async move {
+            info!("Starting node 2");
             let config = Arc::new(DefaultNodeConfig::new());
             let node1_id =
                 DefaultNodeIdentifier::new(NodeAddress::new("127.0.0.1".to_string(), 9001));
@@ -108,6 +108,7 @@ async fn main() {
 
     let task_node3: Box<Task> = Box::new(move || {
         Box::pin(async move {
+            info!("Starting node 3");
             let config = Arc::new(DefaultNodeConfig::new());
             let node1_id =
                 DefaultNodeIdentifier::new(NodeAddress::new("127.0.0.1".to_string(), 9002));

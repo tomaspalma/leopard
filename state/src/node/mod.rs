@@ -1,5 +1,7 @@
 use crate::storage::state::{DataState, DefaultDataState};
 
+use tracing::info;
+
 use async_trait::async_trait;
 use config::node::NodeConfig;
 use connection::{node::default::NodeSocketRoute, route::RouteTask};
@@ -374,7 +376,7 @@ impl NodeState for DefaultNodeState {
 
                             match listener.accept().await {
                                 Ok((mut stream, addr)) => {
-                                    println!("Accepted connection from {}", addr);
+                                    info!("Accepted connection from {}", addr);
 
                                     let mut buffer = Vec::new();
 
