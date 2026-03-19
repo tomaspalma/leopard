@@ -2,7 +2,6 @@ use connection::node::port::NodeAddress;
 use connection::{node::id::DefaultNodeIdentifier, route::default::DefaultRouteHandler};
 use membership_protocols::DefaultMembershipProtocol;
 use reconciliation::riblt::RIBLT;
-use replication::protocol::HintedHandoffReplicationProtocol;
 use runtime::{RUNTIME, Task};
 use services::http::NodeHTTPService;
 use state::node::DefaultNodeState;
@@ -30,7 +29,7 @@ async fn main() {
                 config.clone(),
                 Arc::new(node1_id),
                 Arc::new(DefaultRouteHandler::new()),
-                Arc::new(DefaultDataState::new("node1_data.json".to_string())),
+                Arc::new(DefaultDataState::new("node1_data.json".to_string()).await),
             ));
 
             let mut node = Node::new(
@@ -73,7 +72,7 @@ async fn main() {
                 config.clone(),
                 Arc::new(node1_id),
                 Arc::new(DefaultRouteHandler::new()),
-                Arc::new(DefaultDataState::new("node2_data.json".to_string())),
+                Arc::new(DefaultDataState::new("node2_data.json".to_string()).await),
             ));
 
             let mut node = Node::new(
@@ -116,7 +115,7 @@ async fn main() {
                 config.clone(),
                 Arc::new(node1_id),
                 Arc::new(DefaultRouteHandler::new()),
-                Arc::new(DefaultDataState::new("node3_data.json".to_string())),
+                Arc::new(DefaultDataState::new("node3_data.json".to_string()).await),
             ));
 
             let mut node = Node::new(

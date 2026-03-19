@@ -20,9 +20,9 @@ pub struct DefaultDataState {
 }
 
 impl DefaultDataState {
-    pub fn new(persistent_filename: String) -> Self {
+    pub async fn new(persistent_filename: String) -> Self {
         Self {
-            storage: KeyValueDataStateStorage::new(Some(persistent_filename)),
+            storage: KeyValueDataStateStorage::new(Some(persistent_filename)).await,
         }
     }
 }

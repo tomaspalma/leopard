@@ -62,16 +62,26 @@ pub struct KeyValueDataStateStorage {
 }
 
 impl KeyValueDataStateStorage {
-    pub fn new(persistent_filename: Option<String>) -> Self {
+    pub async fn new(persistent_filename: Option<String>) -> Self {
+        let persistent_storage =
+            PersistentDataStorage::new(if let Some(filename) = persistent_filename {
+                filename.to_string()
+            } else {
+                "data.json".to_string()
+            });
+        let memory_storage = DashMap::new();
+
+        if persistent_storage.exists() {
+            if let Ok(data) = persistent_storage.load::<DashMap<String, String>>().await {
+                for (k, v) in data {
+                    memory_storage.insert(k, v);
+                }
+            }
+        }
+
         Self {
-            memory_storage: DashMap::new(),
-            persistent_storage: PersistentDataStorage::new(
-                if let Some(filename) = persistent_filename {
-                    filename.to_string()
-                } else {
-                    "data.json".to_string()
-                },
-            ),
+            memory_storage,
+            persistent_storage,
         }
     }
 }
