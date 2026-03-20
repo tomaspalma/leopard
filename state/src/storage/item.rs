@@ -1,4 +1,7 @@
-pub trait DataStateItem {}
+pub trait DataStateItem {
+    fn key(&self) -> &str;
+    fn value(&self) -> &str;
+}
 
 pub struct DefaultDataStateItem {
     key: String,
@@ -19,4 +22,12 @@ impl DefaultDataStateItem {
     }
 }
 
-impl DataStateItem for DefaultDataStateItem {}
+impl DataStateItem for DefaultDataStateItem {
+    fn key(&self) -> &str {
+        &self.key
+    }
+
+    fn value(&self) -> &str {
+        &self.value
+    }
+}

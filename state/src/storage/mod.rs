@@ -50,10 +50,8 @@ impl PersistentDataStorage {
 
 #[async_trait]
 pub trait DataStateStorage {
-    type Item: DataStateItem;
-
-    async fn save(&self, item: Box<Self::Item>);
-    async fn get(&self, key: &str) -> Option<Box<Self::Item>>;
+    async fn save(&self, item: Box<dyn DataStateItem + Send + Sync>);
+    async fn get(&self, key: &str) -> Option<Box<dyn DataStateItem + Send + Sync>>;
 }
 
 pub struct KeyValueDataStateStorage {
@@ -88,9 +86,7 @@ impl KeyValueDataStateStorage {
 
 #[async_trait]
 impl DataStateStorage for KeyValueDataStateStorage {
-    type Item = DefaultDataStateItem;
-
-    async fn save(&self, item: Box<Self::Item>) {
+    async fn save(&self, item: Box<dyn DataStateItem + Send + Sync>) {
         self.memory_storage
             .insert(item.key().to_string(), item.value().to_string());
 
@@ -100,7 +96,7 @@ impl DataStateStorage for KeyValueDataStateStorage {
             .unwrap();
     }
 
-    async fn get(&self, key: &str) -> Option<Box<Self::Item>> {
+    async fn get(&self, key: &str) -> Option<Box<dyn DataStateItem + Send + Sync>> {
         if let Some(val) = self.memory_storage.get(key) {
             return Some(Box::new(DefaultDataStateItem::new(
                 key.to_string(),
@@ -120,7 +116,8 @@ impl DataStateStorage for KeyValueDataStateStorage {
                 }
 
                 return self.memory_storage.get(key).map(|val| {
-                    Box::new(DefaultDataStateItem::new(key.to_string(), val.to_string()))
+                    let item: Box<dyn DataStateItem + Send + Sync> = Box::new(DefaultDataStateItem::new(key.to_string(), val.to_string()));
+                    item
                 });
             }
         }

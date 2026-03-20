@@ -32,7 +32,7 @@ impl NodeHTTPService {
     }
 
     async fn get_handler(
-        State(state): State<Arc<DefaultDataState>>,
+        State(state): State<Arc<dyn DataState + Send + Sync>>,
         Path(key): Path<String>,
     ) -> Json<Value> {
         match state.get(&key).await {
@@ -42,7 +42,7 @@ impl NodeHTTPService {
     }
 
     async fn post_handler(
-        State(state): State<Arc<DefaultDataState>>,
+        State(state): State<Arc<dyn DataState + Send + Sync>>,
         Path(key): Path<String>,
         Json(payload): Json<PostRequestPayload>,
     ) -> Json<Value> {
@@ -57,7 +57,7 @@ impl NodeHTTPService {
     }
 
     async fn delete_handler(
-        State(state): State<Arc<DefaultDataState>>,
+        State(state): State<Arc<dyn DataState + Send + Sync>>,
         Path(key): Path<String>,
     ) -> Json<Value> {
         println!("Deleting key: {}", key);
@@ -68,7 +68,11 @@ impl NodeHTTPService {
 #[async_trait]
 impl NodeService for NodeHTTPService {
     async fn init(&self) {
-        let data = self.state.data().clone();
+        let data = self
+            .state
+            .get_storage("default".to_string())
+            .unwrap()
+            .clone();
 
         let app: Router = Router::new()
             .route("/{key}", get(Self::get_handler))

@@ -3,8 +3,9 @@ use connection::{node::id::DefaultNodeIdentifier, route::default::DefaultRouteHa
 use membership_protocols::DefaultMembershipProtocol;
 use reconciliation::riblt::RIBLT;
 use runtime::{RUNTIME, Task};
+
 use services::http::NodeHTTPService;
-use state::node::DefaultNodeState;
+use state::node::{DefaultNodeState, NodeState};
 
 use config::node::DefaultNodeConfig;
 use node::Node;
@@ -25,12 +26,17 @@ async fn main() {
             let config = Arc::new(DefaultNodeConfig::new());
             let node1_id =
                 DefaultNodeIdentifier::new(NodeAddress::new("127.0.0.1".to_string(), 9000));
+
             let node_state = Arc::new(DefaultNodeState::new(
                 config.clone(),
                 Arc::new(node1_id),
                 Arc::new(DefaultRouteHandler::new()),
-                Arc::new(DefaultDataState::new("node1_data.json".to_string()).await),
             ));
+
+            node_state.register_storage(
+                "default".to_string(),
+                Arc::new(DefaultDataState::new("node1_data.json".to_string()).await),
+            );
 
             let mut node = Node::new(
                 node_state.clone(),
@@ -72,8 +78,11 @@ async fn main() {
                 config.clone(),
                 Arc::new(node1_id),
                 Arc::new(DefaultRouteHandler::new()),
-                Arc::new(DefaultDataState::new("node2_data.json".to_string()).await),
             ));
+            node_state.register_storage(
+                "default".to_string(),
+                Arc::new(DefaultDataState::new("node2_data.json".to_string()).await),
+            );
 
             let mut node = Node::new(
                 node_state.clone(),
@@ -115,8 +124,11 @@ async fn main() {
                 config.clone(),
                 Arc::new(node1_id),
                 Arc::new(DefaultRouteHandler::new()),
-                Arc::new(DefaultDataState::new("node3_data.json".to_string()).await),
             ));
+            node_state.register_storage(
+                "default".to_string(),
+                Arc::new(DefaultDataState::new("node3_data.json".to_string()).await),
+            );
 
             let mut node = Node::new(
                 node_state.clone(),

@@ -1,5 +1,7 @@
 use crate::storage::state::{DataState, DefaultDataState};
 
+use dashmap::DashMap;
+
 use tracing::info;
 
 use async_trait::async_trait;
@@ -51,6 +53,10 @@ pub trait NodeState {
     type RouteId;
     type ConnectionInfo;
     type StreamType;
+
+    fn register_storage(&self, key: String, storage: Arc<dyn DataState + Send + Sync>);
+
+    fn get_storage(&self, key: String) -> Option<Arc<dyn DataState + Send + Sync>>;
 
     fn add_socket(
         &self,
@@ -127,8 +133,6 @@ pub trait NodeState {
 
     fn init_neighbors(&self);
 
-    fn data(&self) -> Arc<impl DataState + Send + Sync>;
-
     async fn init(&self) -> Result<(), NodeInitError>;
 }
 
@@ -157,7 +161,7 @@ pub struct DefaultNodeState {
         >,
     >,
     membership: Arc<RwLock<DefaultMembership>>,
-    data: Arc<DefaultDataState>,
+    data: DashMap<String, Arc<dyn DataState + Send + Sync>>,
     config: Arc<
         dyn NodeConfig<
                 DefaultMembershipNeighborRepresentation<DefaultMembershipNeighbor>,
@@ -186,6 +190,14 @@ impl NodeState for DefaultNodeState {
     type RouteId = NodeSocketRouteId;
     type ConnectionInfo = NodeAddress;
     type StreamType = Vec<u8>;
+
+    fn register_storage(&self, key: String, storage: Arc<dyn DataState + Send + Sync>) {
+        self.data.insert(key, storage);
+    }
+
+    fn get_storage(&self, key: String) -> Option<Arc<dyn DataState + Send + Sync>> {
+        Some(self.data.get(&key).unwrap().clone())
+    }
 
     fn add_socket(
         &self,
@@ -407,10 +419,6 @@ impl NodeState for DefaultNodeState {
 
         Ok(())
     }
-
-    fn data(&self) -> Arc<DefaultDataState> {
-        self.data.clone()
-    }
 }
 
 impl DefaultNodeState {
@@ -424,13 +432,12 @@ impl DefaultNodeState {
         >,
         identifier: Arc<dyn NodeIdentifier<NodeAddress, NodeAddress> + Send + Sync>,
         route_handler: Arc<DefaultRouteHandler>,
-        data: Arc<DefaultDataState>,
     ) -> Self {
         Self {
             sockets: Arc::new(tokio::sync::Mutex::new(HashMap::new())),
             membership: Arc::new(RwLock::new(DefaultMembership::new())),
             config,
-            data,
+            data: DashMap::new(),
             identifier,
             route_handler,
         }
