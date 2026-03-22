@@ -8,10 +8,7 @@ use connection::node::port::NodeAddress;
 use serde::Deserialize;
 use serde_json::{Value, json};
 use state::node::{DefaultNodeState, NodeState};
-use state::storage::{
-    item::DefaultDataStateItem,
-    state::{DataState, DefaultDataState},
-};
+use state::storage::{item::DefaultDataStateItem, state::DataState};
 use std::sync::Arc;
 
 use crate::NodeService;

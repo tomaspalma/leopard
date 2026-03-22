@@ -40,6 +40,46 @@ impl RIBLT {
             deserializer: Arc::new(RIBLTDeserializer::default()),
         }
     }
+
+    async fn reconciliation_mechanism(
+        state: Arc<DefaultNodeState>,
+        port: NodeAddress,
+        protocol_id: u64,
+    ) -> Result<(), String> {
+        info!("Ran reconciliation mechanism");
+
+        let connection_targets = {
+            let membership_arc = state.membership();
+            let membership_guard = membership_arc.read().unwrap();
+
+            let neighbors_arc = membership_guard.representation().neighbors();
+            let neighbors_guard = neighbors_arc.read().unwrap();
+
+            neighbors_guard
+                .iter()
+                .map(|n| n.read().unwrap())
+                .filter(|n| !n.tainted())
+                .map(|n| n.identifier().connection_info())
+                .collect::<Vec<_>>()
+        };
+
+        for info in connection_targets {
+            state
+                .send_through_socket(
+                    port.clone(),
+                    Box::new(info),
+                    Box::new(TestMessage::new(
+                        Arc::new(TestMessageType::new()),
+                        Some(protocol_id),
+                    )),
+                )
+                .await
+                .unwrap();
+            info!("sent message");
+        }
+
+        Ok(())
+    }
 }
 
 pub struct RibltTask {}
@@ -166,42 +206,10 @@ where
                     Arc::new(DefaultNodeSocketTaskMetadata::new(String::new())),
                     Arc::new(move || {
                         let state = state_handle.clone();
-                        let port_clone = port_for_closure.clone();
+                        let port = port_for_closure.clone();
 
                         Box::pin(async move {
-                            info!("Running RIBLT");
-
-                            let connection_targets = {
-                                let membership_arc = state.membership();
-                                let membership_guard = membership_arc.read().unwrap();
-
-                                let neighbors_arc = membership_guard.representation().neighbors();
-                                let neighbors_guard = neighbors_arc.read().unwrap();
-
-                                neighbors_guard
-                                    .iter()
-                                    .map(|n| n.read().unwrap())
-                                    .filter(|n| !n.tainted())
-                                    .map(|n| n.identifier().connection_info())
-                                    .collect::<Vec<_>>()
-                            };
-
-                            for info in connection_targets {
-                                state
-                                    .send_through_socket(
-                                        port_clone.clone(),
-                                        Box::new(info),
-                                        Box::new(TestMessage::new(
-                                            Arc::new(TestMessageType::new()),
-                                            Some(protocol_id),
-                                        )),
-                                    )
-                                    .await
-                                    .unwrap();
-                                info!("sent message");
-                            }
-
-                            Ok(())
+                            Self::reconciliation_mechanism(state, port, protocol_id).await
                         })
                     }),
                     Arc::new(TokioPeriodTimeUnit::new(std::time::Duration::from_secs(5))),
