@@ -91,35 +91,17 @@ where
             protocol.init().await;
         }
 
-        let rt_handle = {
-            let guard = RUNTIME.read().unwrap();
-            Arc::clone(&*guard)
-        };
-
         let state_clone = self.state.clone();
 
-        rt_handle
-            .spawn(Box::new(move || {
-                let state = state_clone.clone();
-                Box::pin(async move {
-                    state.init().await.unwrap();
-                    Ok(())
-                })
-            }))
-            .await;
+        runtime::spawn(async move {
+            state_clone.init().await.unwrap();
+        });
 
         for service in self.services.iter_mut() {
             let s = service.clone();
-            rt_handle
-                .spawn(Box::new(move || {
-                    let b = s.clone();
-                    Box::pin(async move {
-                        b.clone().init().await;
-
-                        Ok(())
-                    })
-                }))
-                .await;
+            runtime::spawn(async move {
+                s.clone().init().await;
+            });
         }
 
         Ok(())

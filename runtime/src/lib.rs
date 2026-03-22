@@ -1,8 +1,8 @@
-use tracing::error;
 use async_trait::async_trait;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::{Arc, LazyLock, LockResult, PoisonError, RwLock};
+use tracing::error;
 
 use tokio;
 
@@ -16,7 +16,7 @@ pub type Task = dyn Fn() -> Pin<Box<dyn Future<Output = Result<(), String>> + Se
 
 #[async_trait]
 pub trait Runtime {
-    async fn spawn(&self, task: Box<Task>);
+    fn spawn(&self, task: Pin<Box<dyn Future<Output = ()> + Send>>);
     fn add_task(&self, task: Box<Task>) -> LockResult<()>;
     fn tasks(&self) -> &RwLock<Vec<Box<Task>>>;
     fn init(&self) -> Result<(), String>;
@@ -34,12 +34,17 @@ impl TokioRuntime {
     }
 }
 
-#[async_trait]
+pub fn spawn<F>(future: F)
+where
+    F: Future<Output = ()> + Send + 'static,
+{
+    let guard = RUNTIME.read().unwrap();
+    guard.spawn(Box::pin(future));
+}
+
 impl Runtime for TokioRuntime {
-    async fn spawn(&self, task: Box<Task>) {
-        tokio::spawn(async move {
-            task().await.unwrap();
-        });
+    fn spawn(&self, task: Pin<Box<dyn Future<Output = ()> + Send>>) {
+        tokio::spawn(task);
     }
 
     fn add_task(&self, task: Box<Task>) -> LockResult<()> {

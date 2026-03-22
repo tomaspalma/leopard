@@ -1,14 +1,14 @@
-use tracing::{info, error};
 use crate::node::{NodeSocket, NodeSocketTaskMetadata, PeriodicNodeSocketTask, port::NodeAddress};
 use crate::request::handler::{RequestHandler, default::DefaultRequestHandler};
 use crate::route::{
     Route, RouteHandler, RouteTask,
     default::{DefaultRouteHandler, HashMapRouteStorage, NodeSocketRouteId},
 };
+use tracing::{error, info};
 
 use async_trait::async_trait;
 use message::Message;
-use runtime::RUNTIME;
+use runtime;
 use runtime::{
     Runtime, Task,
     time::{PeriodTimeUnit, TokioPeriodTimeUnit},
@@ -140,22 +140,9 @@ impl NodeSocket for DefaultNodeSocket {
     }
 
     async fn add_periodic_task(&mut self, task: Arc<PeriodicDefaultNodeSocketTask>) {
-        let rt_handle = {
-            let rt_guard = RUNTIME.read().unwrap();
-            Arc::clone(&*rt_guard)
-        };
-
-        rt_handle
-            .spawn(Box::new(move || {
-                Box::pin({
-                    let value = task.clone();
-                    async move {
-                        value.run().await;
-                        Ok(())
-                    }
-                })
-            }))
-            .await;
+        runtime::spawn(async move {
+            task.run().await;
+        });
     }
 
     async fn bind(&mut self) -> Result<(), std::io::Error> {

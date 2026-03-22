@@ -4,7 +4,7 @@ use crate::route::{Route, RouteHandler, RouteId, RouteStorage};
 
 use async_trait::async_trait;
 use dashmap::DashMap;
-use runtime::RUNTIME;
+use runtime;
 use std::sync::Arc;
 
 #[derive(Clone, Hash, Eq, PartialEq)]
@@ -98,23 +98,10 @@ impl RouteHandler for DefaultRouteHandler {
             .get(NodeSocketRouteId::new(port.clone(), protocol));
 
         if let Some(route) = route {
-            let rt_handle = {
-                let guard = RUNTIME.read().unwrap();
-                std::sync::Arc::clone(&*guard)
-            };
-
-            rt_handle
-                .spawn(Box::new(move || {
-                    let request_clone = request.clone();
-                    Box::pin({
-                        let value = route.clone();
-                        async move {
-                            value.task().run(request_clone);
-                            Ok(())
-                        }
-                    })
-                }))
-                .await;
+            let request_clone = request.clone();
+            runtime::spawn(async move {
+                route.task().run(request_clone);
+            });
         } else {
             info!("No route found for port: {}", port.port());
         }

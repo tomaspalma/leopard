@@ -99,23 +99,9 @@ impl RIBLT {
             let info_clone = info.clone();
             let protocol_id_clone = protocol_id;
 
-            let rt_handle = {
-                let guard = RUNTIME.read().unwrap();
-                Arc::clone(&*guard)
-            };
-
-            rt_handle
-                .spawn(Box::new(move || {
-                    let state = state_clone.clone();
-                    let port = port_clone.clone();
-                    let info = info_clone.clone();
-                    let protocol_id = protocol_id_clone;
-                    Box::pin(async move {
-                        RIBLT::sending_symbols_sequence(state, port, info, protocol_id).await;
-                        Ok(())
-                    })
-                }))
-                .await;
+            runtime::spawn(async move {
+                RIBLT::sending_symbols_sequence(state_clone, port_clone, info_clone, protocol_id_clone).await;
+            });
         }
 
         Ok(())

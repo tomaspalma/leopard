@@ -9,7 +9,7 @@ use config::node::NodeConfig;
 use connection::{node::default::NodeSocketRoute, route::RouteTask};
 use errors::node::NodeInitError;
 use message::Message;
-use runtime::{RUNTIME, time::TokioPeriodTimeUnit};
+use runtime::time::TokioPeriodTimeUnit;
 
 use tokio::io::AsyncReadExt;
 
@@ -358,63 +358,55 @@ impl NodeState for DefaultNodeState {
 
             let socket = socket_arc.ok_or(NodeInitError::SocketDoesNotExist())?;
 
-            let rt_handle = {
-                let guard = RUNTIME.read().unwrap();
-                Arc::clone(&*guard)
-            };
-
             let value = socket.clone();
             let route_handler_clone = self.route_handler.clone();
-            rt_handle
-                .spawn(Box::new(move || {
-                    let socket_clone = value.clone();
-                    let route_handler = route_handler_clone.clone();
-                    Box::pin(async move {
-                        {
-                            socket_clone.lock().await.bind().await.unwrap();
-                        };
+            runtime::spawn(async move {
+                let socket_clone = value.clone();
+                let route_handler = route_handler_clone.clone();
 
-                        let (listener, address, request_handler) = {
-                            let mut guard = socket_clone.lock().await;
-                            (
-                                guard.listener().clone(),
-                                guard.connection_info(),
-                                guard.request_handler().clone(),
-                            )
-                        };
+                {
+                    socket_clone.lock().await.bind().await.unwrap();
+                };
 
-                        loop {
-                            info!("Waiting for connection on port {}...", address.port());
+                let (listener, address, request_handler) = {
+                    let mut guard = socket_clone.lock().await;
+                    (
+                        guard.listener().clone(),
+                        guard.connection_info(),
+                        guard.request_handler().clone(),
+                    )
+                };
 
-                            match listener.accept().await {
-                                Ok((mut stream, addr)) => {
-                                    info!("Accepted connection from {}", addr);
+                loop {
+                    info!("Waiting for connection on port {}...", address.port());
 
-                                    let mut buffer = Vec::new();
+                    match listener.accept().await {
+                        Ok((mut stream, addr)) => {
+                            info!("Accepted connection from {}", addr);
 
-                                    match stream.read_to_end(&mut buffer).await {
-                                        Ok(_) => {
-                                            info!("Buffers length: {}", buffer.len());
-                                            let protocol_id =
-                                                request_handler.handle(buffer.clone());
+                            let mut buffer = Vec::new();
 
-                                            route_handler
-                                                .handle(buffer, protocol_id, address.clone())
-                                                .await;
-                                        }
-                                        Err(e) => {
-                                            error!("Failed to read from stream: {}", e);
-                                        }
-                                    }
+                            match stream.read_to_end(&mut buffer).await {
+                                Ok(_) => {
+                                    info!("Buffers length: {}", buffer.len());
+                                    let protocol_id =
+                                        request_handler.handle(buffer.clone());
+
+                                    route_handler
+                                        .handle(buffer, protocol_id, address.clone())
+                                        .await;
                                 }
                                 Err(e) => {
-                                    error!("Failed to accept connection: {}", e);
+                                    error!("Failed to read from stream: {}", e);
                                 }
                             }
                         }
-                    })
-                }))
-                .await;
+                        Err(e) => {
+                            error!("Failed to accept connection: {}", e);
+                        }
+                    }
+                }
+            });
         }
 
         Ok(())
