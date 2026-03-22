@@ -20,9 +20,14 @@ use connection::{
     route::{default::NodeSocketRouteId, RouteHandler, RouteStorage, RouteTask},
 };
 use membership::{Membership, MembershipNeighbor, MembershipNeighbors};
-use runtime::time::{PeriodTimeUnit, TokioPeriodTimeUnit};
+use runtime::{
+    time::{PeriodTimeUnit, TokioPeriodTimeUnit},
+    RUNTIME,
+};
 
 use crate::ReconciliationProtocol;
+
+const RIBLT_PROTOCOL_ID: u64 = 1;
 
 pub struct RIBLT {
     id: u64,
@@ -34,11 +39,36 @@ pub struct RIBLT {
 impl RIBLT {
     pub fn new(state: Arc<DefaultNodeState>, port: NodeAddress) -> Self {
         Self {
-            id: 1,
+            id: RIBLT_PROTOCOL_ID,
             state,
             port,
             deserializer: Arc::new(RIBLTDeserializer::default()),
         }
+    }
+
+    async fn sending_symbols_sequence(
+        state: Arc<DefaultNodeState>,
+        own_address: NodeAddress,
+        neighbor_address: NodeAddress,
+        protocol_id: u64,
+    ) {
+        info!(
+            "Running sending symbols sequence from {:?} to {:?}",
+            own_address, neighbor_address
+        );
+
+        state
+            .send_through_socket(
+                own_address.clone(),
+                Box::new(neighbor_address),
+                Box::new(TestMessage::new(
+                    Arc::new(TestMessageType::new()),
+                    Some(protocol_id),
+                )),
+            )
+            .await
+            .unwrap();
+        info!("sent message");
     }
 
     async fn reconciliation_mechanism(
@@ -64,18 +94,28 @@ impl RIBLT {
         };
 
         for info in connection_targets {
-            state
-                .send_through_socket(
-                    port.clone(),
-                    Box::new(info),
-                    Box::new(TestMessage::new(
-                        Arc::new(TestMessageType::new()),
-                        Some(protocol_id),
-                    )),
-                )
-                .await
-                .unwrap();
-            info!("sent message");
+            let state_clone = state.clone();
+            let port_clone = port.clone();
+            let info_clone = info.clone();
+            let protocol_id_clone = protocol_id;
+
+            let rt_handle = {
+                let guard = RUNTIME.read().unwrap();
+                Arc::clone(&*guard)
+            };
+
+            rt_handle
+                .spawn(Box::new(move || {
+                    let state = state_clone.clone();
+                    let port = port_clone.clone();
+                    let info = info_clone.clone();
+                    let protocol_id = protocol_id_clone;
+                    Box::pin(async move {
+                        RIBLT::sending_symbols_sequence(state, port, info, protocol_id).await;
+                        Ok(())
+                    })
+                }))
+                .await;
         }
 
         Ok(())
@@ -207,6 +247,7 @@ where
                     Arc::new(move || {
                         let state = state_handle.clone();
                         let port = port_for_closure.clone();
+                        let protocol_id = protocol_id;
 
                         Box::pin(async move {
                             Self::reconciliation_mechanism(state, port, protocol_id).await

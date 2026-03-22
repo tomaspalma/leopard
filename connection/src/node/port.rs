@@ -23,7 +23,7 @@ impl ConnectionInfo<u16> for NodePort {
     }
 }
 
-#[derive(Eq, Hash, PartialEq, Clone)]
+#[derive(Eq, Hash, PartialEq, Clone, Debug)]
 pub struct NodeAddress {
     host: String,
     port: u16,
