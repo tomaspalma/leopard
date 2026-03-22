@@ -1,3 +1,4 @@
+use tracing::info;
 use crate::node::port::NodeAddress;
 use crate::route::{Route, RouteHandler, RouteId, RouteStorage};
 
@@ -115,15 +116,15 @@ impl RouteHandler for DefaultRouteHandler {
                 }))
                 .await;
         } else {
-            println!("No route found for port: {}", port.port());
+            info!("No route found for port: {}", port.port());
         }
 
-        println!("Handling route");
+        info!("Handling route");
     }
 
     fn add_route(&self, id: NodeSocketRouteId, route: Arc<dyn Route + Send + Sync>) {
         self.storage.store(id, route);
 
-        println!("Current routes stored: {}", self.storage.storage.len());
+        info!("Current routes stored: {}", self.storage.storage.len());
     }
 }

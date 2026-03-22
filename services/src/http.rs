@@ -1,3 +1,4 @@
+use tracing::info;
 use async_trait::async_trait;
 use axum::extract::{Path, State};
 use axum::{
@@ -57,7 +58,7 @@ impl NodeHTTPService {
         State(state): State<Arc<dyn DataState + Send + Sync>>,
         Path(key): Path<String>,
     ) -> Json<Value> {
-        println!("Deleting key: {}", key);
+        info!("Deleting key: {}", key);
         Json(json!({ "status": "deleted", "key": key }))
     }
 }

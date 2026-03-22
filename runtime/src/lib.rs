@@ -1,3 +1,4 @@
+use tracing::error;
 use async_trait::async_trait;
 use std::future::Future;
 use std::pin::Pin;
@@ -61,7 +62,7 @@ impl Runtime for TokioRuntime {
             let fut = (task)();
             tokio::spawn(async move {
                 fut.await.unwrap_or_else(|e| {
-                    eprintln!("Task failed: {}", e);
+                    error!("Task failed: {}", e);
                 });
             });
         }

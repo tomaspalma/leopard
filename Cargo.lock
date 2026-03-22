@@ -253,6 +253,7 @@ dependencies = [
  "runtime",
  "serde",
  "tokio",
+ "tracing",
  "typetag",
  "zeromq",
 ]
@@ -1329,6 +1330,7 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "tokio",
+ "tracing",
 ]
 
 [[package]]
@@ -1469,6 +1471,7 @@ dependencies = [
  "serde_json",
  "state",
  "tokio",
+ "tracing",
 ]
 
 [[package]]

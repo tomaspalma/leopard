@@ -5,6 +5,7 @@ use membership::{
 use message::Message;
 use std::sync::Arc;
 use tokio::sync::Mutex;
+use tracing::info;
 
 use connection::{
     node::{
@@ -58,7 +59,7 @@ impl NodeSocketTaskMetadata for HintedHandoffReplicationProtocolTaskMetadata {}
 #[async_trait]
 impl RouteTask for HintedHandoffReplicationProtocolTask {
     fn run(&self, message: Vec<u8>) {
-        println!("Running hinted handoff replication protocol task");
+        info!("Running hinted handoff replication protocol task");
     }
 }
 

@@ -92,7 +92,7 @@ impl RibltTask {
 
 impl RouteTask for RibltTask {
     fn run(&self, message: Vec<u8>) {
-        println!("Running RIBLT task");
+        info!("Running RIBLT task");
     }
 }
 

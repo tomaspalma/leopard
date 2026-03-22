@@ -1,3 +1,4 @@
+use tracing::{info, error};
 use crate::node::{NodeSocket, NodeSocketTaskMetadata, PeriodicNodeSocketTask, port::NodeAddress};
 use crate::request::handler::{RequestHandler, default::DefaultRequestHandler};
 use crate::route::{
@@ -64,7 +65,7 @@ impl DefaultNodeSocketTaskMetadata {
 
 impl RouteTask for DefaultNodeSocketTask {
     fn run(&self, message: Vec<u8>) {
-        println!("Running task!");
+        info!("Running task!");
     }
 }
 
@@ -179,12 +180,12 @@ impl NodeSocket for DefaultNodeSocket {
                         let _ = stream.flush().await;
                     }
                     Err(e) => {
-                        eprintln!("Failed to send data to {}: {}", addr, e);
+                        error!("Failed to send data to {}: {}", addr, e);
                     }
                 }
             }
             Err(e) => {
-                eprintln!("Could not connect to target {}: {}", addr, e);
+                error!("Could not connect to target {}: {}", addr, e);
             }
         }
     }

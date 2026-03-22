@@ -2,7 +2,7 @@ use crate::storage::state::{DataState, DefaultDataState};
 
 use dashmap::DashMap;
 
-use tracing::info;
+use tracing::{info, error};
 
 use async_trait::async_trait;
 use config::node::NodeConfig;
@@ -384,7 +384,7 @@ impl NodeState for DefaultNodeState {
                         };
 
                         loop {
-                            println!("Waiting for connection on port {}...", address.port());
+                            info!("Waiting for connection on port {}...", address.port());
 
                             match listener.accept().await {
                                 Ok((mut stream, addr)) => {
@@ -394,7 +394,7 @@ impl NodeState for DefaultNodeState {
 
                                     match stream.read_to_end(&mut buffer).await {
                                         Ok(_) => {
-                                            println!("Buffers length: {}", buffer.len());
+                                            info!("Buffers length: {}", buffer.len());
                                             let protocol_id =
                                                 request_handler.handle(buffer.clone());
 
@@ -403,12 +403,12 @@ impl NodeState for DefaultNodeState {
                                                 .await;
                                         }
                                         Err(e) => {
-                                            eprintln!("Failed to read from stream: {}", e);
+                                            error!("Failed to read from stream: {}", e);
                                         }
                                     }
                                 }
                                 Err(e) => {
-                                    eprintln!("Failed to accept connection: {}", e);
+                                    error!("Failed to accept connection: {}", e);
                                 }
                             }
                         }
