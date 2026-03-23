@@ -52,6 +52,7 @@ impl PersistentDataStorage {
 pub trait DataStateStorage {
     async fn save(&self, item: Box<dyn DataStateItem + Send + Sync>);
     async fn get(&self, key: &str) -> Option<Box<dyn DataStateItem + Send + Sync>>;
+    fn items(&self) -> Vec<Box<dyn DataStateItem + Send + Sync>>;
 }
 
 pub struct KeyValueDataStateStorage {
@@ -123,5 +124,17 @@ impl DataStateStorage for KeyValueDataStateStorage {
         }
 
         None
+    }
+
+    fn items(&self) -> Vec<Box<dyn DataStateItem + Send + Sync>> {
+        self.memory_storage
+            .iter()
+            .map(|entry| {
+                Box::new(DefaultDataStateItem::new(
+                    entry.key().clone(),
+                    entry.value().clone(),
+                )) as Box<dyn DataStateItem + Send + Sync>
+            })
+            .collect()
     }
 }

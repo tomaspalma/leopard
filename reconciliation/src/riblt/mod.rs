@@ -1,17 +1,18 @@
+pub mod messages;
+
 use message::{Message, MessageType, MessageTypeValues};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tracing::info;
 
 use async_trait::async_trait;
-use protocol::{deserializer::ProtocolDeserializer, Protocol, ProtocolIDGenerator};
+use protocol::{deserializer::ProtocolDeserializer, Protocol};
 use state::node::{DefaultNodeState, NodeState};
 
 use connection::{
     node::{
         default::{
-            DefaultNodeSocket, DefaultNodeSocketTask, DefaultNodeSocketTaskMetadata,
-            PeriodicDefaultNodeSocketTask,
+            DefaultNodeSocket, DefaultNodeSocketTaskMetadata, PeriodicDefaultNodeSocketTask,
         },
         port::{ConnectionInfo, NodeAddress},
         NodeSocketTaskMetadata, PeriodicNodeSocketTask,
@@ -20,14 +21,19 @@ use connection::{
     route::{default::NodeSocketRouteId, RouteHandler, RouteStorage, RouteTask},
 };
 use membership::{Membership, MembershipNeighbor, MembershipNeighbors};
-use runtime::{
-    time::{PeriodTimeUnit, TokioPeriodTimeUnit},
-    RUNTIME,
-};
+use runtime::time::{PeriodTimeUnit, TokioPeriodTimeUnit};
 
-use crate::ReconciliationProtocol;
+use crate::{
+    riblt::messages::{RIBLTCodedSymbol, RIBLTMessageType, RIBLTSendSymbolMessage, RIBLTSymbol},
+    ReconciliationProtocol,
+};
+use riblt::RatelessIBLT;
+use std::collections::HashSet;
+use tokio::time::{sleep, Duration};
 
 const RIBLT_PROTOCOL_ID: u64 = 1;
+const BATCH_SIZE: usize = 5;
+const BATCH_INTERVAL: Duration = Duration::from_millis(5000);
 
 pub struct RIBLT {
     id: u64,
@@ -57,18 +63,58 @@ impl RIBLT {
             own_address, neighbor_address
         );
 
-        state
-            .send_through_socket(
-                own_address.clone(),
-                Box::new(neighbor_address),
-                Box::new(TestMessage::new(
-                    Arc::new(TestMessageType::new()),
-                    Some(protocol_id),
-                )),
-            )
-            .await
-            .unwrap();
-        info!("sent message");
+        let storage = state.get_storage("default".to_string());
+
+        if let Some(storage) = storage {
+            let items = storage.items();
+            let mut symbols = HashSet::new();
+
+            for item in items {
+                symbols.insert(RIBLTSymbol {
+                    key: item.key().to_string(),
+                    value: item.value().as_bytes().to_vec(),
+                });
+            }
+
+            let mut iblt = RatelessIBLT::new(symbols);
+            let mut current_index = 0;
+
+            loop {
+                for _ in 0..BATCH_SIZE {
+                    let coded_symbol = iblt.get_coded_symbol(current_index);
+
+                    let symbol_message = RIBLTCodedSymbol {
+                        sum: coded_symbol.sum,
+                        hash: coded_symbol.hash,
+                        count: coded_symbol.count,
+                    };
+
+                    state
+                        .send_through_socket(
+                            own_address.clone(),
+                            Box::new(neighbor_address.clone()),
+                            Box::new(RIBLTSendSymbolMessage::new(
+                                RIBLTMessageType::new(),
+                                Some(protocol_id),
+                                symbol_message,
+                            )),
+                        )
+                        .await
+                        .unwrap();
+
+                    current_index += 1;
+                }
+
+                info!(
+                    "Sent batch of {} symbols up to index {}",
+                    BATCH_SIZE, current_index
+                );
+
+                sleep(BATCH_INTERVAL).await;
+            }
+        } else {
+            info!("No default storage found");
+        }
     }
 
     async fn reconciliation_mechanism(
@@ -100,7 +146,13 @@ impl RIBLT {
             let protocol_id_clone = protocol_id;
 
             runtime::spawn(async move {
-                RIBLT::sending_symbols_sequence(state_clone, port_clone, info_clone, protocol_id_clone).await;
+                RIBLT::sending_symbols_sequence(
+                    state_clone,
+                    port_clone,
+                    info_clone,
+                    protocol_id_clone,
+                )
+                .await;
             });
         }
 
@@ -129,36 +181,6 @@ impl ProtocolDeserializer for RIBLTDeserializer {
     fn deserialize(&self, bytes: Vec<u8>) -> Arc<dyn Message> {
         Arc::new(TestMessage::new(Arc::new(TestMessageType::new()), None))
     }
-}
-
-pub enum RIBLTMessageTypeValues {
-    SYMBOL,
-}
-
-impl MessageTypeValues for RIBLTMessageTypeValues {}
-
-pub struct RIBLTMessageType {
-    value: RIBLTMessageTypeValues,
-}
-
-impl RIBLTMessageType {
-    pub fn new() -> Self {
-        Self {
-            value: RIBLTMessageTypeValues::SYMBOL,
-        }
-    }
-}
-
-impl MessageType for RIBLTMessageType {
-    fn value(&self) -> Box<dyn MessageTypeValues> {
-        Box::new(RIBLTMessageTypeValues::SYMBOL)
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct RIBLTSymbol {
-    key: String,
-    value: Vec<u8>,
 }
 
 impl riblt::Symbol for RIBLTSymbol {

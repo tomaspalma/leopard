@@ -1111,6 +1111,7 @@ dependencies = [
  "message",
  "protocol",
  "riblt",
+ "rkyv 0.8.15",
  "runtime",
  "state",
  "statig",

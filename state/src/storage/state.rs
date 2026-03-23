@@ -35,6 +35,6 @@ impl DataState for DefaultDataState {
     }
 
     fn items(&self) -> Vec<Box<dyn DataStateItem + Send + Sync>> {
-        vec![]
+        self.storage.items()
     }
 }
