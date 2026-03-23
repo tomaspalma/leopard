@@ -1,6 +1,8 @@
 pub mod messages;
 
-use message::{Message, MessageType, MessageTypeValues};
+use dashmap::DashMap;
+
+use message::Message;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tracing::info;
@@ -31,6 +33,14 @@ use riblt::RatelessIBLT;
 use std::collections::HashSet;
 use tokio::time::{sleep, Duration};
 
+#[derive(Debug, Clone, PartialEq)]
+pub enum ReconciliationState {
+    Idle,
+    Reconciling,
+    Failed,
+    Completed,
+}
+
 const RIBLT_PROTOCOL_ID: u64 = 1;
 const BATCH_SIZE: usize = 5;
 const BATCH_INTERVAL: Duration = Duration::from_millis(5000);
@@ -40,6 +50,7 @@ pub struct RIBLT {
     state: Arc<DefaultNodeState>,
     port: NodeAddress,
     deserializer: Arc<RIBLTDeserializer>,
+    reconciliation_states: Arc<DashMap<NodeAddress, ReconciliationState>>,
 }
 
 impl RIBLT {
@@ -49,6 +60,7 @@ impl RIBLT {
             state,
             port,
             deserializer: Arc::new(RIBLTDeserializer::default()),
+            reconciliation_states: Arc::new(DashMap::new()),
         }
     }
 
@@ -57,6 +69,7 @@ impl RIBLT {
         own_address: NodeAddress,
         neighbor_address: NodeAddress,
         protocol_id: u64,
+        reconciliation_states: Arc<DashMap<NodeAddress, ReconciliationState>>,
     ) {
         info!(
             "Running sending symbols sequence from {:?} to {:?}",
@@ -115,12 +128,15 @@ impl RIBLT {
         } else {
             info!("No default storage found");
         }
+
+        reconciliation_states.insert(neighbor_address, ReconciliationState::Idle);
     }
 
     async fn reconciliation_mechanism(
         state: Arc<DefaultNodeState>,
         port: NodeAddress,
         protocol_id: u64,
+        reconciliation_states: Arc<DashMap<NodeAddress, ReconciliationState>>,
     ) -> Result<(), String> {
         info!("Ran reconciliation mechanism");
 
@@ -140,10 +156,19 @@ impl RIBLT {
         };
 
         for info in connection_targets {
+            if let Some(state) = reconciliation_states.get(&info) {
+                if *state == ReconciliationState::Reconciling {
+                    continue;
+                }
+            }
+
+            reconciliation_states.insert(info.clone(), ReconciliationState::Reconciling);
+
             let state_clone = state.clone();
             let port_clone = port.clone();
             let info_clone = info.clone();
             let protocol_id_clone = protocol_id;
+            let reconciliation_states_clone = reconciliation_states.clone();
 
             runtime::spawn(async move {
                 RIBLT::sending_symbols_sequence(
@@ -151,6 +176,7 @@ impl RIBLT {
                     port_clone,
                     info_clone,
                     protocol_id_clone,
+                    reconciliation_states_clone,
                 )
                 .await;
             });
@@ -171,6 +197,12 @@ impl RibltTask {
 impl RouteTask for RibltTask {
     fn run(&self, message: Vec<u8>) {
         info!("Running RIBLT task, received message: {:?}", message);
+
+        // 1. We have to create our own RIBLT
+        //
+        // 2. We have to start decoding the symbols
+        //
+        // 3. If we cannot decode all symbols, we have to inform the sender
     }
 }
 
@@ -236,6 +268,7 @@ where
         let state_handle = self.state.clone();
         let port_for_closure = self.port.clone();
         let protocol_id = self.id;
+        let reconciliation_states = self.reconciliation_states.clone();
 
         self.state
             .add_socket_task_and_create(
@@ -256,9 +289,16 @@ where
                         let state = state_handle.clone();
                         let port = port_for_closure.clone();
                         let protocol_id = protocol_id;
+                        let reconciliation_states = reconciliation_states.clone();
 
                         Box::pin(async move {
-                            Self::reconciliation_mechanism(state, port, protocol_id).await
+                            Self::reconciliation_mechanism(
+                                state,
+                                port,
+                                protocol_id,
+                                reconciliation_states,
+                            )
+                            .await
                         })
                     }),
                     Arc::new(TokioPeriodTimeUnit::new(std::time::Duration::from_secs(5))),
@@ -286,5 +326,10 @@ where
     RHandler: RouteHandler + Send + Sync,
     RStorage: RouteStorage,
 {
-    fn state(&self) {}
+    fn state(&self) {
+        info!("Reconciliation States:");
+        for r in self.reconciliation_states.iter() {
+            info!("  {:?}: {:?}", r.key(), r.value());
+        }
+    }
 }
