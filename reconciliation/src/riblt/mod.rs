@@ -170,7 +170,7 @@ impl RibltTask {
 
 impl RouteTask for RibltTask {
     fn run(&self, message: Vec<u8>) {
-        info!("Running RIBLT task");
+        info!("Running RIBLT task, received message: {:?}", message);
     }
 }
 
@@ -240,7 +240,7 @@ where
         self.state
             .add_socket_task_and_create(
                 NodeSocketRouteId::new(self.port.clone(), protocol_id),
-                Box::new(RibltTask::new()),
+                Arc::new(RibltTask::new()),
                 Box::new(move |port: NodeAddress| {
                     Arc::new(Mutex::new(DefaultNodeSocket::new(port)))
                 }),

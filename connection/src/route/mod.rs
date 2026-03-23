@@ -12,7 +12,7 @@ pub trait RouteId<V> {
 }
 
 pub trait Route {
-    fn task(&self) -> Box<dyn RouteTask>;
+    fn task(&self) -> Arc<dyn RouteTask>;
 }
 
 pub trait RouteTask {

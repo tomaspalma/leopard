@@ -2,7 +2,7 @@ use crate::storage::state::{DataState, DefaultDataState};
 
 use dashmap::DashMap;
 
-use tracing::{info, error};
+use tracing::{error, info};
 
 use async_trait::async_trait;
 use config::node::NodeConfig;
@@ -94,7 +94,7 @@ pub trait NodeState {
     fn add_socket_task_and_create(
         &self,
         id: Self::RouteId,
-        task: Box<dyn RouteTask + Send + Sync>,
+        task: Arc<dyn RouteTask + Send + Sync>,
         socket_constructor: Box<
             dyn Fn(
                 NodeAddress,
@@ -122,7 +122,7 @@ pub trait NodeState {
     fn add_socket_task(
         &self,
         id: Self::RouteId,
-        task: Box<dyn RouteTask + Send + Sync>,
+        task: Arc<dyn RouteTask + Send + Sync>,
     ) -> Result<(), String>;
 
     fn node_identifier(
@@ -255,7 +255,7 @@ impl NodeState for DefaultNodeState {
     fn add_socket_task_and_create(
         &self,
         id: NodeSocketRouteId,
-        task: Box<dyn RouteTask + Send + Sync>,
+        task: Arc<dyn RouteTask + Send + Sync>,
         socket_constructor: Box<
             dyn Fn(
                 NodeAddress,
@@ -309,7 +309,7 @@ impl NodeState for DefaultNodeState {
     fn add_socket_task(
         &self,
         id: NodeSocketRouteId,
-        task: Box<dyn RouteTask + Send + Sync>,
+        task: Arc<dyn RouteTask + Send + Sync>,
     ) -> Result<(), String> {
         self.route_handler()
             .add_route(id, Arc::new(NodeSocketRoute::new(task)));
@@ -389,8 +389,7 @@ impl NodeState for DefaultNodeState {
                             match stream.read_to_end(&mut buffer).await {
                                 Ok(_) => {
                                     info!("Buffers length: {}", buffer.len());
-                                    let protocol_id =
-                                        request_handler.handle(buffer.clone());
+                                    let protocol_id = request_handler.handle(buffer.clone());
 
                                     route_handler
                                         .handle(buffer, protocol_id, address.clone())

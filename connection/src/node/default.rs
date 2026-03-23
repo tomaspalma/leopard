@@ -181,19 +181,17 @@ impl NodeSocket for DefaultNodeSocket {
 }
 
 pub struct NodeSocketRoute {
-    task: Box<dyn RouteTask + Send + Sync>,
+    task: Arc<dyn RouteTask + Send + Sync>,
 }
 
 impl NodeSocketRoute {
-    pub fn new(task: Box<dyn RouteTask + Send + Sync>) -> Self {
+    pub fn new(task: Arc<dyn RouteTask + Send + Sync>) -> Self {
         Self { task }
     }
 }
 
 impl Route for NodeSocketRoute {
-    fn task(&self) -> Box<dyn RouteTask> {
-        Box::new(DefaultNodeSocketTask::new(Arc::new(
-            DefaultNodeSocketTaskMetadata::new(String::new()),
-        )))
+    fn task(&self) -> Arc<dyn RouteTask> {
+        self.task.clone()
     }
 }

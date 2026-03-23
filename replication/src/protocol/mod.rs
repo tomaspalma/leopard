@@ -113,7 +113,7 @@ impl
         self.state
             .add_socket_task_and_create(
                 NodeSocketRouteId::new(self.port.clone(), self.id()),
-                Box::new(DefaultNodeSocketTask::new(Arc::new(
+                Arc::new(DefaultNodeSocketTask::new(Arc::new(
                     DefaultNodeSocketTaskMetadata::new(String::new()),
                 ))),
                 Box::new(move |port: NodeAddress| {
