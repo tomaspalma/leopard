@@ -8,9 +8,9 @@ use tracing::{error, info};
 
 use async_trait::async_trait;
 use message::Message;
-use runtime;
+use runtime::spawn;
 use runtime::{
-    Runtime, Task,
+    Task,
     time::{PeriodTimeUnit, TokioPeriodTimeUnit},
 };
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -140,7 +140,7 @@ impl NodeSocket for DefaultNodeSocket {
     }
 
     async fn add_periodic_task(&mut self, task: Arc<PeriodicDefaultNodeSocketTask>) {
-        runtime::spawn(async move {
+        spawn!({
             task.run().await;
         });
     }

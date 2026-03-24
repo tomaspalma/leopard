@@ -10,12 +10,12 @@ use connection::node::{
 };
 use state::node::NodeState;
 
-use runtime::{Runtime, RUNTIME};
-
 use services::NodeService;
 
 use std::marker::PhantomData;
 use std::sync::Arc;
+
+use runtime::spawn;
 
 pub struct Node<T, S, M, R, N, MN, CI, CV, PTU, PT, RHandler, RStorage>
 where
@@ -93,13 +93,13 @@ where
 
         let state_clone = self.state.clone();
 
-        runtime::spawn(async move {
+        spawn!({
             state_clone.init().await.unwrap();
         });
 
         for service in self.services.iter_mut() {
             let s = service.clone();
-            runtime::spawn(async move {
+            spawn!({
                 s.clone().init().await;
             });
         }

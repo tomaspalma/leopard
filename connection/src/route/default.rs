@@ -4,7 +4,7 @@ use crate::route::{Route, RouteHandler, RouteId, RouteStorage};
 
 use async_trait::async_trait;
 use dashmap::DashMap;
-use runtime;
+use runtime::spawn;
 use std::sync::Arc;
 
 #[derive(Clone, Hash, Eq, PartialEq)]
@@ -99,7 +99,7 @@ impl RouteHandler for DefaultRouteHandler {
 
         if let Some(route) = route {
             let request_clone = request.clone();
-            runtime::spawn(async move {
+            spawn!({
                 route.task().run(request_clone);
             });
         } else {

@@ -10,6 +10,7 @@ use connection::{node::default::NodeSocketRoute, route::RouteTask};
 use errors::node::NodeInitError;
 use message::Message;
 use runtime::time::TokioPeriodTimeUnit;
+use runtime::spawn;
 
 use tokio::io::AsyncReadExt;
 
@@ -360,7 +361,7 @@ impl NodeState for DefaultNodeState {
 
             let value = socket.clone();
             let route_handler_clone = self.route_handler.clone();
-            runtime::spawn(async move {
+            spawn!({
                 let socket_clone = value.clone();
                 let route_handler = route_handler_clone.clone();
 

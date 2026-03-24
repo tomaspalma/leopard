@@ -1,5 +1,7 @@
 pub mod messages;
 
+use runtime::spawn;
+
 use tracing::error;
 
 use dashmap::DashMap;
@@ -33,9 +35,9 @@ use crate::{
 };
 use riblt::RatelessIBLT;
 use rkyv::{from_bytes, rancor::Error};
+use state::storage::StorageAction;
 use std::collections::HashSet;
 use tokio::time::{sleep, Duration};
-use state::storage::StorageAction;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ReconciliationState {
@@ -162,7 +164,7 @@ impl RIBLT {
             let reconciliation_states_clone = reconciliation_states.clone();
             let iblt_clone = iblt.clone();
 
-            runtime::spawn(async move {
+            spawn!({
                 RIBLT::sending_symbols_sequence(
                     state_clone,
                     port_clone,
@@ -313,7 +315,7 @@ where
                     let iblt = iblt_handle.clone();
                     let storage = storage_clone.clone();
 
-                    runtime::spawn(async move {
+                    spawn!({
                         let items = storage.items();
                         let mut symbols = HashSet::new();
 

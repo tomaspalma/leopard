@@ -4,9 +4,10 @@ use std::pin::Pin;
 use std::sync::{Arc, LazyLock, LockResult, PoisonError, RwLock};
 use tracing::error;
 
-use tokio;
+pub use tokio;
 
 pub mod builder;
+pub mod macros;
 pub mod time;
 
 pub static RUNTIME: LazyLock<RwLock<Arc<dyn Runtime + Send + Sync>>> =
