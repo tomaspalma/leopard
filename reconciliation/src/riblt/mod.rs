@@ -34,8 +34,8 @@ use crate::{
 use riblt::RatelessIBLT;
 use rkyv::{from_bytes, rancor::Error};
 use std::collections::HashSet;
-use std::sync::RwLock;
 use tokio::time::{sleep, Duration};
+use state::storage::StorageAction;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ReconciliationState {
@@ -304,6 +304,31 @@ where
             }
 
             *self.iblt.write().await = RatelessIBLT::new(symbols);
+
+            let iblt_handle = iblt_handle.clone();
+            let storage_clone = storage.clone();
+            storage.add_listener(
+                StorageAction::Insert,
+                Box::new(move |_item| {
+                    let iblt = iblt_handle.clone();
+                    let storage = storage_clone.clone();
+
+                    runtime::spawn(async move {
+                        let items = storage.items();
+                        let mut symbols = HashSet::new();
+
+                        for item in items {
+                            symbols.insert(RIBLTSymbol {
+                                key: item.key().to_string(),
+                                value: item.value().as_bytes().to_vec(),
+                            });
+                        }
+
+                        let mut guard = iblt.write().await;
+                        *guard = RatelessIBLT::new(symbols);
+                    });
+                }),
+            );
         } else {
             info!("No default storage found");
         }
