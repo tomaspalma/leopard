@@ -11,7 +11,7 @@ pub enum RIBLTMessageTypeValues {
 
 impl MessageTypeValues for RIBLTMessageTypeValues {}
 
-#[derive(Clone, Serialize, Deserialize, Archive)]
+#[derive(Debug, Clone, Serialize, Deserialize, Archive)]
 pub struct RIBLTMessageType {
     value: RIBLTMessageTypeValues,
 }
@@ -43,18 +43,18 @@ pub struct RIBLTCodedSymbol {
     pub count: i64,
 }
 
-#[derive(Serialize, Deserialize, Archive)]
+#[derive(Debug, Serialize, Deserialize, Archive)]
 pub struct RIBLTSendSymbolMessage {
     _type: RIBLTMessageType,
     protocol_id: Option<u64>,
-    symbol: RIBLTCodedSymbol,
+    symbol: Vec<RIBLTCodedSymbol>,
 }
 
 impl RIBLTSendSymbolMessage {
     pub fn new(
         _type: RIBLTMessageType,
         protocol_id: Option<u64>,
-        symbol: RIBLTCodedSymbol,
+        symbol: Vec<RIBLTCodedSymbol>,
     ) -> Self {
         Self {
             _type,
@@ -65,6 +65,10 @@ impl RIBLTSendSymbolMessage {
 }
 
 impl Message for RIBLTSendSymbolMessage {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
     fn get_type(&self) -> Arc<dyn MessageType + Send + Sync> {
         Arc::new(self._type.clone())
     }

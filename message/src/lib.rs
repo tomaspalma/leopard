@@ -1,5 +1,6 @@
 pub mod deserializer;
 
+use std::any::Any;
 use std::sync::Arc;
 
 pub trait MessageTypeValues {}
@@ -12,9 +13,10 @@ pub enum DefaultMessageTypes {
     Default,
 }
 
-pub trait Message {
+pub trait Message: Any + Send + Sync {
     fn content(&self) -> Arc<Vec<u8>>;
     fn get_type(&self) -> Arc<dyn MessageType + Send + Sync>;
     fn serialize(&self, protocol: Option<u64>) -> Result<Vec<u8>, ()>;
     fn protocol(&self) -> Option<u64>;
+    fn as_any(&self) -> &dyn Any;
 }

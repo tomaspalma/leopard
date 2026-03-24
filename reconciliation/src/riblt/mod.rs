@@ -1,5 +1,7 @@
 pub mod messages;
 
+use tracing::error;
+
 use dashmap::DashMap;
 
 use message::Message;
@@ -30,15 +32,15 @@ use crate::{
     ReconciliationProtocol,
 };
 use riblt::RatelessIBLT;
+use rkyv::{from_bytes, rancor::Error};
 use std::collections::HashSet;
+use std::sync::RwLock;
 use tokio::time::{sleep, Duration};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ReconciliationState {
-    Idle,
-    Reconciling,
-    Failed,
-    Completed,
+    SendingSymbols,
+    AwaitingConfirmation,
 }
 
 const RIBLT_PROTOCOL_ID: u64 = 1;
@@ -51,6 +53,7 @@ pub struct RIBLT {
     port: NodeAddress,
     deserializer: Arc<RIBLTDeserializer>,
     reconciliation_states: Arc<DashMap<NodeAddress, ReconciliationState>>,
+    iblt: Arc<tokio::sync::RwLock<RatelessIBLT<RIBLTSymbol, HashSet<RIBLTSymbol>>>>,
 }
 
 impl RIBLT {
@@ -61,6 +64,7 @@ impl RIBLT {
             port,
             deserializer: Arc::new(RIBLTDeserializer::default()),
             reconciliation_states: Arc::new(DashMap::new()),
+            iblt: Arc::new(tokio::sync::RwLock::new(RatelessIBLT::new(HashSet::new()))),
         }
     }
 
@@ -70,66 +74,54 @@ impl RIBLT {
         neighbor_address: NodeAddress,
         protocol_id: u64,
         reconciliation_states: Arc<DashMap<NodeAddress, ReconciliationState>>,
+        iblt: Arc<tokio::sync::RwLock<RatelessIBLT<RIBLTSymbol, HashSet<RIBLTSymbol>>>>,
     ) {
         info!(
             "Running sending symbols sequence from {:?} to {:?}",
             own_address, neighbor_address
         );
 
-        let storage = state.get_storage("default".to_string());
+        let mut current_index = 0;
 
-        if let Some(storage) = storage {
-            let items = storage.items();
-            let mut symbols = HashSet::new();
+        while reconciliation_states.contains_key(&neighbor_address) {
+            let mut symbols = Vec::new();
 
-            for item in items {
-                symbols.insert(RIBLTSymbol {
-                    key: item.key().to_string(),
-                    value: item.value().as_bytes().to_vec(),
-                });
-            }
-
-            let mut iblt = RatelessIBLT::new(symbols);
-            let mut current_index = 0;
-
-            loop {
+            {
+                let mut iblt_guard = iblt.write().await;
                 for _ in 0..BATCH_SIZE {
-                    let coded_symbol = iblt.get_coded_symbol(current_index);
+                    let coded_symbol = iblt_guard.get_coded_symbol(current_index);
 
                     let symbol_message = RIBLTCodedSymbol {
                         sum: coded_symbol.sum,
                         hash: coded_symbol.hash,
                         count: coded_symbol.count,
                     };
-
-                    state
-                        .send_through_socket(
-                            own_address.clone(),
-                            Box::new(neighbor_address.clone()),
-                            Box::new(RIBLTSendSymbolMessage::new(
-                                RIBLTMessageType::new(),
-                                Some(protocol_id),
-                                symbol_message,
-                            )),
-                        )
-                        .await
-                        .unwrap();
+                    symbols.push(symbol_message);
 
                     current_index += 1;
                 }
-
-                info!(
-                    "Sent batch of {} symbols up to index {}",
-                    BATCH_SIZE, current_index
-                );
-
-                sleep(BATCH_INTERVAL).await;
             }
-        } else {
-            info!("No default storage found");
-        }
 
-        reconciliation_states.insert(neighbor_address, ReconciliationState::Idle);
+            state
+                .send_through_socket(
+                    own_address.clone(),
+                    Box::new(neighbor_address.clone()),
+                    Box::new(RIBLTSendSymbolMessage::new(
+                        RIBLTMessageType::new(),
+                        Some(protocol_id),
+                        symbols,
+                    )),
+                )
+                .await
+                .unwrap();
+
+            info!(
+                "Sent batch of {} symbols up to index {}",
+                BATCH_SIZE, current_index
+            );
+
+            sleep(BATCH_INTERVAL).await;
+        }
     }
 
     async fn reconciliation_mechanism(
@@ -137,6 +129,7 @@ impl RIBLT {
         port: NodeAddress,
         protocol_id: u64,
         reconciliation_states: Arc<DashMap<NodeAddress, ReconciliationState>>,
+        iblt: Arc<tokio::sync::RwLock<RatelessIBLT<RIBLTSymbol, HashSet<RIBLTSymbol>>>>,
     ) -> Result<(), String> {
         info!("Ran reconciliation mechanism");
 
@@ -156,19 +149,18 @@ impl RIBLT {
         };
 
         for info in connection_targets {
-            if let Some(state) = reconciliation_states.get(&info) {
-                if *state == ReconciliationState::Reconciling {
-                    continue;
-                }
+            if let Some(_) = reconciliation_states.get(&info) {
+                continue;
             }
 
-            reconciliation_states.insert(info.clone(), ReconciliationState::Reconciling);
+            reconciliation_states.insert(info.clone(), ReconciliationState::SendingSymbols);
 
             let state_clone = state.clone();
             let port_clone = port.clone();
             let info_clone = info.clone();
             let protocol_id_clone = protocol_id;
             let reconciliation_states_clone = reconciliation_states.clone();
+            let iblt_clone = iblt.clone();
 
             runtime::spawn(async move {
                 RIBLT::sending_symbols_sequence(
@@ -177,6 +169,7 @@ impl RIBLT {
                     info_clone,
                     protocol_id_clone,
                     reconciliation_states_clone,
+                    iblt_clone,
                 )
                 .await;
             });
@@ -196,7 +189,17 @@ impl RibltTask {
 
 impl RouteTask for RibltTask {
     fn run(&self, message: Vec<u8>) {
-        info!("Running RIBLT task, received message: {:?}", message);
+        let deserialized_message = RIBLTDeserializer::new().deserialize(message);
+
+        let message = deserialized_message
+            .as_any()
+            .downcast_ref::<RIBLTSendSymbolMessage>();
+
+        if let Some(message) = message {
+            info!("Received RIBLT message: {:?}", message);
+        } else {
+            error!("Failed to downcast message to RIBLTSendSymbolMessage");
+        }
 
         // 1. We have to create our own RIBLT
         //
@@ -209,9 +212,27 @@ impl RouteTask for RibltTask {
 #[derive(Default)]
 pub struct RIBLTDeserializer {}
 
+impl RIBLTDeserializer {
+    pub fn new() -> Self {
+        Self {}
+    }
+}
+
 impl ProtocolDeserializer for RIBLTDeserializer {
     fn deserialize(&self, bytes: Vec<u8>) -> Arc<dyn Message> {
-        Arc::new(TestMessage::new(Arc::new(TestMessageType::new()), None))
+        if bytes.len() < 8 {
+            return Arc::new(TestMessage::new(Arc::new(TestMessageType::new()), None));
+        }
+
+        let payload = &bytes[8..];
+
+        match from_bytes::<RIBLTSendSymbolMessage, Error>(payload) {
+            Ok(msg) => Arc::new(msg),
+            Err(e) => {
+                error!("Failed to deserialize RIBLT message: {}", e);
+                Arc::new(TestMessage::new(Arc::new(TestMessageType::new()), None))
+            }
+        }
     }
 }
 
@@ -269,6 +290,23 @@ where
         let port_for_closure = self.port.clone();
         let protocol_id = self.id;
         let reconciliation_states = self.reconciliation_states.clone();
+        let iblt_handle = self.iblt.clone();
+
+        if let Some(storage) = self.state.get_storage("default".to_string()) {
+            let items = storage.items();
+            let mut symbols = HashSet::new();
+
+            for item in items {
+                symbols.insert(RIBLTSymbol {
+                    key: item.key().to_string(),
+                    value: item.value().as_bytes().to_vec(),
+                });
+            }
+
+            *self.iblt.write().await = RatelessIBLT::new(symbols);
+        } else {
+            info!("No default storage found");
+        }
 
         self.state
             .add_socket_task_and_create(
@@ -290,6 +328,7 @@ where
                         let port = port_for_closure.clone();
                         let protocol_id = protocol_id;
                         let reconciliation_states = reconciliation_states.clone();
+                        let iblt = iblt_handle.clone();
 
                         Box::pin(async move {
                             Self::reconciliation_mechanism(
@@ -297,6 +336,7 @@ where
                                 port,
                                 protocol_id,
                                 reconciliation_states,
+                                iblt,
                             )
                             .await
                         })

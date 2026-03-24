@@ -55,6 +55,10 @@ impl TestMessage {
 }
 
 impl Message for TestMessage {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
     fn content(&self) -> Arc<Vec<u8>> {
         Arc::new(vec![])
     }
