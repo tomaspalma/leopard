@@ -12,6 +12,13 @@ use std::fs::File;
 use std::io::{BufReader, BufWriter};
 use std::path::Path;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum StorageAction {
+    Insert,
+}
+
+pub type StorageListener = Box<dyn Fn(&dyn DataStateItem) + Send + Sync>;
+
 pub struct PersistentDataStorage {
     filename: String,
 }
@@ -53,11 +60,13 @@ pub trait DataStateStorage {
     async fn save(&self, item: Box<dyn DataStateItem + Send + Sync>);
     async fn get(&self, key: &str) -> Option<Box<dyn DataStateItem + Send + Sync>>;
     fn items(&self) -> Vec<Box<dyn DataStateItem + Send + Sync>>;
+    fn add_listener(&self, action: StorageAction, listener: StorageListener);
 }
 
 pub struct KeyValueDataStateStorage {
     memory_storage: DashMap<String, String>,
     persistent_storage: PersistentDataStorage,
+    listeners: DashMap<StorageAction, Vec<StorageListener>>,
 }
 
 impl KeyValueDataStateStorage {
@@ -81,15 +90,29 @@ impl KeyValueDataStateStorage {
         Self {
             memory_storage,
             persistent_storage,
+            listeners: DashMap::new(),
         }
     }
 }
 
 #[async_trait]
 impl DataStateStorage for KeyValueDataStateStorage {
+    fn add_listener(&self, action: StorageAction, listener: StorageListener) {
+        self.listeners.entry(action).or_default().push(listener);
+    }
+
     async fn save(&self, item: Box<dyn DataStateItem + Send + Sync>) {
-        self.memory_storage
-            .insert(item.key().to_string(), item.value().to_string());
+        let key = item.key().to_string();
+        let value = item.value().to_string();
+
+        self.memory_storage.insert(key, value);
+
+        let action = StorageAction::Insert;
+        if let Some(action_listeners) = self.listeners.get(&action) {
+            for listener in action_listeners.iter() {
+                listener(item.as_ref());
+            }
+        }
 
         self.persistent_storage
             .save(&self.memory_storage)
@@ -117,7 +140,8 @@ impl DataStateStorage for KeyValueDataStateStorage {
                 }
 
                 return self.memory_storage.get(key).map(|val| {
-                    let item: Box<dyn DataStateItem + Send + Sync> = Box::new(DefaultDataStateItem::new(key.to_string(), val.to_string()));
+                    let item: Box<dyn DataStateItem + Send + Sync> =
+                        Box::new(DefaultDataStateItem::new(key.to_string(), val.to_string()));
                     item
                 });
             }

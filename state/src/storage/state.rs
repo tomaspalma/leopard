@@ -3,6 +3,7 @@ use async_trait::async_trait;
 use crate::storage::{
     DataStateStorage, KeyValueDataStateStorage,
     item::DataStateItem,
+    StorageAction, StorageListener,
 };
 
 #[async_trait]
@@ -10,6 +11,7 @@ pub trait DataState {
     async fn store(&self, item: Box<dyn DataStateItem + Send + Sync>);
     async fn get(&self, key: &str) -> Option<Box<dyn DataStateItem + Send + Sync>>;
     fn items(&self) -> Vec<Box<dyn DataStateItem + Send + Sync>>;
+    fn add_listener(&self, action: StorageAction, listener: StorageListener);
 }
 
 pub struct DefaultDataState {
@@ -36,5 +38,9 @@ impl DataState for DefaultDataState {
 
     fn items(&self) -> Vec<Box<dyn DataStateItem + Send + Sync>> {
         self.storage.items()
+    }
+
+    fn add_listener(&self, action: StorageAction, listener: StorageListener) {
+        self.storage.add_listener(action, listener);
     }
 }
