@@ -187,15 +187,15 @@ impl RIBLT {
     }
 }
 
-pub struct RibltTask {}
+pub struct ReceiveNeighborSymbolsTask {}
 
-impl RibltTask {
+impl ReceiveNeighborSymbolsTask {
     pub fn new() -> Self {
         Self {}
     }
 }
 
-impl RouteTask for RibltTask {
+impl RouteTask for ReceiveNeighborSymbolsTask {
     fn run(&self, message: Vec<u8>) {
         let deserialized_message = RIBLTDeserializer::new().deserialize(message);
 
@@ -343,7 +343,7 @@ where
         self.state
             .add_socket_task_and_create(
                 NodeSocketRouteId::new(self.port.clone(), protocol_id),
-                Arc::new(RibltTask::new()),
+                Arc::new(ReceiveNeighborSymbolsTask::new()),
                 Box::new(move |port: NodeAddress| {
                     Arc::new(Mutex::new(DefaultNodeSocket::new(port)))
                 }),
