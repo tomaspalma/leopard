@@ -122,6 +122,12 @@ impl RIBLT {
                 BATCH_SIZE, current_index
             );
 
+            reconciliation_states
+                .get_mut(&neighbor_address)
+                .map(|mut state| {
+                    *state = ReconciliationState::AwaitingConfirmation;
+                });
+
             sleep(BATCH_INTERVAL).await;
         }
     }
@@ -197,14 +203,13 @@ impl RouteTask for RibltTask {
             .as_any()
             .downcast_ref::<RIBLTSendSymbolMessage>();
 
-        if let Some(message) = message {
-            info!("Received RIBLT message: {:?}", message);
-        } else {
-            error!("Failed to downcast message to RIBLTSendSymbolMessage");
+        match message {
+            Some(msg) => {
+                info!("Received RIBLT message: {:?}", msg);
+            }
+            None => error!("Failed to downcast message to RIBLTSendSymbolMessage"),
         }
 
-        // 1. We have to create our own RIBLT
-        //
         // 2. We have to start decoding the symbols
         //
         // 3. If we cannot decode all symbols, we have to inform the sender
