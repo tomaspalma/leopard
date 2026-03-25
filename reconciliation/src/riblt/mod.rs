@@ -33,7 +33,7 @@ use crate::{
     riblt::messages::{RIBLTCodedSymbol, RIBLTMessageType, RIBLTSendSymbolMessage, RIBLTSymbol},
     ReconciliationProtocol,
 };
-use riblt::RatelessIBLT;
+use riblt::{RatelessIBLT, UnmanagedRatelessIBLT};
 use rkyv::{from_bytes, rancor::Error};
 use state::storage::StorageAction;
 use std::collections::HashSet;
@@ -56,6 +56,7 @@ pub struct RIBLT {
     deserializer: Arc<RIBLTDeserializer>,
     reconciliation_states: Arc<DashMap<NodeAddress, ReconciliationState>>,
     iblt: Arc<tokio::sync::RwLock<RatelessIBLT<RIBLTSymbol, HashSet<RIBLTSymbol>>>>,
+    reconciliation_riblts: Arc<DashMap<NodeAddress, UnmanagedRatelessIBLT<RIBLTSymbol>>>,
 }
 
 impl RIBLT {
@@ -67,6 +68,7 @@ impl RIBLT {
             deserializer: Arc::new(RIBLTDeserializer::default()),
             reconciliation_states: Arc::new(DashMap::new()),
             iblt: Arc::new(tokio::sync::RwLock::new(RatelessIBLT::new(HashSet::new()))),
+            reconciliation_riblts: Arc::new(DashMap::new()),
         }
     }
 
@@ -185,18 +187,28 @@ impl RIBLT {
 
         Ok(())
     }
+
+    fn check_if_neighbor_already_reconciling(&self, neighbor: NodeAddress) -> bool {
+        self.reconciliation_states.contains_key(&neighbor)
+    }
 }
 
-pub struct ReceiveNeighborSymbolsTask {}
+pub struct ReceiveNeighborSymbolsTask {
+    reconciliation_riblts: Arc<DashMap<NodeAddress, UnmanagedRatelessIBLT<RIBLTSymbol>>>,
+}
 
 impl ReceiveNeighborSymbolsTask {
-    pub fn new() -> Self {
-        Self {}
+    pub fn new(
+        reconciliation_riblts: Arc<DashMap<NodeAddress, UnmanagedRatelessIBLT<RIBLTSymbol>>>,
+    ) -> Self {
+        Self {
+            reconciliation_riblts,
+        }
     }
 }
 
 impl RouteTask for ReceiveNeighborSymbolsTask {
-    fn run(&self, message: Vec<u8>) {
+    fn run(&self, message: Vec<u8>, neighbor: NodeAddress) {
         let deserialized_message = RIBLTDeserializer::new().deserialize(message);
 
         let message = deserialized_message
@@ -206,6 +218,8 @@ impl RouteTask for ReceiveNeighborSymbolsTask {
         match message {
             Some(msg) => {
                 info!("Received RIBLT message: {:?}", msg);
+
+                // 1. We have to check if we already have an ongoing iblt for a specific neighbor
             }
             None => error!("Failed to downcast message to RIBLTSendSymbolMessage"),
         }
@@ -343,7 +357,9 @@ where
         self.state
             .add_socket_task_and_create(
                 NodeSocketRouteId::new(self.port.clone(), protocol_id),
-                Arc::new(ReceiveNeighborSymbolsTask::new()),
+                Arc::new(ReceiveNeighborSymbolsTask::new(
+                    self.reconciliation_riblts.clone(),
+                )),
                 Box::new(move |port: NodeAddress| {
                     Arc::new(Mutex::new(DefaultNodeSocket::new(port)))
                 }),

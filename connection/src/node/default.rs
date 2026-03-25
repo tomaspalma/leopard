@@ -64,7 +64,7 @@ impl DefaultNodeSocketTaskMetadata {
 }
 
 impl RouteTask for DefaultNodeSocketTask {
-    fn run(&self, message: Vec<u8>) {
+    fn run(&self, message: Vec<u8>, neighbor: NodeAddress) {
         info!("Running task!");
     }
 }

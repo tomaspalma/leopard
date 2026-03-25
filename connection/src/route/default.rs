@@ -1,6 +1,6 @@
-use tracing::info;
 use crate::node::port::NodeAddress;
 use crate::route::{Route, RouteHandler, RouteId, RouteStorage};
+use tracing::info;
 
 use async_trait::async_trait;
 use dashmap::DashMap;
@@ -100,7 +100,7 @@ impl RouteHandler for DefaultRouteHandler {
         if let Some(route) = route {
             let request_clone = request.clone();
             spawn!({
-                route.task().run(request_clone);
+                route.task().run(request_clone, port.clone());
             });
         } else {
             info!("No route found for port: {}", port.port());

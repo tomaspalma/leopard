@@ -16,7 +16,7 @@ pub trait Route {
 }
 
 pub trait RouteTask {
-    fn run(&self, message: Vec<u8>);
+    fn run(&self, message: Vec<u8>, neighbor: NodeAddress);
 }
 
 pub trait RouterHandlerInfo {
