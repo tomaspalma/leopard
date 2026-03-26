@@ -55,7 +55,7 @@ pub struct RIBLT {
     port: NodeAddress,
     deserializer: Arc<RIBLTDeserializer>,
     reconciliation_states: Arc<DashMap<NodeAddress, ReconciliationState>>,
-    iblt: Arc<tokio::sync::RwLock<RatelessIBLT<RIBLTSymbol, HashSet<RIBLTSymbol>>>>,
+    iblt: Arc<DashMap<NodeAddress, RatelessIBLT<RIBLTSymbol, HashSet<RIBLTSymbol>>>>,
     reconciliation_riblts: Arc<DashMap<NodeAddress, UnmanagedRatelessIBLT<RIBLTSymbol>>>,
 }
 
@@ -67,7 +67,7 @@ impl RIBLT {
             port,
             deserializer: Arc::new(RIBLTDeserializer::default()),
             reconciliation_states: Arc::new(DashMap::new()),
-            iblt: Arc::new(tokio::sync::RwLock::new(RatelessIBLT::new(HashSet::new()))),
+            iblt: Arc::new(DashMap::new()),
             reconciliation_riblts: Arc::new(DashMap::new()),
         }
     }
@@ -78,7 +78,7 @@ impl RIBLT {
         neighbor_address: NodeAddress,
         protocol_id: u64,
         reconciliation_states: Arc<DashMap<NodeAddress, ReconciliationState>>,
-        iblt: Arc<tokio::sync::RwLock<RatelessIBLT<RIBLTSymbol, HashSet<RIBLTSymbol>>>>,
+        iblt: Arc<DashMap<NodeAddress, RatelessIBLT<RIBLTSymbol, HashSet<RIBLTSymbol>>>>,
     ) {
         info!(
             "Running sending symbols sequence from {:?} to {:?}",
@@ -91,7 +91,10 @@ impl RIBLT {
             let mut symbols = Vec::new();
 
             {
-                let mut iblt_guard = iblt.write().await;
+                let mut iblt_guard = match iblt.get_mut(&neighbor_address) {
+                    Some(guard) => guard,
+                    None => break,
+                };
                 for _ in 0..BATCH_SIZE {
                     let coded_symbol = iblt_guard.get_coded_symbol(current_index);
 
@@ -139,7 +142,7 @@ impl RIBLT {
         port: NodeAddress,
         protocol_id: u64,
         reconciliation_states: Arc<DashMap<NodeAddress, ReconciliationState>>,
-        iblt: Arc<tokio::sync::RwLock<RatelessIBLT<RIBLTSymbol, HashSet<RIBLTSymbol>>>>,
+        iblt: Arc<DashMap<NodeAddress, RatelessIBLT<RIBLTSymbol, HashSet<RIBLTSymbol>>>>,
     ) -> Result<(), String> {
         info!("Ran reconciliation mechanism");
 
@@ -165,6 +168,19 @@ impl RIBLT {
 
             reconciliation_states.insert(info.clone(), ReconciliationState::SendingSymbols);
 
+            if !iblt.contains_key(&info) {
+                let mut symbols = HashSet::new();
+                if let Some(storage) = state.get_storage("default".to_string()) {
+                    for item in storage.items() {
+                        symbols.insert(RIBLTSymbol {
+                            key: item.key().to_string(),
+                            value: item.value().as_bytes().to_vec(),
+                        });
+                    }
+                }
+                iblt.insert(info.clone(), RatelessIBLT::new(symbols));
+            }
+
             let state_clone = state.clone();
             let port_clone = port.clone();
             let info_clone = info.clone();
@@ -188,8 +204,11 @@ impl RIBLT {
         Ok(())
     }
 
-    fn check_if_neighbor_already_reconciling(&self, neighbor: NodeAddress) -> bool {
-        self.reconciliation_states.contains_key(&neighbor)
+    fn check_if_neighbor_already_reconciling(
+        reconciliation_riblts: Arc<DashMap<NodeAddress, UnmanagedRatelessIBLT<RIBLTSymbol>>>,
+        neighbor: NodeAddress,
+    ) -> bool {
+        reconciliation_riblts.contains_key(&neighbor)
     }
 }
 
@@ -219,14 +238,29 @@ impl RouteTask for ReceiveNeighborSymbolsTask {
             Some(msg) => {
                 info!("Received RIBLT message: {:?}", msg);
 
-                // 1. We have to check if we already have an ongoing iblt for a specific neighbor
+                if !RIBLT::check_if_neighbor_already_reconciling(
+                    self.reconciliation_riblts.clone(),
+                    neighbor.clone(),
+                ) {
+                    self.reconciliation_riblts
+                        .insert(neighbor.clone(), UnmanagedRatelessIBLT::new());
+                }
+
+                for symbol in msg.symbols() {
+                    match self.reconciliation_riblts.get_mut(&neighbor) {
+                        Some(mut riblt) => {
+                            let mut cs = riblt::CodedSymbol::new();
+                            cs.sum = symbol.sum.clone();
+                            cs.hash = symbol.hash;
+                            cs.count = symbol.count;
+                            riblt.add_coded_symbol(&cs);
+                        }
+                        None => error!("Failed to get or create IBLT for neighbor {:?}", neighbor),
+                    }
+                }
             }
             None => error!("Failed to downcast message to RIBLTSendSymbolMessage"),
         }
-
-        // 2. We have to start decoding the symbols
-        //
-        // 3. If we cannot decode all symbols, we have to inform the sender
     }
 }
 
@@ -254,26 +288,6 @@ impl ProtocolDeserializer for RIBLTDeserializer {
                 Arc::new(TestMessage::new(Arc::new(TestMessageType::new()), None))
             }
         }
-    }
-}
-
-impl riblt::Symbol for RIBLTSymbol {
-    const BYTE_ARRAY_LENGTH: usize = 128;
-
-    fn encode_to_bytes(&self) -> Vec<u8> {
-        let mut bytes = self.key.as_bytes().to_vec();
-        bytes.extend_from_slice(&self.value);
-        if bytes.len() < Self::BYTE_ARRAY_LENGTH {
-            bytes.resize(Self::BYTE_ARRAY_LENGTH, 0);
-        }
-        bytes
-    }
-
-    fn decode_from_bytes(bytes: &Vec<u8>) -> Self {
-        let key_end = bytes.iter().position(|&b| b == 0).unwrap_or(bytes.len());
-        let key = String::from_utf8_lossy(&bytes[..key_end]).to_string();
-        let value = bytes[key_end..].to_vec();
-        Self { key, value }
     }
 }
 
@@ -324,8 +338,6 @@ where
                 });
             }
 
-            *self.iblt.write().await = RatelessIBLT::new(symbols);
-
             let iblt_handle = iblt_handle.clone();
             let storage_clone = storage.clone();
             storage.add_listener(
@@ -339,14 +351,20 @@ where
                         let mut symbols = HashSet::new();
 
                         for item in items {
-                            symbols.insert(RIBLTSymbol {
-                                key: item.key().to_string(),
-                                value: item.value().as_bytes().to_vec(),
-                            });
+                            // let mut hasher = DefaultHasher::new();
+                            // item.key().hash(&mut hasher);
+                            // let key_hash = hasher.finish();
+                            //
+                            // symbols.insert(RIBLTCodedSymbol {
+                            //     sum: item.value().as_bytes().to_vec(),
+                            //     hash: key_hash,
+                            //     count: 1, // Base symbols start with a count of 1
+                            // });
                         }
 
-                        let mut guard = iblt.write().await;
-                        *guard = RatelessIBLT::new(symbols);
+                        for mut guard in iblt.iter_mut() {
+                            *guard = RatelessIBLT::new(symbols.clone());
+                        }
                     });
                 }),
             );
