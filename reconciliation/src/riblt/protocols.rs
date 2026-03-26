@@ -1,0 +1,183 @@
+use std::{collections::HashSet, sync::Arc};
+
+use riblt::RatelessIBLT;
+use tokio::sync::Mutex;
+use tracing::info;
+
+use async_trait::async_trait;
+use connection::{
+    node::{
+        default::{
+            DefaultNodeSocket, DefaultNodeSocketTaskMetadata, PeriodicDefaultNodeSocketTask,
+        },
+        port::{ConnectionInfo, NodeAddress},
+        NodeSocketTaskMetadata, PeriodicNodeSocketTask,
+    },
+    request::handler::default::{TestMessage, TestMessageType},
+    route::{default::NodeSocketRouteId, RouteHandler, RouteStorage, RouteTask},
+};
+use dashmap::DashMap;
+use membership::{Membership, MembershipNeighbor, MembershipNeighbors};
+use message::Message;
+use protocol::{deserializer::ProtocolDeserializer, Protocol};
+use runtime::{
+    spawn,
+    time::{PeriodTimeUnit, TokioPeriodTimeUnit},
+};
+use state::{node::NodeState, storage::StorageAction};
+
+use crate::{
+    riblt::{
+        messages::RIBLTSymbol, receiver::ReceiveNeighborSymbolsTask, RIBLTDeserializer, RIBLT,
+    },
+    ReconciliationProtocol,
+};
+
+#[async_trait]
+impl<S, T, M, R, N, MN, CI, CV, PTU, PT, RHandler, RStorage>
+    Protocol<S, T, M, R, N, MN, CI, CV, PTU, PT, RHandler, RStorage> for RIBLT
+where
+    S: NodeState,
+    T: RouteTask,
+    M: NodeSocketTaskMetadata,
+    R: MembershipNeighbors<MN>,
+    N: Membership<R, MN>,
+    MN: MembershipNeighbor + Send + Sync,
+    CI: ConnectionInfo<CV>,
+    CV: Sized,
+    PTU: PeriodTimeUnit + Send + Sync,
+    PT: PeriodicNodeSocketTask<PTU>,
+    RHandler: RouteHandler + Send + Sync,
+    RStorage: RouteStorage,
+{
+    fn deserializer(&self) -> Arc<dyn ProtocolDeserializer> {
+        Arc::new(RIBLTDeserializer::default())
+    }
+
+    fn deserialize_message(&self, bytes: Vec<u8>) -> Arc<dyn Message> {
+        self.deserializer.deserialize(bytes)
+    }
+
+    fn id(&self) -> u64 {
+        self.id
+    }
+
+    async fn init(&mut self) {
+        let state_handle = self.state.clone();
+        let port_for_closure = self.port.clone();
+        let protocol_id = self.id;
+        let reconciliation_states = self.reconciliation_states.clone();
+        let iblt_handle = self.iblt.clone();
+
+        if let Some(storage) = self.state.get_storage("default".to_string()) {
+            let items = storage.items();
+            let mut symbols = HashSet::new();
+
+            for item in items {
+                symbols.insert(RIBLTSymbol {
+                    key: item.key().to_string(),
+                    value: item.value().as_bytes().to_vec(),
+                });
+            }
+
+            let iblt_handle = iblt_handle.clone();
+            let storage_clone = storage.clone();
+            storage.add_listener(
+                StorageAction::Insert,
+                Box::new(move |_item| {
+                    let iblt = iblt_handle.clone();
+                    let storage = storage_clone.clone();
+
+                    spawn!({
+                        let items = storage.items();
+                        let mut symbols = HashSet::new();
+
+                        for item in items {
+                            // let mut hasher = DefaultHasher::new();
+                            // item.key().hash(&mut hasher);
+                            // let key_hash = hasher.finish();
+                            //
+                            // symbols.insert(RIBLTCodedSymbol {
+                            //     sum: item.value().as_bytes().to_vec(),
+                            //     hash: key_hash,
+                            //     count: 1, // Base symbols start with a count of 1
+                            // });
+                        }
+
+                        for mut guard in iblt.iter_mut() {
+                            *guard = RatelessIBLT::new(symbols.clone());
+                        }
+                    });
+                }),
+            );
+        } else {
+            info!("No default storage found");
+        }
+
+        self.state
+            .add_socket_task_and_create(
+                NodeSocketRouteId::new(self.port.clone(), protocol_id),
+                Arc::new(ReceiveNeighborSymbolsTask::new(
+                    self.reconciliation_riblts.clone(),
+                )),
+                Box::new(move |port: NodeAddress| {
+                    Arc::new(Mutex::new(DefaultNodeSocket::new(port)))
+                }),
+            )
+            .unwrap();
+
+        self.state
+            .add_periodic_socket_task(
+                self.port.clone(),
+                Arc::new(PeriodicDefaultNodeSocketTask::new(
+                    Arc::new(DefaultNodeSocketTaskMetadata::new(String::new())),
+                    Arc::new(move || {
+                        let state = state_handle.clone();
+                        let port = port_for_closure.clone();
+                        let protocol_id = protocol_id;
+                        let reconciliation_states = reconciliation_states.clone();
+                        let iblt = iblt_handle.clone();
+
+                        Box::pin(async move {
+                            Self::reconciliation_mechanism(
+                                state,
+                                port,
+                                protocol_id,
+                                reconciliation_states,
+                                iblt,
+                            )
+                            .await
+                        })
+                    }),
+                    Arc::new(TokioPeriodTimeUnit::new(std::time::Duration::from_secs(5))),
+                )),
+            )
+            .await
+            .unwrap();
+    }
+}
+
+#[async_trait]
+impl<S, T, M, R, N, MN, CI, CV, PTU, PT, RHandler, RStorage>
+    ReconciliationProtocol<S, T, M, R, N, MN, CI, CV, PTU, PT, RHandler, RStorage> for RIBLT
+where
+    S: NodeState,
+    T: RouteTask,
+    M: NodeSocketTaskMetadata,
+    R: MembershipNeighbors<MN>,
+    N: Membership<R, MN>,
+    MN: MembershipNeighbor + Send + Sync,
+    CI: ConnectionInfo<CV>,
+    CV: Sized,
+    PTU: PeriodTimeUnit + Send + Sync,
+    PT: PeriodicNodeSocketTask<PTU>,
+    RHandler: RouteHandler + Send + Sync,
+    RStorage: RouteStorage,
+{
+    fn state(&self) {
+        info!("Reconciliation States:");
+        for r in self.reconciliation_states.iter() {
+            info!("  {:?}: {:?}", r.key(), r.value());
+        }
+    }
+}
