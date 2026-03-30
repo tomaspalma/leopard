@@ -1,12 +1,14 @@
 use rkyv::{rancor::Error, validation::archive, Archive, Deserialize, Serialize};
 
+use std::rc::Rc;
 use std::sync::Arc;
 
 use message::{Message, MessageType, MessageTypeValues};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Archive)]
 pub enum RIBLTMessageTypeValues {
-    SYMBOL,
+    SendSymbol,
+    FinishedDecoding,
 }
 
 impl MessageTypeValues for RIBLTMessageTypeValues {}
@@ -17,16 +19,14 @@ pub struct RIBLTMessageType {
 }
 
 impl RIBLTMessageType {
-    pub fn new() -> Self {
-        Self {
-            value: RIBLTMessageTypeValues::SYMBOL,
-        }
+    pub fn new(value: RIBLTMessageTypeValues) -> Self {
+        Self { value }
     }
 }
 
 impl MessageType for RIBLTMessageType {
     fn value(&self) -> Box<dyn MessageTypeValues> {
-        Box::new(RIBLTMessageTypeValues::SYMBOL)
+        Box::new(self.value.clone())
     }
 }
 
@@ -79,6 +79,55 @@ impl riblt::Symbol for RIBLTCodedSymbol {
         let hash = u64::from_be_bytes(bytes[bytes.len() - 16..bytes.len() - 8].try_into().unwrap());
         let count = i64::from_be_bytes(bytes[bytes.len() - 8..].try_into().unwrap());
         Self { sum, hash, count }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, Archive)]
+pub struct RIBLTDecodedAllMessage {
+    _type: RIBLTMessageType,
+    protocol_id: Option<u64>,
+}
+
+impl RIBLTDecodedAllMessage {
+    pub fn new(_type: RIBLTMessageType, protocol_id: Option<u64>) -> Self {
+        Self { _type, protocol_id }
+    }
+}
+
+impl Message for RIBLTDecodedAllMessage {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn get_type(&self) -> Arc<dyn MessageType + Send + Sync> {
+        Arc::new(self._type.clone())
+    }
+
+    fn content(&self) -> Arc<Vec<u8>> {
+        Arc::new(vec![])
+    }
+
+    fn protocol(&self) -> Option<u64> {
+        self.protocol_id
+    }
+
+    fn serialize(&self, protocol: Option<u64>, sender_port: u16) -> Result<Vec<u8>, ()> {
+        let body_bytes = rkyv::to_bytes::<Error>(self).map_err(|_| ())?;
+
+        let mut packet = Vec::with_capacity(body_bytes.len() + 16);
+
+        if let Some(id) = protocol {
+            packet.extend_from_slice(&id.to_be_bytes());
+        } else {
+            packet.extend_from_slice(&[0; 8]);
+        }
+
+        packet.extend_from_slice(&sender_port.to_be_bytes());
+        packet.extend_from_slice(&[0; 6]);
+
+        packet.extend_from_slice(&body_bytes);
+
+        Ok(packet)
     }
 }
 

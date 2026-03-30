@@ -99,10 +99,13 @@ where
             info!("No default storage found");
         }
 
+        let state_clone = self.state.clone();
         self.state
             .add_socket_task_and_create(
                 NodeSocketRouteId::new(self.port.clone(), protocol_id),
                 Arc::new(ReceiveNeighborSymbolsTask::new(
+                    state_clone.node_identifier(),
+                    state_clone,
                     self.iblt.clone(),
                     self.reconciliation_riblts.clone(),
                 )),

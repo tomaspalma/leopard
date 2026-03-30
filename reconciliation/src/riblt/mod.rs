@@ -39,7 +39,7 @@ pub enum ReconciliationState {
     AwaitingConfirmation,
 }
 
-const RIBLT_PROTOCOL_ID: u64 = 1;
+pub const RIBLT_PROTOCOL_ID: u64 = 1;
 const BATCH_SIZE: usize = 5;
 const BATCH_INTERVAL: Duration = Duration::from_millis(5000);
 
@@ -64,6 +64,10 @@ impl RIBLT {
             iblt: Arc::new(DashMap::new()),
             reconciliation_riblts: Arc::new(DashMap::new()),
         }
+    }
+
+    pub fn peeling_successful(riblt: &mut UnmanagedRatelessIBLT<RIBLTSymbol>) -> bool {
+        riblt.is_empty()
     }
 
     fn update_symbols(
@@ -121,7 +125,7 @@ impl RIBLT {
                     own_address.clone(),
                     Box::new(neighbor_address.clone()),
                     Box::new(RIBLTSendSymbolMessage::new(
-                        RIBLTMessageType::new(),
+                        RIBLTMessageType::new(crate::riblt::messages::RIBLTMessageTypeValues::SendSymbol),
                         Some(protocol_id),
                         symbols,
                     )),

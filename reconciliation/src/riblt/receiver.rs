@@ -1,26 +1,39 @@
-use connection::{node::port::NodeAddress, route::RouteTask};
+use runtime::spawn;
+
+use crate::riblt::messages::RIBLTMessageType;
+use connection::{
+    node::{id::NodeIdentifier, port::NodeAddress},
+    route::RouteTask,
+};
 use dashmap::DashMap;
 use protocol::deserializer::ProtocolDeserializer;
 use riblt::{RatelessIBLT, UnmanagedRatelessIBLT};
+use state::node::{DefaultNodeState, NodeState};
 use std::{collections::HashSet, sync::Arc};
 use tracing::{error, info};
 
 use crate::riblt::{
-    messages::{RIBLTSendSymbolMessage, RIBLTSymbol},
-    RIBLTDeserializer, RIBLT,
+    messages::{RIBLTDecodedAllMessage, RIBLTSendSymbolMessage, RIBLTSymbol},
+    RIBLTDeserializer, RIBLT, RIBLT_PROTOCOL_ID,
 };
 
 pub struct ReceiveNeighborSymbolsTask {
+    identifier: Arc<dyn NodeIdentifier<NodeAddress, NodeAddress> + Send + Sync>,
+    state: Arc<DefaultNodeState>,
     riblts: Arc<DashMap<NodeAddress, RatelessIBLT<RIBLTSymbol, HashSet<RIBLTSymbol>>>>,
     reconciliation_riblts: Arc<DashMap<NodeAddress, UnmanagedRatelessIBLT<RIBLTSymbol>>>,
 }
 
 impl ReceiveNeighborSymbolsTask {
     pub fn new(
+        identifier: Arc<dyn NodeIdentifier<NodeAddress, NodeAddress> + Send + Sync>,
+        state: Arc<DefaultNodeState>,
         riblts: Arc<DashMap<NodeAddress, RatelessIBLT<RIBLTSymbol, HashSet<RIBLTSymbol>>>>,
         reconciliation_riblts: Arc<DashMap<NodeAddress, UnmanagedRatelessIBLT<RIBLTSymbol>>>,
     ) -> Self {
         Self {
+            identifier,
+            state,
             riblts,
             reconciliation_riblts,
         }
@@ -61,9 +74,13 @@ impl RouteTask for ReceiveNeighborSymbolsTask {
                                 Some(guard) => {
                                     info!("Found local IBLT for neighbor {:?}", neighbor);
                                     guard
-                                },
+                                }
                                 None => {
-                                    let all_keys: Vec<_> = self.riblts.iter().map(|r| format!("{:?}", r.key())).collect();
+                                    let all_keys: Vec<_> = self
+                                        .riblts
+                                        .iter()
+                                        .map(|r| format!("{:?}", r.key()))
+                                        .collect();
                                     panic!(
                                         "Key {:?} not found! \nAvailable keys: {:?} \nNeighbor Hash: {:?}", 
                                         neighbor, 
@@ -78,11 +95,29 @@ impl RouteTask for ReceiveNeighborSymbolsTask {
                                 }
                             };
 
-                            let mut a = local_riblt.collapse(&riblt);
-
-                            let peel_symbols = a.peel_all_symbols();
+                            let mut collapsed = local_riblt.collapse(&riblt);
+                            let peel_symbols = collapsed.peel_all_symbols();
 
                             info!("Peel symbols: {:?}", peel_symbols);
+
+                            if RIBLT::peeling_successful(&mut collapsed) {
+                                info!("Peeling successful for neighbor {:?}", neighbor);
+
+                                let state_clone = self.state.clone();
+                                let id_clone = self.identifier.connection_info().clone();
+                                let neighbor_clone = neighbor.clone();
+
+                                spawn!({
+                                    let _ = state_clone.send_through_socket(
+                                        id_clone,
+                                        Box::new(neighbor_clone), 
+                                        Box::new(RIBLTDecodedAllMessage::new(
+                                            RIBLTMessageType::new(crate::riblt::messages::RIBLTMessageTypeValues::FinishedDecoding),
+                                            Some(RIBLT_PROTOCOL_ID)
+                                                ))
+                                    ).await;
+                                });
+                            }
                         }
                         None => error!("Failed to get or create IBLT for neighbor {:?}", neighbor),
                     }
