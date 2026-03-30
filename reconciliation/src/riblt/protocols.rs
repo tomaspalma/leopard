@@ -73,12 +73,7 @@ where
             let items = storage.items();
             let mut symbols = HashSet::new();
 
-            for item in items {
-                symbols.insert(RIBLTSymbol {
-                    key: item.key().to_string(),
-                    value: item.value().as_bytes().to_vec(),
-                });
-            }
+            Self::update_symbols(&mut symbols, items);
 
             let iblt_handle = iblt_handle.clone();
             let storage_clone = storage.clone();
@@ -92,17 +87,7 @@ where
                         let items = storage.items();
                         let mut symbols = HashSet::new();
 
-                        for item in items {
-                            // let mut hasher = DefaultHasher::new();
-                            // item.key().hash(&mut hasher);
-                            // let key_hash = hasher.finish();
-                            //
-                            // symbols.insert(RIBLTCodedSymbol {
-                            //     sum: item.value().as_bytes().to_vec(),
-                            //     hash: key_hash,
-                            //     count: 1, // Base symbols start with a count of 1
-                            // });
-                        }
+                        Self::update_symbols(&mut symbols, items);
 
                         for mut guard in iblt.iter_mut() {
                             *guard = RatelessIBLT::new(symbols.clone());
@@ -118,6 +103,7 @@ where
             .add_socket_task_and_create(
                 NodeSocketRouteId::new(self.port.clone(), protocol_id),
                 Arc::new(ReceiveNeighborSymbolsTask::new(
+                    self.iblt.clone(),
                     self.reconciliation_riblts.clone(),
                 )),
                 Box::new(move |port: NodeAddress| {

@@ -12,31 +12,21 @@ use dashmap::DashMap;
 
 use message::Message;
 use std::sync::Arc;
-use tokio::sync::Mutex;
 use tracing::info;
 
-use async_trait::async_trait;
-use state::node::{DefaultNodeState, NodeState};
+use state::{
+    node::{DefaultNodeState, NodeState},
+    storage::item::DataStateItem,
+};
 
 use connection::{
-    node::{
-        default::{
-            DefaultNodeSocket, DefaultNodeSocketTaskMetadata, PeriodicDefaultNodeSocketTask,
-        },
-        port::{ConnectionInfo, NodeAddress},
-        NodeSocketTaskMetadata, PeriodicNodeSocketTask,
-    },
+    node::port::NodeAddress,
     request::handler::default::{TestMessage, TestMessageType},
-    route::{default::NodeSocketRouteId, RouteHandler, RouteStorage, RouteTask},
 };
 use membership::{Membership, MembershipNeighbor, MembershipNeighbors};
-use runtime::time::{PeriodTimeUnit, TokioPeriodTimeUnit};
 
-use crate::{
-    riblt::{
-        messages::{RIBLTCodedSymbol, RIBLTMessageType, RIBLTSendSymbolMessage, RIBLTSymbol},
-    },
-    ReconciliationProtocol,
+use crate::riblt::messages::{
+    RIBLTCodedSymbol, RIBLTMessageType, RIBLTSendSymbolMessage, RIBLTSymbol,
 };
 use riblt::{RatelessIBLT, UnmanagedRatelessIBLT};
 use rkyv::{from_bytes, rancor::Error};
@@ -76,6 +66,18 @@ impl RIBLT {
         }
     }
 
+    fn update_symbols(
+        symbols: &mut HashSet<RIBLTSymbol>,
+        items: Vec<Box<dyn DataStateItem + Send + Sync>>,
+    ) {
+        for item in items {
+            symbols.insert(RIBLTSymbol {
+                key: item.key().to_string(),
+                value: item.value().as_bytes().to_vec(),
+            });
+        }
+    }
+
     async fn sending_symbols_sequence(
         state: Arc<DefaultNodeState>,
         own_address: NodeAddress,
@@ -99,6 +101,7 @@ impl RIBLT {
                     Some(guard) => guard,
                     None => break,
                 };
+
                 for _ in 0..BATCH_SIZE {
                     let coded_symbol = iblt_guard.get_coded_symbol(current_index);
 
@@ -209,10 +212,11 @@ impl RIBLT {
     }
 
     fn check_if_neighbor_already_reconciling(
+        riblts: Arc<DashMap<NodeAddress, RatelessIBLT<RIBLTSymbol, HashSet<RIBLTSymbol>>>>,
         reconciliation_riblts: Arc<DashMap<NodeAddress, UnmanagedRatelessIBLT<RIBLTSymbol>>>,
         neighbor: NodeAddress,
     ) -> bool {
-        reconciliation_riblts.contains_key(&neighbor)
+        reconciliation_riblts.contains_key(&neighbor) && riblts.contains_key(&neighbor)
     }
 }
 

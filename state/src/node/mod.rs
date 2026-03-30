@@ -9,8 +9,8 @@ use config::node::NodeConfig;
 use connection::{node::default::NodeSocketRoute, route::RouteTask};
 use errors::node::NodeInitError;
 use message::Message;
-use runtime::time::TokioPeriodTimeUnit;
 use runtime::spawn;
+use runtime::time::TokioPeriodTimeUnit;
 
 use tokio::io::AsyncReadExt;
 
@@ -359,27 +359,26 @@ impl NodeState for DefaultNodeState {
 
             let socket = socket_arc.ok_or(NodeInitError::SocketDoesNotExist())?;
 
-            let value = socket.clone();
             let route_handler_clone = self.route_handler.clone();
+            let local_identifier = self.node_identifier().connection_info();
             spawn!({
-                let socket_clone = value.clone();
+                let socket_clone = socket.clone();
                 let route_handler = route_handler_clone.clone();
 
                 {
                     socket_clone.lock().await.bind().await.unwrap();
                 };
 
-                let (listener, address, request_handler) = {
-                    let mut guard = socket_clone.lock().await;
-                    (
-                        guard.listener().clone(),
-                        guard.connection_info(),
-                        guard.request_handler().clone(),
-                    )
+                let (listener, request_handler) = {
+                    let guard = socket_clone.lock().await;
+                    (guard.listener().clone(), guard.request_handler().clone())
                 };
 
                 loop {
-                    info!("Waiting for connection on port {}...", address.port());
+                    info!(
+                        "Waiting for connection on port {}...",
+                        local_identifier.port()
+                    );
 
                     match listener.accept().await {
                         Ok((mut stream, addr)) => {
@@ -387,13 +386,15 @@ impl NodeState for DefaultNodeState {
 
                             let mut buffer = Vec::new();
 
+                            println!("Current addr: {}", addr);
+
                             match stream.read_to_end(&mut buffer).await {
                                 Ok(_) => {
                                     info!("Buffers length: {}", buffer.len());
                                     let protocol_id = request_handler.handle(buffer.clone());
 
                                     route_handler
-                                        .handle(buffer, protocol_id, address.clone())
+                                        .handle(buffer, protocol_id, local_identifier.clone())
                                         .await;
                                 }
                                 Err(e) => {

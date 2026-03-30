@@ -1,8 +1,8 @@
 use connection::{node::port::NodeAddress, route::RouteTask};
 use dashmap::DashMap;
 use protocol::deserializer::ProtocolDeserializer;
-use riblt::UnmanagedRatelessIBLT;
-use std::sync::Arc;
+use riblt::{RatelessIBLT, UnmanagedRatelessIBLT};
+use std::{collections::HashSet, sync::Arc};
 use tracing::{error, info};
 
 use crate::riblt::{
@@ -11,14 +11,17 @@ use crate::riblt::{
 };
 
 pub struct ReceiveNeighborSymbolsTask {
+    riblts: Arc<DashMap<NodeAddress, RatelessIBLT<RIBLTSymbol, HashSet<RIBLTSymbol>>>>,
     reconciliation_riblts: Arc<DashMap<NodeAddress, UnmanagedRatelessIBLT<RIBLTSymbol>>>,
 }
 
 impl ReceiveNeighborSymbolsTask {
     pub fn new(
+        riblts: Arc<DashMap<NodeAddress, RatelessIBLT<RIBLTSymbol, HashSet<RIBLTSymbol>>>>,
         reconciliation_riblts: Arc<DashMap<NodeAddress, UnmanagedRatelessIBLT<RIBLTSymbol>>>,
     ) -> Self {
         Self {
+            riblts,
             reconciliation_riblts,
         }
     }
@@ -34,9 +37,10 @@ impl RouteTask for ReceiveNeighborSymbolsTask {
 
         match message {
             Some(msg) => {
-                info!("Received RIBLT message: {:?}", msg);
+                info!("Received RIBLT message");
 
                 if !RIBLT::check_if_neighbor_already_reconciling(
+                    self.riblts.clone(),
                     self.reconciliation_riblts.clone(),
                     neighbor.clone(),
                 ) {
@@ -52,6 +56,30 @@ impl RouteTask for ReceiveNeighborSymbolsTask {
                             cs.hash = symbol.hash;
                             cs.count = symbol.count;
                             riblt.add_coded_symbol(&cs);
+
+                            let mut local_riblt = match self.riblts.get_mut(&neighbor) {
+                                Some(guard) => guard,
+                                None => {
+                                    let all_keys: Vec<_> = self.riblts.iter().map(|r| format!("{:?}", r.key())).collect();
+                                    panic!(
+                                        "Key {:?} not found! \nAvailable keys: {:?} \nNeighbor Hash: {:?}", 
+                                        neighbor, 
+                                        all_keys,
+                                        {
+                                            use std::hash::{Hash, Hasher};
+                                            let mut s = std::collections::hash_map::DefaultHasher::new();
+                                            neighbor.hash(&mut s);
+                                            s.finish()
+                                        }
+                                    );
+                                }
+                            };
+
+                            let mut a = local_riblt.collapse(&riblt);
+
+                            let peel_symbols = a.peel_all_symbols();
+
+                            info!("Peel symbols: {:?}", peel_symbols);
                         }
                         None => error!("Failed to get or create IBLT for neighbor {:?}", neighbor),
                     }
