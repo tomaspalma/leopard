@@ -312,6 +312,7 @@ impl NodeState for DefaultNodeState {
         id: NodeSocketRouteId,
         task: Arc<dyn RouteTask + Send + Sync>,
     ) -> Result<(), String> {
+        info!("Node socket route: {:?}", id);
         self.route_handler()
             .add_route(id, Arc::new(NodeSocketRoute::new(task)));
 
@@ -386,15 +387,24 @@ impl NodeState for DefaultNodeState {
 
                             let mut buffer = Vec::new();
 
-                            println!("Current addr: {}", addr);
-
                             match stream.read_to_end(&mut buffer).await {
                                 Ok(_) => {
                                     info!("Buffers length: {}", buffer.len());
+                                    if buffer.len() < 16 {
+                                        error!("Buffer too small");
+                                        continue;
+                                    }
                                     let protocol_id = request_handler.handle(buffer.clone());
 
+                                    let sender_port = 
+                                        u16::from_be_bytes(buffer[8..10].try_into().unwrap());
+                                    let sender_address =
+                                        NodeAddress::new(addr.ip().to_string(), sender_port);
+
+                                    println!("Sender address: {:?}", sender_address);
+
                                     route_handler
-                                        .handle(buffer, protocol_id, local_identifier.clone())
+                                        .handle(buffer, protocol_id, local_identifier.clone(), sender_address)
                                         .await;
                                 }
                                 Err(e) => {

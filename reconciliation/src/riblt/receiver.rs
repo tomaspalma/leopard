@@ -58,7 +58,10 @@ impl RouteTask for ReceiveNeighborSymbolsTask {
                             riblt.add_coded_symbol(&cs);
 
                             let mut local_riblt = match self.riblts.get_mut(&neighbor) {
-                                Some(guard) => guard,
+                                Some(guard) => {
+                                    info!("Found local IBLT for neighbor {:?}", neighbor);
+                                    guard
+                                },
                                 None => {
                                     let all_keys: Vec<_> = self.riblts.iter().map(|r| format!("{:?}", r.key())).collect();
                                     panic!(

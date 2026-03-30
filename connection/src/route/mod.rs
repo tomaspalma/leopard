@@ -37,6 +37,6 @@ pub trait RouteStorage {
 pub trait RouteHandler {
     type RouteId;
 
-    async fn handle(&self, message: Vec<u8>, protocol: u64, port: NodeAddress);
+    async fn handle(&self, message: Vec<u8>, protocol: u64, local_address: NodeAddress, sender_address: NodeAddress);
     fn add_route(&self, id: Self::RouteId, route: Arc<dyn Route + Send + Sync>);
 }

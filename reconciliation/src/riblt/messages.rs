@@ -124,14 +124,19 @@ impl Message for RIBLTSendSymbolMessage {
         self.protocol_id
     }
 
-    fn serialize(&self, protocol: Option<u64>) -> Result<Vec<u8>, ()> {
+    fn serialize(&self, protocol: Option<u64>, sender_port: u16) -> Result<Vec<u8>, ()> {
         let body_bytes = rkyv::to_bytes::<Error>(self).map_err(|_| ())?;
 
-        let mut packet = Vec::with_capacity(body_bytes.len() + 8);
+        let mut packet = Vec::with_capacity(body_bytes.len() + 16);
 
         if let Some(id) = protocol {
             packet.extend_from_slice(&id.to_be_bytes());
+        } else {
+            packet.extend_from_slice(&[0; 8]);
         }
+
+        packet.extend_from_slice(&sender_port.to_be_bytes());
+        packet.extend_from_slice(&[0; 6]);
 
         packet.extend_from_slice(&body_bytes);
 

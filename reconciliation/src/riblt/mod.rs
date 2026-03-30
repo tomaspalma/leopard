@@ -231,11 +231,11 @@ impl RIBLTDeserializer {
 
 impl ProtocolDeserializer for RIBLTDeserializer {
     fn deserialize(&self, bytes: Vec<u8>) -> Arc<dyn Message> {
-        if bytes.len() < 8 {
+        if bytes.len() < 16 {
             return Arc::new(TestMessage::new(Arc::new(TestMessageType::new()), None));
         }
 
-        let payload = &bytes[8..];
+        let payload = &bytes[16..];
 
         match from_bytes::<RIBLTSendSymbolMessage, Error>(payload) {
             Ok(msg) => Arc::new(msg),
