@@ -66,8 +66,7 @@ where
         let state_handle = self.state.clone();
         let port_for_closure = self.port.clone();
         let protocol_id = self.id;
-        let reconciliation_states = self.reconciliation_states.clone();
-        let iblt_handle = self.iblt.clone();
+        let neighbor_states = self.neighbor_states.clone();
 
         if let Some(storage) = self.state.get_storage("default".to_string()) {
             let items = storage.items();
@@ -75,12 +74,12 @@ where
 
             Self::update_symbols(&mut symbols, items);
 
-            let iblt_handle = iblt_handle.clone();
+            let neighbor_states_handle = neighbor_states.clone();
             let storage_clone = storage.clone();
             storage.add_listener(
                 StorageAction::Insert,
                 Box::new(move |_item| {
-                    let iblt = iblt_handle.clone();
+                    let neighbor_states_handle = neighbor_states_handle.clone();
                     let storage = storage_clone.clone();
 
                     spawn!({
@@ -89,8 +88,8 @@ where
 
                         Self::update_symbols(&mut symbols, items);
 
-                        for mut guard in iblt.iter_mut() {
-                            *guard = RatelessIBLT::new(symbols.clone());
+                        for mut guard in neighbor_states_handle.iter_mut() {
+                            guard.local_iblt = RatelessIBLT::new(symbols.clone());
                         }
                     });
                 }),
@@ -106,9 +105,7 @@ where
                 Arc::new(ReceiveNeighborSymbolsTask::new(
                     state_clone.node_identifier(),
                     state_clone,
-                    self.iblt.clone(),
-                    self.reconciliation_riblts.clone(),
-                    self.reconciliation_states.clone(),
+                    self.neighbor_states.clone(),
                 )),
                 Box::new(move |port: NodeAddress| {
                     Arc::new(Mutex::new(DefaultNodeSocket::new(port)))
@@ -125,16 +122,14 @@ where
                         let state = state_handle.clone();
                         let port = port_for_closure.clone();
                         let protocol_id = protocol_id;
-                        let reconciliation_states = reconciliation_states.clone();
-                        let iblt = iblt_handle.clone();
+                        let neighbor_states = neighbor_states.clone();
 
                         Box::pin(async move {
                             Self::reconciliation_mechanism(
                                 state,
                                 port,
                                 protocol_id,
-                                reconciliation_states,
-                                iblt,
+                                neighbor_states,
                             )
                             .await
                         })
@@ -166,8 +161,8 @@ where
 {
     fn state(&self) {
         info!("Reconciliation States:");
-        for r in self.reconciliation_states.iter() {
-            info!("  {:?}: {:?}", r.key(), r.value());
+        for r in self.neighbor_states.iter() {
+            info!("  {:?}: {:?}", r.key(), r.value().state);
         }
     }
 }

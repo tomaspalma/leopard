@@ -2,7 +2,7 @@ use runtime::spawn;
 
 use crate::riblt::{
     messages::{RIBLTMessageType, RIBLTMessageTypeValues},
-    ReconciliationState,
+    ReconciliationNeighborStatus,
 };
 
 use connection::{
@@ -11,96 +11,66 @@ use connection::{
 };
 use dashmap::DashMap;
 use protocol::deserializer::ProtocolDeserializer;
-use riblt::{RatelessIBLT, UnmanagedRatelessIBLT};
 use state::node::{DefaultNodeState, NodeState};
-use std::{collections::HashSet, sync::Arc};
+use std::sync::Arc;
 use tracing::{error, info};
 
 use crate::riblt::{
-    messages::{RIBLTDecodedAllMessage, RIBLTSendSymbolMessage, RIBLTSymbol},
+    messages::{RIBLTDecodedAllMessage, RIBLTSendSymbolMessage},
     RIBLTDeserializer, RIBLT, RIBLT_PROTOCOL_ID,
 };
 
 pub struct ReceiveNeighborSymbolsTask {
     identifier: Arc<dyn NodeIdentifier<NodeAddress, NodeAddress> + Send + Sync>,
     state: Arc<DefaultNodeState>,
-    reconciliation_states: Arc<DashMap<NodeAddress, ReconciliationState>>,
-    riblts: Arc<DashMap<NodeAddress, RatelessIBLT<RIBLTSymbol, HashSet<RIBLTSymbol>>>>,
-    reconciliation_riblts: Arc<DashMap<NodeAddress, UnmanagedRatelessIBLT<RIBLTSymbol>>>,
+    neighbor_states: Arc<DashMap<NodeAddress, crate::riblt::ReconciliationNeighborStatus>>,
 }
 
 impl ReceiveNeighborSymbolsTask {
     pub fn new(
         identifier: Arc<dyn NodeIdentifier<NodeAddress, NodeAddress> + Send + Sync>,
         state: Arc<DefaultNodeState>,
-        riblts: Arc<DashMap<NodeAddress, RatelessIBLT<RIBLTSymbol, HashSet<RIBLTSymbol>>>>,
-        reconciliation_riblts: Arc<DashMap<NodeAddress, UnmanagedRatelessIBLT<RIBLTSymbol>>>,
-        reconciliation_states: Arc<DashMap<NodeAddress, ReconciliationState>>,
+        neighbor_states: Arc<DashMap<NodeAddress, crate::riblt::ReconciliationNeighborStatus>>,
     ) -> Self {
         Self {
             identifier,
             state,
-            riblts,
-            reconciliation_riblts,
-            reconciliation_states,
+            neighbor_states,
         }
     }
 
     fn receive_symbols_neighbor_decoded(&self, neighbor: NodeAddress) {
         info!("Neighbor successfully decoded symbols");
 
-        self.reconciliation_riblts.remove(&neighbor);
-        self.riblts.remove(&neighbor);
-        self.reconciliation_states.remove(&neighbor);
+        self.neighbor_states.remove(&neighbor);
     }
 
     fn receive_incoming_symbols(&self, message: &RIBLTSendSymbolMessage, neighbor: NodeAddress) {
         info!("Received RIBLT message");
 
         if !RIBLT::check_if_neighbor_already_reconciling(
-            self.riblts.clone(),
-            self.reconciliation_riblts.clone(),
+            self.neighbor_states.clone(),
             neighbor.clone(),
         ) {
-            self.reconciliation_riblts
-                .insert(neighbor.clone(), UnmanagedRatelessIBLT::new());
+            return;
         }
 
         for symbol in message.symbols() {
-            match self.reconciliation_riblts.get_mut(&neighbor) {
-                Some(mut riblt) => {
+            match self.neighbor_states.get_mut(&neighbor) {
+                Some(mut status) => {
                     let mut cs = riblt::CodedSymbol::new();
                     cs.sum = symbol.sum.clone();
                     cs.hash = symbol.hash;
                     cs.count = symbol.count;
-                    riblt.add_coded_symbol(&cs);
+                    status.remote_iblt.add_coded_symbol(&cs);
 
-                    let mut local_riblt = match self.riblts.get_mut(&neighbor) {
-                        Some(guard) => {
-                            info!("Found local IBLT for neighbor {:?}", neighbor);
-                            guard
-                        }
-                        None => {
-                            let all_keys: Vec<_> = self
-                                .riblts
-                                .iter()
-                                .map(|r| format!("{:?}", r.key()))
-                                .collect();
-                            panic!(
-                                "Key {:?} not found! \nAvailable keys: {:?} \nNeighbor Hash: {:?}",
-                                neighbor,
-                                all_keys,
-                                {
-                                    use std::hash::{Hash, Hasher};
-                                    let mut s = std::collections::hash_map::DefaultHasher::new();
-                                    neighbor.hash(&mut s);
-                                    s.finish()
-                                }
-                            );
-                        }
-                    };
+                    let ReconciliationNeighborStatus {
+                        local_iblt,
+                        remote_iblt,
+                        ..
+                    } = &mut *status;
 
-                    let mut collapsed = local_riblt.collapse(&riblt);
+                    let mut collapsed = local_iblt.collapse(remote_iblt);
                     let peel_symbols = collapsed.peel_all_symbols();
 
                     info!("Peel symbols: {:?}", peel_symbols);
@@ -128,7 +98,7 @@ impl ReceiveNeighborSymbolsTask {
                         });
                     }
                 }
-                None => error!("Failed to get or create IBLT for neighbor {:?}", neighbor),
+                None => error!("Failed to get IBLT for neighbor {:?}", neighbor),
             }
         }
     }
