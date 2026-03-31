@@ -74,7 +74,7 @@ impl RIBLT {
         for item in items {
             symbols.insert(RIBLTSymbol {
                 key: item.key().to_string(),
-                value: item.value().as_bytes().to_vec(),
+                value: item.value().to_string(),
             });
         }
     }
@@ -177,7 +177,7 @@ impl RIBLT {
                 for item in storage.items() {
                     symbols.insert(RIBLTSymbol {
                         key: item.key().to_string(),
-                        value: item.value().as_bytes().to_vec(),
+                        value: item.value().to_string(),
                     });
                 }
             }

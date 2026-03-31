@@ -43,7 +43,7 @@ impl MessageType for RIBLTMessageType {
 #[derive(Debug, Clone, Serialize, Deserialize, Archive, PartialEq, Eq, Hash)]
 pub struct RIBLTSymbol {
     pub key: String,
-    pub value: Vec<u8>,
+    pub value: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Archive, PartialEq, Eq, Hash)]
@@ -57,8 +57,18 @@ impl riblt::Symbol for RIBLTSymbol {
     const BYTE_ARRAY_LENGTH: usize = 128;
 
     fn encode_to_bytes(&self) -> Vec<u8> {
-        let mut bytes = self.key.as_bytes().to_vec();
-        bytes.extend_from_slice(&self.value);
+        let mut bytes = Vec::with_capacity(Self::BYTE_ARRAY_LENGTH);
+        let key_bytes = self.key.as_bytes();
+        
+        // Use 1 byte for key length
+        bytes.push(key_bytes.len() as u8);
+        bytes.extend_from_slice(key_bytes);
+        
+        // Use 1 byte for value length
+        let val_bytes = self.value.as_bytes();
+        bytes.push(val_bytes.len() as u8);
+        bytes.extend_from_slice(val_bytes);
+        
         if bytes.len() < Self::BYTE_ARRAY_LENGTH {
             bytes.resize(Self::BYTE_ARRAY_LENGTH, 0);
         }
@@ -66,9 +76,35 @@ impl riblt::Symbol for RIBLTSymbol {
     }
 
     fn decode_from_bytes(bytes: &Vec<u8>) -> Self {
-        let key_end = bytes.iter().position(|&b| b == 0).unwrap_or(bytes.len());
-        let key = String::from_utf8_lossy(&bytes[..key_end]).to_string();
-        let value = bytes[key_end..].to_vec();
+        if bytes.is_empty() {
+            return Self { key: String::new(), value: String::new() };
+        }
+        
+        let key_len = bytes[0] as usize;
+        let mut current_idx = 1;
+        
+        let key = if current_idx + key_len <= bytes.len() {
+            let k = String::from_utf8_lossy(&bytes[current_idx..current_idx + key_len]).to_string();
+            current_idx += key_len;
+            k
+        } else {
+            String::new()
+        };
+        
+        let value_len = if current_idx < bytes.len() {
+            let vl = bytes[current_idx] as usize;
+            current_idx += 1;
+            vl
+        } else {
+            0
+        };
+        
+        let value = if current_idx + value_len <= bytes.len() {
+            String::from_utf8_lossy(&bytes[current_idx..current_idx + value_len]).to_string()
+        } else {
+            String::new()
+        };
+        
         Self { key, value }
     }
 }
