@@ -1,16 +1,14 @@
+pub mod deserializer;
 pub mod messages;
 pub mod protocols;
 pub mod receiver;
 
 use runtime::spawn;
 
-use protocol::deserializer::ProtocolDeserializer;
-
-use tracing::error;
+use deserializer::RIBLTDeserializer;
 
 use dashmap::DashMap;
 
-use message::Message;
 use std::sync::Arc;
 use tracing::info;
 
@@ -19,18 +17,14 @@ use state::{
     storage::item::DataStateItem,
 };
 
-use connection::{
-    node::port::NodeAddress,
-    request::handler::default::{TestMessage, TestMessageType},
-};
+use connection::node::port::NodeAddress;
 use membership::{Membership, MembershipNeighbor, MembershipNeighbors};
 
 use crate::riblt::messages::{
-    RIBLTCodedSymbol, RIBLTMessageType, RIBLTMessageTypeValues, RIBLTMessageWrapper,
-    RIBLTSendSymbolMessage, RIBLTSymbol,
+    RIBLTCodedSymbol, RIBLTMessageType, RIBLTMessageTypeValues, RIBLTSendSymbolMessage, RIBLTSymbol,
 };
 use riblt::{RatelessIBLT, UnmanagedRatelessIBLT};
-use rkyv::{from_bytes, rancor::Error};
+
 use std::collections::HashSet;
 use tokio::time::{sleep, Duration};
 
@@ -222,35 +216,5 @@ impl RIBLT {
         neighbor: NodeAddress,
     ) -> bool {
         reconciliation_riblts.contains_key(&neighbor) && riblts.contains_key(&neighbor)
-    }
-}
-
-#[derive(Default)]
-pub struct RIBLTDeserializer {}
-
-impl RIBLTDeserializer {
-    pub fn new() -> Self {
-        Self {}
-    }
-}
-
-impl ProtocolDeserializer for RIBLTDeserializer {
-    fn deserialize(&self, bytes: Vec<u8>) -> Arc<dyn Message> {
-        if bytes.len() < 16 {
-            return Arc::new(TestMessage::new(Arc::new(TestMessageType::new()), None));
-        }
-
-        let payload = &bytes[16..];
-
-        match from_bytes::<RIBLTMessageWrapper, Error>(payload) {
-            Ok(wrapper) => match wrapper {
-                RIBLTMessageWrapper::SendSymbol(msg) => Arc::new(msg),
-                RIBLTMessageWrapper::DecodedAll(msg) => Arc::new(msg),
-            },
-            Err(e) => {
-                error!("Failed to deserialize RIBLT message: {}", e);
-                Arc::new(TestMessage::new(Arc::new(TestMessageType::new()), None))
-            }
-        }
     }
 }
