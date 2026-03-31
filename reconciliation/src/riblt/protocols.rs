@@ -108,6 +108,7 @@ where
                     state_clone,
                     self.iblt.clone(),
                     self.reconciliation_riblts.clone(),
+                    self.reconciliation_states.clone(),
                 )),
                 Box::new(move |port: NodeAddress| {
                     Arc::new(Mutex::new(DefaultNodeSocket::new(port)))

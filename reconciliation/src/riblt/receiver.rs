@@ -1,6 +1,9 @@
 use runtime::spawn;
 
-use crate::riblt::messages::{RIBLTMessageType, RIBLTMessageTypeValues};
+use crate::riblt::{
+    messages::{RIBLTMessageType, RIBLTMessageTypeValues},
+    ReconciliationState,
+};
 
 use connection::{
     node::{id::NodeIdentifier, port::NodeAddress},
@@ -21,6 +24,7 @@ use crate::riblt::{
 pub struct ReceiveNeighborSymbolsTask {
     identifier: Arc<dyn NodeIdentifier<NodeAddress, NodeAddress> + Send + Sync>,
     state: Arc<DefaultNodeState>,
+    reconciliation_states: Arc<DashMap<NodeAddress, ReconciliationState>>,
     riblts: Arc<DashMap<NodeAddress, RatelessIBLT<RIBLTSymbol, HashSet<RIBLTSymbol>>>>,
     reconciliation_riblts: Arc<DashMap<NodeAddress, UnmanagedRatelessIBLT<RIBLTSymbol>>>,
 }
@@ -31,13 +35,23 @@ impl ReceiveNeighborSymbolsTask {
         state: Arc<DefaultNodeState>,
         riblts: Arc<DashMap<NodeAddress, RatelessIBLT<RIBLTSymbol, HashSet<RIBLTSymbol>>>>,
         reconciliation_riblts: Arc<DashMap<NodeAddress, UnmanagedRatelessIBLT<RIBLTSymbol>>>,
+        reconciliation_states: Arc<DashMap<NodeAddress, ReconciliationState>>,
     ) -> Self {
         Self {
             identifier,
             state,
             riblts,
             reconciliation_riblts,
+            reconciliation_states,
         }
+    }
+
+    fn receive_symbols_neighbor_decoded(&self, neighbor: NodeAddress) {
+        info!("Neighbor successfully decoded symbols");
+
+        self.reconciliation_riblts.remove(&neighbor);
+        self.riblts.remove(&neighbor);
+        self.reconciliation_states.remove(&neighbor);
     }
 
     fn receive_incoming_symbols(&self, message: &RIBLTSendSymbolMessage, neighbor: NodeAddress) {
@@ -142,7 +156,7 @@ impl RouteTask for ReceiveNeighborSymbolsTask {
                     }
                 }
                 RIBLTMessageTypeValues::FinishedDecoding => {
-                    info!("Received FinishedDecoding message from {:?}", neighbor);
+                    self.receive_symbols_neighbor_decoded(neighbor);
                 }
             }
         } else {
