@@ -26,7 +26,8 @@ use connection::{
 use membership::{Membership, MembershipNeighbor, MembershipNeighbors};
 
 use crate::riblt::messages::{
-    RIBLTCodedSymbol, RIBLTMessageType, RIBLTSendSymbolMessage, RIBLTSymbol,
+    RIBLTCodedSymbol, RIBLTMessageType, RIBLTMessageTypeValues, RIBLTMessageWrapper,
+    RIBLTSendSymbolMessage, RIBLTSymbol,
 };
 use riblt::{RatelessIBLT, UnmanagedRatelessIBLT};
 use rkyv::{from_bytes, rancor::Error};
@@ -125,7 +126,7 @@ impl RIBLT {
                     own_address.clone(),
                     Box::new(neighbor_address.clone()),
                     Box::new(RIBLTSendSymbolMessage::new(
-                        RIBLTMessageType::new(crate::riblt::messages::RIBLTMessageTypeValues::SendSymbol),
+                        RIBLTMessageType::new(RIBLTMessageTypeValues::SendSymbol),
                         Some(protocol_id),
                         symbols,
                     )),
@@ -241,8 +242,11 @@ impl ProtocolDeserializer for RIBLTDeserializer {
 
         let payload = &bytes[16..];
 
-        match from_bytes::<RIBLTSendSymbolMessage, Error>(payload) {
-            Ok(msg) => Arc::new(msg),
+        match from_bytes::<RIBLTMessageWrapper, Error>(payload) {
+            Ok(wrapper) => match wrapper {
+                RIBLTMessageWrapper::SendSymbol(msg) => Arc::new(msg),
+                RIBLTMessageWrapper::DecodedAll(msg) => Arc::new(msg),
+            },
             Err(e) => {
                 error!("Failed to deserialize RIBLT message: {}", e);
                 Arc::new(TestMessage::new(Arc::new(TestMessageType::new()), None))

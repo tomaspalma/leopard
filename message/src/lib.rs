@@ -3,7 +3,9 @@ pub mod deserializer;
 use std::any::Any;
 use std::sync::Arc;
 
-pub trait MessageTypeValues {}
+pub trait MessageTypeValues: Any {
+    fn as_any(&self) -> &dyn Any;
+}
 
 pub trait MessageType {
     fn value(&self) -> Box<dyn MessageTypeValues>;

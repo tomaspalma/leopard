@@ -6,12 +6,22 @@ use std::sync::Arc;
 use message::{Message, MessageType, MessageTypeValues};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Archive)]
+pub enum RIBLTMessageWrapper {
+    SendSymbol(RIBLTSendSymbolMessage),
+    DecodedAll(RIBLTDecodedAllMessage),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Archive)]
 pub enum RIBLTMessageTypeValues {
     SendSymbol,
     FinishedDecoding,
 }
 
-impl MessageTypeValues for RIBLTMessageTypeValues {}
+impl MessageTypeValues for RIBLTMessageTypeValues {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, Archive)]
 pub struct RIBLTMessageType {
@@ -82,7 +92,7 @@ impl riblt::Symbol for RIBLTCodedSymbol {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Archive)]
+#[derive(Debug, Clone, Serialize, Deserialize, Archive)]
 pub struct RIBLTDecodedAllMessage {
     _type: RIBLTMessageType,
     protocol_id: Option<u64>,
@@ -112,7 +122,8 @@ impl Message for RIBLTDecodedAllMessage {
     }
 
     fn serialize(&self, protocol: Option<u64>, sender_port: u16) -> Result<Vec<u8>, ()> {
-        let body_bytes = rkyv::to_bytes::<Error>(self).map_err(|_| ())?;
+        let wrapper = RIBLTMessageWrapper::DecodedAll(self.clone());
+        let body_bytes = rkyv::to_bytes::<Error>(&wrapper).map_err(|_| ())?;
 
         let mut packet = Vec::with_capacity(body_bytes.len() + 16);
 
@@ -131,7 +142,7 @@ impl Message for RIBLTDecodedAllMessage {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Archive)]
+#[derive(Debug, Clone, Serialize, Deserialize, Archive)]
 pub struct RIBLTSendSymbolMessage {
     _type: RIBLTMessageType,
     protocol_id: Option<u64>,
@@ -174,7 +185,8 @@ impl Message for RIBLTSendSymbolMessage {
     }
 
     fn serialize(&self, protocol: Option<u64>, sender_port: u16) -> Result<Vec<u8>, ()> {
-        let body_bytes = rkyv::to_bytes::<Error>(self).map_err(|_| ())?;
+        let wrapper = RIBLTMessageWrapper::SendSymbol(self.clone());
+        let body_bytes = rkyv::to_bytes::<Error>(&wrapper).map_err(|_| ())?;
 
         let mut packet = Vec::with_capacity(body_bytes.len() + 16);
 

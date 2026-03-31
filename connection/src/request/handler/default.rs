@@ -31,7 +31,11 @@ impl TestMessageTypeValues {
     }
 }
 
-impl MessageTypeValues for TestMessageTypeValues {}
+impl MessageTypeValues for TestMessageTypeValues {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+}
 
 #[derive(Archive, Serialize, Deserialize)]
 pub struct TestMessageType {}
