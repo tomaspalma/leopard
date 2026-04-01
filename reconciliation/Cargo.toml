@@ -10,7 +10,7 @@ message = { path = "../message" }
 connection = { path = "../connection" }
 membership = { path = "../membership" }
 runtime = { path = "../runtime" }
-riblt = "0.1.1"
+riblt = { path = "../riblt" }
 async-trait = "0.1.89"
 tokio = "1.50.0"
 tracing = "0.1.44"

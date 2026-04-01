@@ -1,7 +1,9 @@
 use runtime::spawn;
 
+use riblt::symbol::PeelableResult;
+
 use crate::riblt::{
-    messages::{RIBLTMessageType, RIBLTMessageTypeValues},
+    messages::{RIBLTMessageType, RIBLTMessageTypeValues, RIBLTSymbol},
     ReconciliationNeighborStatus,
 };
 
@@ -45,6 +47,47 @@ impl ReceiveNeighborSymbolsTask {
         self.neighbor_states.remove(&neighbor);
     }
 
+    fn filter_remote_peeled_symbols(
+        &self,
+        peeled_symbols: Vec<PeelableResult<RIBLTSymbol>>,
+    ) -> Vec<RIBLTSymbol> {
+        info!("Filtering remote peeled symbols: {:?}", peeled_symbols);
+        peeled_symbols
+            .into_iter()
+            .filter(|symbol| match symbol {
+                PeelableResult::Remote(_) => true,
+                _ => false,
+            })
+            .map(|symbol| match symbol {
+                PeelableResult::Remote(s) => s,
+                _ => unreachable!(),
+            })
+            .collect()
+    }
+
+    fn apply_reconciliation_result(&self, result: Vec<RIBLTSymbol>) {
+        match result.len() {
+            0 => info!("No reconciliation result"),
+            _ => info!("Reconciliation result length: {}", result.len()),
+        }
+
+        info!("Applying reconciliation result: {:?}", result);
+
+        let state_clone = self.state.clone();
+        spawn!({
+            if let Some(storage) = state_clone.get_storage("default".to_string()) {
+                for symbol in result {
+                    storage
+                        .store(Box::new(state::storage::item::DefaultDataStateItem::new(
+                            symbol.key,
+                            symbol.value,
+                        )))
+                        .await;
+                }
+            }
+        });
+    }
+
     fn receive_incoming_symbols(&self, message: &RIBLTSendSymbolMessage, neighbor: NodeAddress) {
         info!("Received RIBLT message");
 
@@ -81,6 +124,10 @@ impl ReceiveNeighborSymbolsTask {
                         let state_clone = self.state.clone();
                         let id_clone = self.identifier.connection_info().clone();
                         let neighbor_clone = neighbor.clone();
+
+                        self.apply_reconciliation_result(
+                            self.filter_remote_peeled_symbols(peel_symbols),
+                        );
 
                         spawn!({
                             let _ = state_clone

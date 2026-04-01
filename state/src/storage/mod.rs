@@ -1,6 +1,8 @@
 pub mod item;
 pub mod state;
 
+use tracing::info;
+
 use async_trait::async_trait;
 
 use item::{DataStateItem, DefaultDataStateItem};
@@ -102,6 +104,8 @@ impl DataStateStorage for KeyValueDataStateStorage {
     }
 
     async fn save(&self, item: Box<dyn DataStateItem + Send + Sync>) {
+        info!("Saving item {}:{}", item.key(), item.value());
+
         let key = item.key().to_string();
         let value = item.value().to_string();
 
