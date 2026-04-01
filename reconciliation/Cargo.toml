@@ -17,3 +17,7 @@ tracing = "0.1.44"
 statig = "0.4.1"
 rkyv = "0.8.15"
 dashmap = "6.1.0"
+blake3 = "1.8.4"
+bincode = "1.3.3"
+serde = { version = "1.0.228", features = ["derive"] }
+rand = "0.10.0"

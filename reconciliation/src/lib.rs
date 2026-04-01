@@ -14,6 +14,7 @@ pub mod hybrid;
 pub mod pbs;
 pub mod pin_sketch;
 pub mod riblt;
+pub mod merkle_tree;
 
 #[async_trait]
 pub trait ReconciliationProtocol<S, T, M, R, N, MN, CI, CV, PTU, PT, RHandler, RStorage>:
