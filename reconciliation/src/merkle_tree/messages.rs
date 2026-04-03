@@ -9,7 +9,7 @@ use message::{Message, MessageType, MessageTypeValues};
 pub enum MerkleTreeMessageWrapper {
     SyncRoot([u8; 32]),
     SyncNodeRequest(String),
-    SyncNodeResponse(String, [u8; 32], [u8; 32], Option<[u8; 32]>),
+    SyncNodeResponse(String, [u8; 32], [u8; 32], Option<[u8; 32]>, Option<String>),
     DataRequest(String),
     DataResponse(String, String),
 }

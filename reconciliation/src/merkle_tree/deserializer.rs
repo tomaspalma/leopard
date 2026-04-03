@@ -42,7 +42,7 @@ impl ProtocolDeserializer for MerkleTreeDeserializer {
             MerkleTreeMessageWrapper::SyncNodeRequest(_) => {
                 MerkleTreeMessageTypeValues::SyncNodeRequest
             }
-            MerkleTreeMessageWrapper::SyncNodeResponse(_, _, _, _) => {
+            MerkleTreeMessageWrapper::SyncNodeResponse(_, _, _, _, _) => {
                 MerkleTreeMessageTypeValues::SyncNodeResponse
             }
             MerkleTreeMessageWrapper::DataRequest(_) => MerkleTreeMessageTypeValues::DataRequest,

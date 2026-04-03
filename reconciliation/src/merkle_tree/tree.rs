@@ -31,6 +31,33 @@ impl BinaryMerkleTree {
         }
     }
 
+    pub fn get_node(&self, path: &str) -> Option<(MerkleNode, Option<[u8; 32]>)> {
+        let root = self.root.read().unwrap();
+        let mut current = root.as_deref()?;
+        let mut parent_hash = None;
+
+        if path == "root" {
+            return Some(((*current).clone(), parent_hash));
+        }
+
+        let parts: Vec<&str> = path.split('-').collect();
+        // Assume path is like "root-left-right" or "0-1"
+        for part in parts {
+            if part == "root" {
+                continue;
+            }
+            parent_hash = Some(current.hash);
+            if part == "0" || part == "left" {
+                current = current.left.as_deref()?;
+            } else if part == "1" || part == "right" {
+                current = current.right.as_deref()?;
+            } else {
+                return None;
+            }
+        }
+        Some(((*current).clone(), parent_hash))
+    }
+
     pub fn insert(&self, key: String, value: String) {
         {
             let mut data = self.data.write().unwrap();
