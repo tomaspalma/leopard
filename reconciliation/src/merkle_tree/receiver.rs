@@ -1,3 +1,4 @@
+use metrics::counter;
 use std::sync::Arc;
 use tracing::{error, info};
 
@@ -70,6 +71,8 @@ impl ReceiveMerkleTreeMessageTask {
         neighbor: NodeAddress,
         root_hash: &[u8; 32],
     ) {
+        counter!("merkle_tree_sync_root_received", "neighbor" => format!("{:?}", neighbor))
+            .increment(1);
         let local_root = self.tree.get_root_hash();
         if local_root != *root_hash {
             info!("Root hash mismatch. Requesting children nodes sync.");
@@ -116,6 +119,8 @@ impl ReceiveMerkleTreeMessageTask {
         neighbor: NodeAddress,
         node_id: &String,
     ) {
+        counter!("merkle_tree_sync_node_request_received", "neighbor" => format!("{:?}", neighbor))
+            .increment(1);
         info!("Received SyncNodeRequest from {:?}", node_id);
         let root_hash = self.tree.get_root_hash();
 
@@ -156,6 +161,8 @@ impl ReceiveMerkleTreeMessageTask {
         hash: &[u8; 32],
         remote_key: &Option<String>,
     ) {
+        counter!("merkle_tree_sync_node_response_received", "neighbor" => format!("{:?}", neighbor))
+            .increment(1);
         info!("Received SyncNodeResponse for {:?}", node_id);
         let local_node = self.tree.get_node(node_id);
         let local_hash = local_node.map_or([0; 32], |(n, _)| n.hash);
@@ -222,6 +229,8 @@ impl ReceiveMerkleTreeMessageTask {
     }
 
     fn handle_data_request(&self, protocol_id: Option<u64>, neighbor: NodeAddress, key: &String) {
+        counter!("merkle_tree_data_request_received", "neighbor" => format!("{:?}", neighbor))
+            .increment(1);
         info!("Received DataRequest for key {:?}", key);
         if let Some(value) = self.tree.data.read().unwrap().get(key).cloned() {
             let state_clone = self.state.clone();
@@ -242,6 +251,7 @@ impl ReceiveMerkleTreeMessageTask {
     }
 
     fn handle_data_response(&self, key: &String, value: &String) {
+        counter!("merkle_tree_data_response_received").increment(1);
         info!(
             "Received DataResponse for key {:?}. Inserting into local tree.",
             key

@@ -35,3 +35,4 @@ membership-protocols = { path = "./membership/src/protocols" }
 config = { path = "./config" }
 reconciliation = { path = "./reconciliation" }
 services = { path = "./services" }
+metrics = "0.24.3"

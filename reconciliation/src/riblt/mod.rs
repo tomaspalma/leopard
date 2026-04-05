@@ -25,6 +25,7 @@ use crate::riblt::messages::{
 };
 use riblt::{RatelessIBLT, UnmanagedRatelessIBLT};
 
+use metrics::counter;
 use std::collections::HashSet;
 use tokio::time::{sleep, Duration};
 
@@ -34,10 +35,13 @@ pub enum ReconciliationState {
     AwaitingConfirmation,
 }
 
+use std::time::Instant;
+
 pub struct ReconciliationNeighborStatus {
     pub state: ReconciliationState,
     pub local_iblt: RatelessIBLT<RIBLTSymbol, HashSet<RIBLTSymbol>>,
     pub remote_iblt: UnmanagedRatelessIBLT<RIBLTSymbol>,
+    pub start_time: Instant,
 }
 
 pub const RIBLT_PROTOCOL_ID: u64 = 1;
@@ -116,6 +120,8 @@ impl RIBLT {
                 }
             }
 
+            let symbols_len = symbols.len() as u64;
+
             state
                 .send_through_socket(
                     own_address.clone(),
@@ -128,6 +134,8 @@ impl RIBLT {
                 )
                 .await
                 .unwrap();
+
+            counter!("riblt_symbols_sent", "neighbor" => format!("{:?}", neighbor_address)).increment(symbols_len);
 
             info!(
                 "Sent batch of {} symbols up to index {}",
@@ -188,6 +196,7 @@ impl RIBLT {
                     state: ReconciliationState::SendingSymbols,
                     local_iblt: RatelessIBLT::new(symbols),
                     remote_iblt: UnmanagedRatelessIBLT::new(),
+                    start_time: Instant::now(),
                 },
             );
 

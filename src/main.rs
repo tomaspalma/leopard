@@ -16,9 +16,20 @@ use tracing_subscriber;
 
 use std::sync::Arc;
 
+use runtime::metrics::csv::CsvRecorder;
+use metrics::set_global_recorder;
+use std::time::Duration;
+
 #[tokio::main]
 async fn main() {
     tracing_subscriber::fmt::init();
+
+    let recorder = CsvRecorder::new();
+    recorder.clone().start_exporter(
+        "./metrics_output".to_string(),
+        Duration::from_secs(5)
+    );
+    set_global_recorder(recorder).expect("Failed to set global metrics recorder");
 
     let task_node1: Box<Task> = Box::new(move || {
         Box::pin(async move {

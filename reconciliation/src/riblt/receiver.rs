@@ -1,3 +1,4 @@
+use metrics::{counter, histogram};
 use runtime::spawn;
 
 use riblt::symbol::PeelableResult;
@@ -90,6 +91,8 @@ impl ReceiveNeighborSymbolsTask {
 
     fn receive_incoming_symbols(&self, message: &RIBLTSendSymbolMessage, neighbor: NodeAddress) {
         info!("Received RIBLT message");
+        counter!("riblt_symbols_received", "neighbor" => format!("{:?}", neighbor))
+            .increment(message.symbols().len() as u64);
 
         if !RIBLT::check_if_neighbor_already_reconciling(
             self.neighbor_states.clone(),
@@ -110,11 +113,16 @@ impl ReceiveNeighborSymbolsTask {
                     let ReconciliationNeighborStatus {
                         local_iblt,
                         remote_iblt,
+                        start_time,
                         ..
                     } = &mut *status;
 
+                    let decode_start = std::time::Instant::now();
                     let mut collapsed = local_iblt.collapse(remote_iblt);
                     let peel_symbols = collapsed.peel_all_symbols();
+
+                    histogram!("riblt_decode_duration_seconds", "neighbor" => format!("{:?}", neighbor))
+                        .record(decode_start.elapsed().as_secs_f64());
 
                     info!("Peel symbols: {:?}", peel_symbols);
 
@@ -125,9 +133,16 @@ impl ReceiveNeighborSymbolsTask {
                         let id_clone = self.identifier.connection_info().clone();
                         let neighbor_clone = neighbor.clone();
 
-                        self.apply_reconciliation_result(
-                            self.filter_remote_peeled_symbols(peel_symbols),
-                        );
+                        let remote_peeled = self.filter_remote_peeled_symbols(peel_symbols);
+                        let diff_count = remote_peeled.len() as u64;
+
+                        histogram!("riblt_reconciliation_duration_seconds", "neighbor" => format!("{:?}", neighbor), "differences" => diff_count.to_string())
+                            .record(start_time.elapsed().as_secs_f64());
+
+                        counter!("riblt_differences_resolved", "neighbor" => format!("{:?}", neighbor))
+                            .increment(diff_count);
+
+                        self.apply_reconciliation_result(remote_peeled);
 
                         spawn!({
                             let _ = state_clone

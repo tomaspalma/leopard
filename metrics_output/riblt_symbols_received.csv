@@ -1,0 +1,7 @@
+timestamp,value,labels
+1775430868.790,10,"neighbor=NodeAddress { host: "127.0.0.1", port: 9000 }"
+1775430868.790,10,"neighbor=NodeAddress { host: "127.0.0.1", port: 9002 }"
+1775430868.790,10,"neighbor=NodeAddress { host: "127.0.0.1", port: 9001 }"
+1775430873.789,25,"neighbor=NodeAddress { host: "127.0.0.1", port: 9000 }"
+1775430873.789,25,"neighbor=NodeAddress { host: "127.0.0.1", port: 9002 }"
+1775430873.789,25,"neighbor=NodeAddress { host: "127.0.0.1", port: 9001 }"

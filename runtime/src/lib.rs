@@ -8,6 +8,7 @@ pub use tokio;
 
 pub mod builder;
 pub mod macros;
+pub mod metrics;
 pub mod time;
 
 pub static RUNTIME: LazyLock<RwLock<Arc<dyn Runtime + Send + Sync>>> =
