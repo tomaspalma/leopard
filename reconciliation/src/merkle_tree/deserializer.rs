@@ -31,7 +31,6 @@ impl ProtocolDeserializer for MerkleTreeDeserializer {
             Some(protocol_id)
         };
 
-        // port is bytes[8..10]
         let body_bytes = &bytes[16..];
 
         let wrapper: MerkleTreeMessageWrapper =

@@ -253,10 +253,39 @@ impl ReceiveMerkleTreeMessageTask {
     fn handle_data_response(&self, key: &String, value: &String) {
         counter!("merkle_tree_data_response_received").increment(1);
         info!(
-            "Received DataResponse for key {:?}. Inserting into local tree.",
+            "Received DataResponse for key {:?}. Evaluating for local tree and storage insertion.",
             key
         );
-        self.tree.insert(key.clone(), value.clone());
+        let state_clone = self.state.clone();
+        let key_clone = key.clone();
+        let value_clone = value.clone();
+
+        spawn!({
+            if let Some(storage) = state_clone.get_storage("default".to_string()) {
+                let should_store = if let Some(existing) = storage.get(&key_clone).await {
+                    value_clone > existing.value().to_string()
+                } else {
+                    true
+                };
+
+                if should_store {
+                    info!(
+                        "Updating key {:?} to new value {:?}",
+                        key_clone, value_clone
+                    );
+                    let item = Box::new(state::storage::item::DefaultDataStateItem::new(
+                        key_clone,
+                        value_clone,
+                    ));
+                    storage.store(item).await;
+                } else {
+                    info!(
+                        "Keeping existing value for key {:?} (conflict resolution)",
+                        key_clone
+                    );
+                }
+            }
+        });
     }
 }
 

@@ -1,6 +1,7 @@
 use connection::node::port::NodeAddress;
 use connection::{node::id::DefaultNodeIdentifier, route::default::DefaultRouteHandler};
 use membership_protocols::DefaultMembershipProtocol;
+use reconciliation::merkle_tree::protocol::MerkleTreeReconciliationProtocol;
 use reconciliation::riblt::RIBLT;
 use runtime::{RUNTIME, Task};
 
@@ -63,10 +64,13 @@ async fn main() {
             //     NodeAddress::new("127.0.0.1".to_string(), 9000),
             // )));
             node.add_protocol(Box::new(DefaultMembershipProtocol::new()));
-            node.add_protocol(Box::new(RIBLT::new(
+            /*node.add_protocol(Box::new(RIBLT::new(
                 node_state.clone(),
                 NodeAddress::new("127.0.0.1".to_string(), 9000),
-            )));
+            )));*/
+            node.add_protocol(Box::new(
+                MerkleTreeReconciliationProtocol::new(node_state.clone(), NodeAddress::new("127.0.0.1".to_string(), 9000))
+            ));
 
             node.add_service(Arc::new(NodeHTTPService::new(
                 NodeAddress::new("127.0.0.1".to_string(), 3000),
@@ -109,9 +113,13 @@ async fn main() {
             //     NodeAddress::new("127.0.0.1".to_string(), 9001),
             // )));
             node.add_protocol(Box::new(DefaultMembershipProtocol::new()));
-            node.add_protocol(Box::new(RIBLT::new(
+            // node.add_protocol(Box::new(RIBLT::new(
+            //     node_state.clone(),
+            //     NodeAddress::new("127.0.0.1".to_string(), 9001),
+            // )));
+            node.add_protocol(Box::new(MerkleTreeReconciliationProtocol::new(
                 node_state.clone(),
-                NodeAddress::new("127.0.0.1".to_string(), 9001),
+                NodeAddress::new("127.0.0.1".to_string(), 9001)
             )));
 
             node.add_service(Arc::new(NodeHTTPService::new(
@@ -155,10 +163,13 @@ async fn main() {
             //     NodeAddress::new("127.0.0.1".to_string(), 9002),
             // )));
             node.add_protocol(Box::new(DefaultMembershipProtocol::new()));
-            node.add_protocol(Box::new(RIBLT::new(
-                node_state.clone(),
-                NodeAddress::new("127.0.0.1".to_string(), 9002),
-            )));
+            // node.add_protocol(Box::new(RIBLT::new(
+            //     node_state.clone(),
+            //     NodeAddress::new("127.0.0.1".to_string(), 9002),
+            // )));
+            node.add_protocol(Box::new(
+                MerkleTreeReconciliationProtocol::new(node_state.clone(), NodeAddress::new("127.0.0.1".to_string(), 9002))
+            ));
 
             node.add_service(Arc::new(NodeHTTPService::new(
                 NodeAddress::new("127.0.0.1".to_string(), 3002),

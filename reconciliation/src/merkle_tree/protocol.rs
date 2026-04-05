@@ -53,6 +53,10 @@ impl MerkleTreeReconciliationProtocol {
     fn setup_storage_listener(&self) {
         let tree_clone = self.tree.clone();
         if let Some(storage) = self.state.get_storage("default".to_string()) {
+            for item in storage.items() {
+                self.tree.insert(item.key().to_string(), item.value().to_string());
+            }
+
             let listener: state::storage::StorageListener = Box::new(move |item| {
                 info!("Storage updated dynamically, rebuilding Merkle Tree hashes.");
                 tree_clone.insert(item.key().to_string(), item.value().to_string());
@@ -63,7 +67,6 @@ impl MerkleTreeReconciliationProtocol {
 
     async fn periodic_sync(
         state: Arc<DefaultNodeState>,
-        port: NodeAddress,
         protocol_id: u64,
         tree: Arc<BinaryMerkleTree>,
     ) {
@@ -147,7 +150,6 @@ where
 
         let protocol_id = MERKLE_TREE_PROTOCOL_ID;
         let state_clone = self.state.clone();
-        let port_clone = self.port.clone();
         let tree_clone = self.tree.clone();
 
         self.state
@@ -171,11 +173,10 @@ where
                     Arc::new(DefaultNodeSocketTaskMetadata::new(String::new())),
                     Arc::new(move || {
                         let state = state_clone.clone();
-                        let port = port_clone.clone();
                         let tree = tree_clone.clone();
 
                         Box::pin(async move {
-                            Self::periodic_sync(state, port, protocol_id, tree).await;
+                            Self::periodic_sync(state, protocol_id, tree).await;
                             Ok(())
                         })
                     }),
