@@ -86,6 +86,18 @@ where
             self.add_neighbor(new_neighbors[i].clone());
         }
     }
+
+    fn valid_connection_targets(&self) -> Vec<NodeAddress> {
+        let neighbors_arc = self.representation().neighbors();
+        let neighbors_guard = neighbors_arc.read().unwrap();
+
+        neighbors_guard
+            .iter()
+            .map(|n| n.read().unwrap())
+            .filter(|n| !n.tainted())
+            .map(|n| n.identifier().connection_info().clone())
+            .collect::<Vec<_>>()
+    }
 }
 
 pub struct DefaultMembership {

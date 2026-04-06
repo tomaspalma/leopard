@@ -160,20 +160,7 @@ impl RIBLT {
     ) -> Result<(), String> {
         info!("Ran reconciliation mechanism");
 
-        let connection_targets = {
-            let membership_arc = state.membership();
-            let membership_guard = membership_arc.read().unwrap();
-
-            let neighbors_arc = membership_guard.representation().neighbors();
-            let neighbors_guard = neighbors_arc.read().unwrap();
-
-            neighbors_guard
-                .iter()
-                .map(|n| n.read().unwrap())
-                .filter(|n| !n.tainted())
-                .map(|n| n.identifier().connection_info())
-                .collect::<Vec<_>>()
-        };
+        let connection_targets = state.membership().read().unwrap().valid_connection_targets();
 
         for info in connection_targets {
             if let Some(_) = neighbor_states.get(&info) {

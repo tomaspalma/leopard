@@ -72,19 +72,7 @@ impl MerkleTreeReconciliationProtocol {
     ) {
         info!("Running periodic Merkle Tree sync");
 
-        let connection_targets = {
-            let membership_arc = state.membership();
-            let membership_guard = membership_arc.read().unwrap();
-            let neighbors_arc = membership_guard.representation().neighbors();
-            let neighbors_guard = neighbors_arc.read().unwrap();
-
-            neighbors_guard
-                .iter()
-                .map(|n| n.read().unwrap())
-                .filter(|n| !n.tainted())
-                .map(|n| n.identifier().connection_info())
-                .collect::<Vec<_>>()
-        };
+        let connection_targets = state.membership().read().unwrap().valid_connection_targets();
 
         if connection_targets.is_empty() {
             info!("No neighbors found for sync.");
