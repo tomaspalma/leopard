@@ -36,3 +36,4 @@ config = { path = "./config" }
 reconciliation = { path = "./reconciliation" }
 services = { path = "./services" }
 metrics = "0.24.3"
+clap = { version = "4.6.0", features = ["derive"] }
