@@ -1,3 +1,3 @@
-pub mod default_three_nodes;
+pub mod custom_nodes;
 
-pub use default_three_nodes::default_three_nodes;
+pub use custom_nodes::custom_nodes;
