@@ -12,13 +12,8 @@ use node::Node;
 
 use state::storage::state::DefaultDataState;
 use tracing::info;
-use tracing_subscriber;
 
 use std::sync::Arc;
-
-use metrics::set_global_recorder;
-use runtime::metrics::csv::CsvRecorder;
-use std::time::Duration;
 
 pub fn default_task(ip: String, port: u16, http_port: u16, dataset: String) -> Box<Task> {
     Box::new(move || {
@@ -70,19 +65,27 @@ pub fn default_task(ip: String, port: u16, http_port: u16, dataset: String) -> B
 pub async fn custom_nodes(nodes: Vec<String>) {
     for node_str in nodes {
         let parts: Vec<&str> = node_str.split(',').collect();
-        if parts.len() != 4 {
+        
+        let (node_type, ip, port_str, http_port_str, dataset) = if parts.len() == 4 {
+            ("default", parts[0], parts[1], parts[2], parts[3])
+        } else if parts.len() == 5 {
+            (parts[0], parts[1], parts[2], parts[3], parts[4])
+        } else {
             panic!(
-                "Invalid node format: {}. Expected ip,port,http_port,dataset",
+                "Invalid node format: {}. Expected [type,]ip,port,http_port,dataset",
                 node_str
             );
-        }
+        };
 
-        let ip = parts[0].to_string();
-        let port: u16 = parts[1].parse().expect("Invalid port");
-        let http_port: u16 = parts[2].parse().expect("Invalid http_port");
-        let dataset = parts[3].to_string();
+        let ip = ip.to_string();
+        let port: u16 = port_str.parse().expect("Invalid port");
+        let http_port: u16 = http_port_str.parse().expect("Invalid http_port");
+        let dataset = dataset.to_string();
 
-        let task_node = default_task(ip, port, http_port, dataset);
+        let task_node = match node_type {
+            "default" => default_task(ip, port, http_port, dataset),
+            _ => panic!("Unknown node type: {}", node_type),
+        };
 
         RUNTIME.write().unwrap().add_task(task_node).unwrap();
     }
