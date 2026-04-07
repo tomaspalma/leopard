@@ -62,6 +62,55 @@ pub fn default_task(ip: String, port: u16, http_port: u16, dataset: String) -> B
     })
 }
 
+use reconciliation::riblt::RIBLT;
+
+pub fn riblt_task(ip: String, port: u16, http_port: u16, dataset: String) -> Box<Task> {
+    Box::new(move || {
+        let ip_clone = ip.clone();
+        let dataset_clone = dataset.clone();
+        Box::pin(async move {
+            info!("Starting node at {}:{}", ip_clone, port);
+            let config = Arc::new(DefaultNodeConfig::new());
+            let node_id = DefaultNodeIdentifier::new(NodeAddress::new(ip_clone.clone(), port));
+
+            let node_state = Arc::new(DefaultNodeState::new(
+                config.clone(),
+                Arc::new(node_id),
+                Arc::new(DefaultRouteHandler::new()),
+            ));
+
+            node_state.register_storage(
+                "default".to_string(),
+                Arc::new(DefaultDataState::new(dataset_clone).await),
+            );
+
+            let mut node = Node::new(
+                node_state.clone(),
+                config.clone(),
+                Box::new(DefaultNodeIdentifier::new(NodeAddress::new(
+                    ip_clone.clone(),
+                    port,
+                ))),
+            );
+
+            node.add_protocol(Box::new(DefaultMembershipProtocol::new()));
+            node.add_protocol(Box::new(RIBLT::new(
+                node_state.clone(),
+                NodeAddress::new(ip_clone.clone(), port),
+            )));
+
+            node.add_service(Arc::new(NodeHTTPService::new(
+                NodeAddress::new(ip_clone.clone(), http_port),
+                node_state.clone(),
+            )));
+
+            node.init().await.unwrap();
+
+            Ok(())
+        })
+    })
+}
+
 pub async fn custom_nodes(nodes: Vec<String>) {
     for node_str in nodes {
         let parts: Vec<&str> = node_str.split(',').collect();
@@ -84,6 +133,8 @@ pub async fn custom_nodes(nodes: Vec<String>) {
 
         let task_node = match node_type {
             "default" => default_task(ip, port, http_port, dataset),
+            "merkle" => default_task(ip, port, http_port, dataset),
+            "riblt" => riblt_task(ip, port, http_port, dataset),
             _ => panic!("Unknown node type: {}", node_type),
         };
 

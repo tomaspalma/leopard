@@ -1,8 +1,12 @@
 #!/usr/bin/env bash
 
-echo "Starting custom nodes experiment..."
+if [ ! -d "data" ]; then
+    echo "Generating test data..."
+    python generate_data.py
+fi
 
-cargo run -- custom-nodes \
-  --nodes "127.0.0.1,9000,3000,node1_data.json" \
-  --nodes "127.0.0.1,9001,3001,node2_data.json" \
-  --nodes "127.0.0.1,9002,3002,node3_data.json"
+echo "Running Merkle Tree tests..."
+echo "-----------------------------------"
+echo "Testing SMALL dataset (10 items)"
+./run_experiment.sh merkle small
+
