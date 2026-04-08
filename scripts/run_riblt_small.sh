@@ -8,8 +8,7 @@ if [ ! -d "data" ] || [ ! -f "data/small_node1.json" ]; then
     python generate_data.py
 fi
 
-echo "Running Merkle Tree tests..."
+echo "Running RIBLT tests..."
 echo "-----------------------------------"
 echo "Testing SMALL dataset (10 items)"
-./scripts/run_experiment.sh merkle small
-
+./scripts/run_experiment.sh riblt small

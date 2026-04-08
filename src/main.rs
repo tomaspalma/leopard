@@ -16,6 +16,8 @@ struct Cli {
 #[derive(Subcommand)]
 enum Commands {
     CustomNodes {
+        #[arg(long, default_value = "merkle")]
+        protocol: String,
         #[arg(long)]
         nodes: Vec<String>,
     },
@@ -34,8 +36,8 @@ async fn main() {
     set_global_recorder(recorder).expect("Failed to set global metrics recorder");
 
     match &cli.command {
-        Commands::CustomNodes { nodes } => {
-            experiments::custom_nodes(nodes.clone()).await;
+        Commands::CustomNodes { protocol, nodes } => {
+            experiments::custom_nodes(protocol.clone(), nodes.clone()).await;
         }
     }
 }
