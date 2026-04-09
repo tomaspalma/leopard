@@ -42,6 +42,25 @@ pub struct ReconciliationNeighborStatus {
     pub local_iblt: RatelessIBLT<RIBLTSymbol, HashSet<RIBLTSymbol>>,
     pub remote_iblt: UnmanagedRatelessIBLT<RIBLTSymbol>,
     pub start_time: Instant,
+    pub decoded_remote: bool,
+    pub remote_decoded_local: bool,
+}
+
+impl ReconciliationNeighborStatus {
+    pub fn new(
+        local_iblt: RatelessIBLT<RIBLTSymbol, HashSet<RIBLTSymbol>>,
+        remote_iblt: UnmanagedRatelessIBLT<RIBLTSymbol>,
+        start_time: Instant,
+    ) -> Self {
+        Self {
+            state: ReconciliationState::SendingSymbols,
+            local_iblt,
+            remote_iblt,
+            start_time,
+            decoded_remote: false,
+            remote_decoded_local: false,
+        }
+    }
 }
 
 pub const RIBLT_PROTOCOL_ID: u64 = 1;
@@ -105,6 +124,10 @@ impl RIBLT {
                     Some(guard) => guard,
                     None => break,
                 };
+                
+                if status_guard.remote_decoded_local {
+                    break;
+                }
 
                 for _ in 0..BATCH_SIZE {
                     let coded_symbol = status_guard.local_iblt.get_coded_symbol(current_index);
@@ -167,24 +190,10 @@ impl RIBLT {
                 continue;
             }
 
-            let mut symbols = HashSet::new();
-            if let Some(storage) = state.get_storage("default".to_string()) {
-                for item in storage.items() {
-                    symbols.insert(RIBLTSymbol {
-                        key: item.key().to_string(),
-                        value: item.value().to_string(),
-                    });
-                }
-            }
-
-            neighbor_states.insert(
+            Self::init_neighbor_reconciliation(
+                state.clone(),
+                neighbor_states.clone(),
                 info.clone(),
-                ReconciliationNeighborStatus {
-                    state: ReconciliationState::SendingSymbols,
-                    local_iblt: RatelessIBLT::new(symbols),
-                    remote_iblt: UnmanagedRatelessIBLT::new(),
-                    start_time: Instant::now(),
-                },
             );
 
             let state_clone = state.clone();
@@ -213,5 +222,30 @@ impl RIBLT {
         neighbor: NodeAddress,
     ) -> bool {
         neighbor_states.contains_key(&neighbor)
+    }
+
+    pub fn init_neighbor_reconciliation(
+        state: Arc<DefaultNodeState>,
+        neighbor_states: Arc<DashMap<NodeAddress, ReconciliationNeighborStatus>>,
+        neighbor: NodeAddress,
+    ) {
+        let mut symbols = HashSet::new();
+        if let Some(storage) = state.get_storage("default".to_string()) {
+            for item in storage.items() {
+                symbols.insert(RIBLTSymbol {
+                    key: item.key().to_string(),
+                    value: item.value().to_string(),
+                });
+            }
+        }
+
+        neighbor_states.insert(
+            neighbor,
+            ReconciliationNeighborStatus::new(
+                RatelessIBLT::new(symbols),
+                UnmanagedRatelessIBLT::new(),
+                Instant::now(),
+            ),
+        );
     }
 }

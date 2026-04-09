@@ -1,7 +1,7 @@
 use metrics::{counter, histogram};
 use runtime::spawn;
 
-use riblt::symbol::PeelableResult;
+use riblt::{symbol::PeelableResult, RatelessIBLT};
 
 use crate::riblt::{
     messages::{RIBLTMessageType, RIBLTMessageTypeValues, RIBLTSymbol},
@@ -44,8 +44,15 @@ impl ReceiveNeighborSymbolsTask {
 
     fn receive_symbols_neighbor_decoded(&self, neighbor: NodeAddress) {
         info!("Neighbor successfully decoded symbols");
+        let mut remove = false;
+        if let Some(mut status) = self.neighbor_states.get_mut(&neighbor) {
+            status.remote_decoded_local = true;
+            remove = status.decoded_remote && status.remote_decoded_local;
+        }
 
-        self.neighbor_states.remove(&neighbor);
+        if remove {
+            self.neighbor_states.remove(&neighbor);
+        }
     }
 
     fn filter_remote_peeled_symbols(
@@ -98,24 +105,35 @@ impl ReceiveNeighborSymbolsTask {
             self.neighbor_states.clone(),
             neighbor.clone(),
         ) {
-            return;
+            RIBLT::init_neighbor_reconciliation(
+                self.state.clone(),
+                self.neighbor_states.clone(),
+                neighbor.clone(),
+            );
         }
 
         for symbol in message.symbols() {
+            let mut decoded_now = false;
+            let mut remove = false;
             match self.neighbor_states.get_mut(&neighbor) {
                 Some(mut status) => {
+                    if status.decoded_remote {
+                        continue;
+                    }
                     let mut cs = riblt::CodedSymbol::new();
                     cs.sum = symbol.sum.clone();
                     cs.hash = symbol.hash;
                     cs.count = symbol.count;
                     status.remote_iblt.add_coded_symbol(&cs);
 
-                    let ReconciliationNeighborStatus {
-                        local_iblt,
-                        remote_iblt,
-                        start_time,
-                        ..
-                    } = &mut *status;
+                    let (local_iblt, remote_iblt, start_time) = {
+                        let status_ref = &mut *status;
+                        (
+                            &mut status_ref.local_iblt,
+                            &status_ref.remote_iblt,
+                            status_ref.start_time,
+                        )
+                    };
 
                     let decode_start = std::time::Instant::now();
                     let mut collapsed = local_iblt.collapse(remote_iblt);
@@ -128,6 +146,9 @@ impl ReceiveNeighborSymbolsTask {
 
                     if RIBLT::peeling_successful(&mut collapsed) {
                         info!("Peeling successful for neighbor {:?}", neighbor);
+                        status.decoded_remote = true;
+                        decoded_now = true;
+                        remove = status.decoded_remote && status.remote_decoded_local;
 
                         let state_clone = self.state.clone();
                         let id_clone = self.identifier.connection_info().clone();
@@ -161,6 +182,12 @@ impl ReceiveNeighborSymbolsTask {
                     }
                 }
                 None => error!("Failed to get IBLT for neighbor {:?}", neighbor),
+            }
+            if remove {
+                self.neighbor_states.remove(&neighbor);
+            }
+            if decoded_now {
+                break;
             }
         }
     }

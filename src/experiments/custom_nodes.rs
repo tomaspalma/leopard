@@ -12,7 +12,7 @@ use config::node::DefaultNodeConfig;
 use node::Node;
 
 use state::storage::state::DefaultDataState;
-use tracing::info;
+use tracing::{info, Instrument};
 
 use std::sync::Arc;
 
@@ -28,56 +28,61 @@ pub fn default_task(
         let dataset_clone = dataset.clone();
         let protocol_clone = protocol.clone();
         Box::pin(async move {
-            info!("Starting node at {}:{}", ip_clone, port);
-            let config = Arc::new(DefaultNodeConfig::new());
-            let node_id = DefaultNodeIdentifier::new(NodeAddress::new(ip_clone.clone(), port));
+            let node_name = format!("{}:{}", ip_clone, port);
+            let span = tracing::info_span!("node", name = %node_name);
+            
+            async move {
+                info!("Starting node at {}:{}", ip_clone, port);
+                let config = Arc::new(DefaultNodeConfig::new());
+                let node_id = DefaultNodeIdentifier::new(NodeAddress::new(ip_clone.clone(), port));
 
-            let node_state = Arc::new(DefaultNodeState::new(
-                config.clone(),
-                Arc::new(node_id),
-                Arc::new(DefaultRouteHandler::new()),
-            ));
+                let node_state = Arc::new(DefaultNodeState::new(
+                    config.clone(),
+                    Arc::new(node_id),
+                    Arc::new(DefaultRouteHandler::new()),
+                ));
 
-            node_state.register_storage(
-                "default".to_string(),
-                Arc::new(DefaultDataState::new(dataset_clone).await),
-            );
+                node_state.register_storage(
+                    "default".to_string(),
+                    Arc::new(DefaultDataState::new(dataset_clone).await),
+                );
 
-            let mut node = Node::new(
-                node_state.clone(),
-                config.clone(),
-                Box::new(DefaultNodeIdentifier::new(NodeAddress::new(
-                    ip_clone.clone(),
-                    port,
-                ))),
-            );
+                let mut node = Node::new(
+                    node_state.clone(),
+                    config.clone(),
+                    Box::new(DefaultNodeIdentifier::new(NodeAddress::new(
+                        ip_clone.clone(),
+                        port,
+                    ))),
+                );
 
-            node.add_protocol(Box::new(DefaultMembershipProtocol::new()));
+                node.add_protocol(Box::new(DefaultMembershipProtocol::new()));
 
-            match protocol_clone.as_str() {
-                "merkle" => {
-                    node.add_protocol(Box::new(MerkleTreeReconciliationProtocol::new(
-                        node_state.clone(),
-                        NodeAddress::new(ip_clone.clone(), port),
-                    )));
+                match protocol_clone.as_str() {
+                    "merkle" => {
+                        node.add_protocol(Box::new(MerkleTreeReconciliationProtocol::new(
+                            node_state.clone(),
+                            NodeAddress::new(ip_clone.clone(), port),
+                        )));
+                    }
+                    "riblt" => {
+                        node.add_protocol(Box::new(RIBLT::new(
+                            node_state.clone(),
+                            NodeAddress::new(ip_clone.clone(), port),
+                        )));
+                    }
+                    _ => panic!("Unknown protocol: {}", protocol_clone),
                 }
-                "riblt" => {
-                    node.add_protocol(Box::new(RIBLT::new(
-                        node_state.clone(),
-                        NodeAddress::new(ip_clone.clone(), port),
-                    )));
-                }
-                _ => panic!("Unknown protocol: {}", protocol_clone),
-            }
 
-            node.add_service(Arc::new(NodeHTTPService::new(
-                NodeAddress::new(ip_clone.clone(), http_port),
-                node_state.clone(),
-            )));
+                node.add_service(Arc::new(NodeHTTPService::new(
+                    NodeAddress::new(ip_clone.clone(), http_port),
+                    node_state.clone(),
+                )));
 
-            node.init().await.unwrap();
+                node.init().await.unwrap();
 
-            Ok(())
+                Ok(())
+            }.instrument(span).await
         })
     })
 }
@@ -108,5 +113,5 @@ pub async fn custom_nodes(node_type: String, protocol: String, nodes: Vec<String
 
     RUNTIME.write().unwrap().init().unwrap();
 
-    loop {}
+    std::future::pending::<()>().await;
 }

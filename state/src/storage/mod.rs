@@ -1,6 +1,10 @@
 pub mod item;
 pub mod state;
 
+use runtime::spawn;
+
+use serde_json::to_string_pretty;
+use tokio::fs::{read_to_string, write};
 use tracing::info;
 
 use async_trait::async_trait;
@@ -10,8 +14,6 @@ use item::{DataStateItem, DefaultDataStateItem};
 use dashmap::DashMap;
 
 use serde::{Serialize, de::DeserializeOwned};
-use std::fs::File;
-use std::io::{BufReader, BufWriter};
 use std::path::Path;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -21,6 +23,7 @@ pub enum StorageAction {
 
 pub type StorageListener = Box<dyn Fn(&dyn DataStateItem) + Send + Sync>;
 
+#[derive(Debug, Clone)]
 pub struct PersistentDataStorage {
     filename: String,
 }
@@ -33,20 +36,18 @@ impl PersistentDataStorage {
     }
 
     pub async fn save<T: Serialize>(&self, data: &T) -> std::io::Result<()> {
-        let file = File::create(&self.filename)?;
-        let writer = BufWriter::new(file);
-
-        serde_json::to_writer_pretty(writer, data)
+        let serialized = to_string_pretty(data)
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+
+        write(&self.filename, serialized).await?;
 
         Ok(())
     }
 
     pub async fn load<T: DeserializeOwned>(&self) -> std::io::Result<T> {
-        let file = File::open(&self.filename)?;
-        let reader = BufReader::new(file);
+        let content = read_to_string(&self.filename).await?;
 
-        let data = serde_json::from_reader(reader)
+        let data = serde_json::from_str(&content)
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
 
         Ok(data)
@@ -118,10 +119,15 @@ impl DataStateStorage for KeyValueDataStateStorage {
             }
         }
 
-        self.persistent_storage
-            .save(&self.memory_storage)
-            .await
-            .unwrap();
+        let persistent_storage_clone = self.persistent_storage.clone();
+        let memory_storage_clone = self.memory_storage.clone();
+        spawn!({
+            persistent_storage_clone
+                .clone()
+                .save(&memory_storage_clone)
+                .await
+                .unwrap()
+        });
     }
 
     async fn get(&self, key: &str) -> Option<Box<dyn DataStateItem + Send + Sync>> {
