@@ -14,10 +14,9 @@ use runtime::time::TokioPeriodTimeUnit;
 
 use tokio::io::AsyncReadExt;
 
-use std::{
-    collections::HashMap,
-    sync::{Arc, RwLock},
-};
+use tokio::sync::RwLock;
+
+use std::{collections::HashMap, sync::Arc};
 
 use connection::route::{
     RouteHandler,
@@ -132,7 +131,7 @@ pub trait NodeState {
 
     fn membership(&self) -> Arc<RwLock<Self::Membership>>;
 
-    fn init_neighbors(&self);
+    async fn init_neighbors(&self);
 
     async fn init(&self) -> Result<(), NodeInitError>;
 }
@@ -319,30 +318,34 @@ impl NodeState for DefaultNodeState {
         Ok(())
     }
 
-    fn init_neighbors(&self) {
+    async fn init_neighbors(&self) {
+        info!("Initializing neighbors");
         let neighbors = self.config.neighbors().neighbors().read().unwrap().clone();
 
+        info!("Neighbors: {}", neighbors.len());
+
         for i in 0..neighbors.len() {
-            let mut n = neighbors[i].write().unwrap();
+            {
+                let mut n = neighbors[i].write().unwrap();
+                let info = n.identifier().connection_info();
+                let local_info = self.node_identifier().connection_info();
 
-            let neighbor_info = n.identifier().connection_info();
-
-            if self.node_identifier().connection_info().port() == neighbor_info.port() {
-                n.add_taint(Box::new(NodeAddressTaint::new(
-                    self.node_identifier().connection_info(),
-                    neighbor_info,
-                )));
+                let needs_taint = local_info.port() == info.port();
+                if needs_taint {
+                    n.add_taint(Box::new(NodeAddressTaint::new(local_info, info.clone())));
+                }
             }
 
+            // info!("Adding neighbor {:?} to membership", neighbors[i].;
             self.membership
                 .write()
-                .unwrap()
+                .await
                 .add_neighbor(neighbors[i].clone());
         }
     }
 
     async fn init(&self) -> Result<(), NodeInitError> {
-        self.init_neighbors();
+        self.init_neighbors().await;
 
         let keys = self
             .sockets
@@ -396,7 +399,7 @@ impl NodeState for DefaultNodeState {
                                     }
                                     let protocol_id = request_handler.handle(buffer.clone());
 
-                                    let sender_port = 
+                                    let sender_port =
                                         u16::from_be_bytes(buffer[8..10].try_into().unwrap());
                                     let sender_address =
                                         NodeAddress::new(addr.ip().to_string(), sender_port);
@@ -404,7 +407,12 @@ impl NodeState for DefaultNodeState {
                                     println!("Sender address: {:?}", sender_address);
 
                                     route_handler
-                                        .handle(buffer, protocol_id, local_identifier.clone(), sender_address)
+                                        .handle(
+                                            buffer,
+                                            protocol_id,
+                                            local_identifier.clone(),
+                                            sender_address,
+                                        )
                                         .await;
                                 }
                                 Err(e) => {

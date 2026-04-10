@@ -41,9 +41,9 @@ pub struct ReconciliationNeighborStatus {
     pub state: ReconciliationState,
     pub local_iblt: RatelessIBLT<RIBLTSymbol, HashSet<RIBLTSymbol>>,
     pub remote_iblt: UnmanagedRatelessIBLT<RIBLTSymbol>,
+    pub collapsed: UnmanagedRatelessIBLT<RIBLTSymbol>,
+    pub stored_symbols: Vec<RIBLTSymbol>,
     pub start_time: Instant,
-    pub decoded_remote: bool,
-    pub remote_decoded_local: bool,
 }
 
 impl ReconciliationNeighborStatus {
@@ -56,9 +56,11 @@ impl ReconciliationNeighborStatus {
             state: ReconciliationState::SendingSymbols,
             local_iblt,
             remote_iblt,
+            collapsed: UnmanagedRatelessIBLT {
+                coded_symbols: vec![],
+            },
+            stored_symbols: Vec::new(),
             start_time,
-            decoded_remote: false,
-            remote_decoded_local: false,
         }
     }
 }
@@ -124,10 +126,6 @@ impl RIBLT {
                     Some(guard) => guard,
                     None => break,
                 };
-                
-                if status_guard.remote_decoded_local {
-                    break;
-                }
 
                 for _ in 0..BATCH_SIZE {
                     let coded_symbol = status_guard.local_iblt.get_coded_symbol(current_index);
@@ -158,7 +156,8 @@ impl RIBLT {
                 .await
                 .unwrap();
 
-            counter!("riblt_symbols_sent", "neighbor" => format!("{:?}", neighbor_address)).increment(symbols_len);
+            counter!("riblt_symbols_sent", "neighbor" => format!("{:?}", neighbor_address))
+                .increment(symbols_len);
 
             info!(
                 "Sent batch of {} symbols up to index {}",
@@ -183,17 +182,27 @@ impl RIBLT {
     ) -> Result<(), String> {
         info!("Ran reconciliation mechanism");
 
-        let connection_targets = state.membership().read().unwrap().valid_connection_targets();
+        let connection_targets = state.membership().read().await.valid_connection_targets();
+
+        info!("Valid connection targets: {:?}", connection_targets);
 
         for info in connection_targets {
             if let Some(_) = neighbor_states.get(&info) {
                 continue;
             }
 
+            info!(
+                "Initializing neighbor reconciliation for neighbor {:?}",
+                info
+            );
             Self::init_neighbor_reconciliation(
                 state.clone(),
                 neighbor_states.clone(),
                 info.clone(),
+            );
+            info!(
+                "Finished initializing neighbor reconciliation for neighbor {:?}",
+                info
             );
 
             let state_clone = state.clone();
@@ -202,6 +211,7 @@ impl RIBLT {
             let protocol_id_clone = protocol_id;
             let neighbor_states_clone = neighbor_states.clone();
 
+            info!("Sending symbols sequence to neighbor {:?}", info);
             spawn!({
                 RIBLT::sending_symbols_sequence(
                     state_clone,

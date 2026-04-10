@@ -58,7 +58,7 @@ impl NodeSocketTaskMetadata for HintedHandoffReplicationProtocolTaskMetadata {}
 
 #[async_trait]
 impl RouteTask for HintedHandoffReplicationProtocolTask {
-    fn run(&self, message: Vec<u8>, neighbor: NodeAddress) {
+    fn run(self: Arc<Self>, message: Vec<u8>, neighbor: NodeAddress) {
         info!("Running hinted handoff replication protocol task");
     }
 }

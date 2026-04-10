@@ -64,7 +64,7 @@ impl DefaultNodeSocketTaskMetadata {
 }
 
 impl RouteTask for DefaultNodeSocketTask {
-    fn run(&self, message: Vec<u8>, neighbor: NodeAddress) {
+    fn run(self: Arc<Self>, message: Vec<u8>, neighbor: NodeAddress) {
         info!("Running task!");
     }
 }
@@ -160,7 +160,9 @@ impl NodeSocket for DefaultNodeSocket {
 
         match TcpStream::connect(&addr).await {
             Ok(mut stream) => {
-                let message_to_send = message.serialize(message.protocol(), self.port.port()).unwrap();
+                let message_to_send = message
+                    .serialize(message.protocol(), self.port.port())
+                    .unwrap();
 
                 match stream.write_all(&message_to_send).await {
                     Ok(_) => {

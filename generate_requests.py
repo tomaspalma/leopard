@@ -64,8 +64,8 @@ if __name__ == "__main__":
         "--count",
         "-c",
         type=int,
-        default=10,
-        help="Exact number of requests to send (default: 10)",
+        default=1,
+        help="Exact number of requests to send (default: 1)",
     )
 
     args = parser.parse_args()

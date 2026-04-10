@@ -290,7 +290,7 @@ impl ReceiveMerkleTreeMessageTask {
 }
 
 impl RouteTask for ReceiveMerkleTreeMessageTask {
-    fn run(&self, message: Vec<u8>, neighbor: NodeAddress) {
+    fn run(self: Arc<Self>, message: Vec<u8>, neighbor: NodeAddress) {
         let deserialized_message = MerkleTreeDeserializer::new().deserialize(message);
 
         if let Some(msg) = deserialized_message

@@ -1,7 +1,7 @@
 use metrics::{counter, histogram};
 use runtime::spawn;
 
-use riblt::{symbol::PeelableResult, RatelessIBLT};
+use riblt::{symbol::PeelableResult, RatelessIBLT, UnmanagedRatelessIBLT};
 
 use crate::riblt::{
     messages::{RIBLTMessageType, RIBLTMessageTypeValues, RIBLTSymbol},
@@ -44,42 +44,29 @@ impl ReceiveNeighborSymbolsTask {
 
     fn receive_symbols_neighbor_decoded(&self, neighbor: NodeAddress) {
         info!("Neighbor successfully decoded symbols");
-        let mut remove = false;
-        if let Some(mut status) = self.neighbor_states.get_mut(&neighbor) {
-            status.remote_decoded_local = true;
-            remove = status.decoded_remote && status.remote_decoded_local;
-        }
-
-        if remove {
-            self.neighbor_states.remove(&neighbor);
-        }
+        self.neighbor_states.remove(&neighbor);
     }
 
     fn filter_remote_peeled_symbols(
         &self,
         peeled_symbols: Vec<PeelableResult<RIBLTSymbol>>,
     ) -> Vec<RIBLTSymbol> {
-        info!("Filtering remote peeled symbols: {:?}", peeled_symbols);
+        info!("Filtering remote peeled symbols");
         peeled_symbols
             .into_iter()
-            .filter(|symbol| match symbol {
-                PeelableResult::Remote(_) => true,
-                _ => false,
-            })
-            .map(|symbol| match symbol {
-                PeelableResult::Remote(s) => s,
-                _ => unreachable!(),
+            .filter_map(|symbol| match symbol {
+                PeelableResult::Remote(s) => Some(s),
+                _ => None,
             })
             .collect()
     }
 
     fn apply_reconciliation_result(&self, result: Vec<RIBLTSymbol>) {
-        match result.len() {
-            0 => info!("No reconciliation result"),
-            _ => info!("Reconciliation result length: {}", result.len()),
+        if result.is_empty() {
+            info!("No reconciliation result");
+        } else {
+            info!("Reconciliation result length: {}", result.len());
         }
-
-        info!("Applying reconciliation result: {:?}", result);
 
         let state_clone = self.state.clone();
         spawn!({
@@ -96,130 +83,159 @@ impl ReceiveNeighborSymbolsTask {
         });
     }
 
-    fn receive_incoming_symbols(&self, message: &RIBLTSendSymbolMessage, neighbor: NodeAddress) {
-        info!("Received RIBLT message");
-        counter!("riblt_symbols_received", "neighbor" => format!("{:?}", neighbor))
-            .increment(message.symbols().len() as u64);
-
-        if !RIBLT::check_if_neighbor_already_reconciling(
-            self.neighbor_states.clone(),
-            neighbor.clone(),
-        ) {
-            RIBLT::init_neighbor_reconciliation(
-                self.state.clone(),
-                self.neighbor_states.clone(),
-                neighbor.clone(),
-            );
-        }
-
+    async fn handle_received_symbols(&self, message: RIBLTSendSymbolMessage, neighbor: NodeAddress) {
         for symbol in message.symbols() {
-            let mut decoded_now = false;
-            let mut remove = false;
-            match self.neighbor_states.get_mut(&neighbor) {
-                Some(mut status) => {
-                    if status.decoded_remote {
+            let (local_coded_symbols, remote_coded_symbols, mut stored_symbols) =
+                match self.neighbor_states.get_mut(&neighbor) {
+                    Some(mut status) => {
+                        let mut cs = riblt::CodedSymbol::new();
+                        cs.sum = symbol.sum.clone();
+                        cs.hash = symbol.hash;
+                        cs.count = symbol.count;
+                        status.remote_iblt.add_coded_symbol(&cs);
+
+                        let coded_symbols_len = status.remote_iblt.coded_symbols.len() as usize;
+                        status.local_iblt.extend_coded_symbols(coded_symbols_len);
+
+                        (
+                            status.local_iblt.coded_symbols.clone(),
+                            status.remote_iblt.coded_symbols.clone(),
+                            status.stored_symbols.clone(),
+                        )
+                    }
+                    None => {
+                        error!("Failed to get IBLT for neighbor {:?}", neighbor);
                         continue;
                     }
-                    let mut cs = riblt::CodedSymbol::new();
-                    cs.sum = symbol.sum.clone();
-                    cs.hash = symbol.hash;
-                    cs.count = symbol.count;
-                    status.remote_iblt.add_coded_symbol(&cs);
+                };
 
-                    let (local_iblt, remote_iblt, start_time) = {
-                        let status_ref = &mut *status;
-                        (
-                            &mut status_ref.local_iblt,
-                            &status_ref.remote_iblt,
-                            status_ref.start_time,
-                        )
-                    };
+            let neighbor_clone = neighbor.clone();
+            
+            let (is_peeling_successful, new_symbols) = tokio::task::spawn_blocking(move || {
+                let local_iblt = UnmanagedRatelessIBLT {
+                    coded_symbols: local_coded_symbols,
+                };
+                let remote_iblt = UnmanagedRatelessIBLT {
+                    coded_symbols: remote_coded_symbols,
+                };
 
-                    let decode_start = std::time::Instant::now();
-                    let mut collapsed = local_iblt.collapse(remote_iblt);
-                    let peel_symbols = collapsed.peel_all_symbols();
+                let decode_start = std::time::Instant::now();
+                let mut collapsed = local_iblt.collapse(&remote_iblt);
+                let peel_symbols = collapsed.peel_all_symbols();
+                
+                let result = peel_symbols
+                    .into_iter()
+                    .filter_map(|symbol| match symbol {
+                        riblt::symbol::PeelableResult::Remote(s) => Some(s),
+                        _ => None,
+                    })
+                    .collect::<Vec<RIBLTSymbol>>();
 
-                    histogram!("riblt_decode_duration_seconds", "neighbor" => format!("{:?}", neighbor))
-                        .record(decode_start.elapsed().as_secs_f64());
+                histogram!("riblt_decode_duration_seconds", "neighbor" => format!("{:?}", neighbor_clone))
+                    .record(decode_start.elapsed().as_secs_f64());
 
-                    info!("Peel symbols: {:?}", peel_symbols);
+                let successful = RIBLT::peeling_successful(&mut collapsed);
+                (successful, result)
+            }).await.unwrap();
 
-                    if RIBLT::peeling_successful(&mut collapsed) {
-                        info!("Peeling successful for neighbor {:?}", neighbor);
-                        status.decoded_remote = true;
-                        decoded_now = true;
-                        remove = status.decoded_remote && status.remote_decoded_local;
+            stored_symbols.extend(new_symbols.clone());
 
-                        let state_clone = self.state.clone();
-                        let id_clone = self.identifier.connection_info().clone();
-                        let neighbor_clone = neighbor.clone();
-
-                        let remote_peeled = self.filter_remote_peeled_symbols(peel_symbols);
-                        let diff_count = remote_peeled.len() as u64;
-
-                        histogram!("riblt_reconciliation_duration_seconds", "neighbor" => format!("{:?}", neighbor), "differences" => diff_count.to_string())
-                            .record(start_time.elapsed().as_secs_f64());
-
-                        counter!("riblt_differences_resolved", "neighbor" => format!("{:?}", neighbor))
-                            .increment(diff_count);
-
-                        self.apply_reconciliation_result(remote_peeled);
-
-                        spawn!({
-                            let _ = state_clone
-                                .send_through_socket(
-                                    id_clone,
-                                    Box::new(neighbor_clone),
-                                    Box::new(RIBLTDecodedAllMessage::new(
-                                        RIBLTMessageType::new(
-                                            RIBLTMessageTypeValues::FinishedDecoding,
-                                        ),
-                                        Some(RIBLT_PROTOCOL_ID),
-                                    )),
-                                )
-                                .await;
-                        });
-                    }
+            if !new_symbols.is_empty() || is_peeling_successful {
+                if let Some(mut status) = self.neighbor_states.get_mut(&neighbor) {
+                    status.stored_symbols = stored_symbols.clone();
                 }
-                None => error!("Failed to get IBLT for neighbor {:?}", neighbor),
             }
-            if remove {
-                self.neighbor_states.remove(&neighbor);
-            }
-            if decoded_now {
+
+            if is_peeling_successful {
+                info!("Peeling successful for neighbor {:?}", neighbor);
+
+                self.apply_reconciliation_result(stored_symbols.clone());
+
+                let state_clone = self.state.clone();
+                let id_clone = self.identifier.connection_info().clone();
+                let neighbor_clone = neighbor.clone();
+                spawn!({
+                    let _ = state_clone
+                        .send_through_socket(
+                            id_clone,
+                            Box::new(neighbor_clone),
+                            Box::new(RIBLTDecodedAllMessage::new(
+                                RIBLTMessageType::new(RIBLTMessageTypeValues::FinishedDecoding),
+                                Some(RIBLT_PROTOCOL_ID),
+                            )),
+                        )
+                        .await;
+                });
                 break;
             }
         }
     }
+
+    async fn receive_incoming_symbols(
+        self: Arc<Self>,
+        message: RIBLTSendSymbolMessage,
+        neighbor: NodeAddress,
+    ) {
+        info!("Received RIBLT message");
+        counter!("riblt_symbols_received", "neighbor" => format!("{:?}", neighbor))
+            .increment(message.symbols().len() as u64);
+
+        info!("Checking if neighbor {:?} is already reconciling", neighbor);
+        if !RIBLT::check_if_neighbor_already_reconciling(
+            self.neighbor_states.clone(),
+            neighbor.clone(),
+        ) {
+            info!("Initializing neighbor reconciliation for neighbor {:?}", neighbor);
+            let state_clone = self.state.clone();
+            let neighbor_states_clone = self.neighbor_states.clone();
+            let neighbor_clone = neighbor.clone();
+            
+            tokio::task::spawn_blocking(move || {
+                RIBLT::init_neighbor_reconciliation(
+                    state_clone,
+                    neighbor_states_clone,
+                    neighbor_clone,
+                );
+            }).await.unwrap();
+            
+            info!("Finished initializing neighbor reconciliation for neighbor {:?}", neighbor);
+        }
+
+        self.handle_received_symbols(message, neighbor).await;
+    }
 }
 
 impl RouteTask for ReceiveNeighborSymbolsTask {
-    fn run(&self, message: Vec<u8>, neighbor: NodeAddress) {
-        let deserialized_message = RIBLTDeserializer::new().deserialize(message);
+    fn run(self: Arc<Self>, message: Vec<u8>, neighbor: NodeAddress) {
+        spawn!({
+            let msg_to_process = {
+                let deserialized_message = RIBLTDeserializer::new().deserialize(message);
+                let msg_type_box = deserialized_message.get_type().value();
 
-        let msg_type_box = deserialized_message.get_type().value();
-
-        if let Some(riblt_type) = msg_type_box
-            .as_any()
-            .downcast_ref::<RIBLTMessageTypeValues>()
-        {
-            match riblt_type {
-                RIBLTMessageTypeValues::SendSymbol => {
-                    if let Some(msg) = deserialized_message
-                        .as_any()
-                        .downcast_ref::<RIBLTSendSymbolMessage>()
-                    {
-                        self.receive_incoming_symbols(msg, neighbor);
-                    } else {
-                        error!("Failed to downcast message to RIBLTSendSymbolMessage");
+                if let Some(riblt_type) = msg_type_box.as_any().downcast_ref::<RIBLTMessageTypeValues>() {
+                    match riblt_type {
+                        RIBLTMessageTypeValues::SendSymbol => {
+                            if let Some(msg) = deserialized_message.as_any().downcast_ref::<RIBLTSendSymbolMessage>() {
+                                Some(msg.clone())
+                            } else {
+                                error!("Failed to downcast message to RIBLTSendSymbolMessage");
+                                None
+                            }
+                        }
+                        RIBLTMessageTypeValues::FinishedDecoding => {
+                            self.receive_symbols_neighbor_decoded(neighbor.clone());
+                            None
+                        }
                     }
+                } else {
+                    error!("Received unexpected message type");
+                    None
                 }
-                RIBLTMessageTypeValues::FinishedDecoding => {
-                    self.receive_symbols_neighbor_decoded(neighbor);
-                }
+            };
+            
+            if let Some(msg) = msg_to_process {
+                self.receive_incoming_symbols(msg, neighbor).await;
             }
-        } else {
-            error!("Received unexpected message type");
-        }
+        });
     }
 }

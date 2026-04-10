@@ -26,20 +26,26 @@ pub type StorageListener = Box<dyn Fn(&dyn DataStateItem) + Send + Sync>;
 #[derive(Debug, Clone)]
 pub struct PersistentDataStorage {
     filename: String,
+    write_lock: std::sync::Arc<tokio::sync::Mutex<()>>,
 }
 
 impl PersistentDataStorage {
     pub fn new(filename: String) -> Self {
         Self {
             filename: filename.to_string(),
+            write_lock: std::sync::Arc::new(tokio::sync::Mutex::new(())),
         }
     }
 
     pub async fn save<T: Serialize>(&self, data: &T) -> std::io::Result<()> {
+        let _guard = self.write_lock.lock().await;
+
         let serialized = to_string_pretty(data)
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
 
-        write(&self.filename, serialized).await?;
+        let tmp_filename = format!("{}.tmp", self.filename);
+        write(&tmp_filename, serialized).await?;
+        tokio::fs::rename(&tmp_filename, &self.filename).await?;
 
         Ok(())
     }

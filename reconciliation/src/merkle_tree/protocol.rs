@@ -54,7 +54,8 @@ impl MerkleTreeReconciliationProtocol {
         let tree_clone = self.tree.clone();
         if let Some(storage) = self.state.get_storage("default".to_string()) {
             for item in storage.items() {
-                self.tree.insert(item.key().to_string(), item.value().to_string());
+                self.tree
+                    .insert(item.key().to_string(), item.value().to_string());
             }
 
             let listener: state::storage::StorageListener = Box::new(move |item| {
@@ -72,7 +73,7 @@ impl MerkleTreeReconciliationProtocol {
     ) {
         info!("Running periodic Merkle Tree sync");
 
-        let connection_targets = state.membership().read().unwrap().valid_connection_targets();
+        let connection_targets = state.membership().read().await.valid_connection_targets();
 
         if connection_targets.is_empty() {
             info!("No neighbors found for sync.");

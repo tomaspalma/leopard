@@ -73,27 +73,6 @@ where
             let mut symbols = HashSet::new();
 
             Self::update_symbols(&mut symbols, items);
-
-            let neighbor_states_handle = neighbor_states.clone();
-            let storage_clone = storage.clone();
-            storage.add_listener(
-                StorageAction::Insert,
-                Box::new(move |_item| {
-                    let neighbor_states_handle = neighbor_states_handle.clone();
-                    let storage = storage_clone.clone();
-
-                    spawn!({
-                        let items = storage.items();
-                        let mut symbols = HashSet::new();
-
-                        Self::update_symbols(&mut symbols, items);
-
-                        for mut guard in neighbor_states_handle.iter_mut() {
-                            guard.local_iblt = RatelessIBLT::new(symbols.clone());
-                        }
-                    });
-                }),
-            );
         } else {
             info!("No default storage found");
         }
