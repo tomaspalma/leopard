@@ -16,7 +16,7 @@ impl MerkleTreeDeserializer {
 }
 
 impl ProtocolDeserializer for MerkleTreeDeserializer {
-    fn deserialize(&self, bytes: Vec<u8>) -> Arc<dyn Message> {
+    fn deserialize(&self, bytes: Vec<u8>) -> Arc<dyn Message + Send + Sync> {
         if bytes.len() < 16 {
             panic!("Message too short");
         }

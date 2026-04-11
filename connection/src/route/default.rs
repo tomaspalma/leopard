@@ -105,13 +105,9 @@ impl RouteHandler for DefaultRouteHandler {
         } else {
             info!("No route found for port: {}", local_address.port());
         }
-
-        info!("Handling route");
     }
 
     fn add_route(&self, id: NodeSocketRouteId, route: Arc<dyn Route + Send + Sync>) {
         self.storage.store(id, route);
-
-        info!("Current routes stored: {}", self.storage.storage.len());
     }
 }

@@ -66,7 +66,8 @@ where
         let state_handle = self.state.clone();
         let port_for_closure = self.port.clone();
         let protocol_id = self.id;
-        let neighbor_states = self.neighbor_states.clone();
+        let sending_states = self.sending_states.clone();
+        let receiving_states = self.receiving_states.clone();
 
         if let Some(storage) = self.state.get_storage("default".to_string()) {
             let items = storage.items();
@@ -84,7 +85,8 @@ where
                 Arc::new(ReceiveNeighborSymbolsTask::new(
                     state_clone.node_identifier(),
                     state_clone,
-                    self.neighbor_states.clone(),
+                    self.sending_states.clone(),
+                    self.receiving_states.clone(),
                 )),
                 Box::new(move |port: NodeAddress| {
                     Arc::new(Mutex::new(DefaultNodeSocket::new(port)))
@@ -101,14 +103,16 @@ where
                         let state = state_handle.clone();
                         let port = port_for_closure.clone();
                         let protocol_id = protocol_id;
-                        let neighbor_states = neighbor_states.clone();
+                        let sending_states = sending_states.clone();
+                        let receiving_states = receiving_states.clone();
 
                         Box::pin(async move {
                             Self::reconciliation_mechanism(
                                 state,
                                 port,
                                 protocol_id,
-                                neighbor_states,
+                                sending_states,
+                                
                             )
                             .await
                         })
@@ -140,7 +144,7 @@ where
 {
     fn state(&self) {
         info!("Reconciliation States:");
-        for r in self.neighbor_states.iter() {
+        for r in self.sending_states.iter() {
             info!("  {:?}: {:?}", r.key(), r.value().state);
         }
     }

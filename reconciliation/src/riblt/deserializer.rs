@@ -17,7 +17,7 @@ impl RIBLTDeserializer {
 }
 
 impl ProtocolDeserializer for RIBLTDeserializer {
-    fn deserialize(&self, bytes: Vec<u8>) -> Arc<dyn Message> {
+    fn deserialize(&self, bytes: Vec<u8>) -> Arc<dyn Message + Send + Sync> {
         if bytes.len() < 16 {
             return Arc::new(TestMessage::new(Arc::new(TestMessageType::new()), None));
         }
@@ -28,6 +28,7 @@ impl ProtocolDeserializer for RIBLTDeserializer {
             Ok(wrapper) => match wrapper {
                 RIBLTMessageWrapper::SendSymbol(msg) => Arc::new(msg),
                 RIBLTMessageWrapper::DecodedAll(msg) => Arc::new(msg),
+                RIBLTMessageWrapper::RequestMoreSymbols(msg) => Arc::new(msg),
             },
             Err(e) => {
                 error!("Failed to deserialize RIBLT message: {}", e);

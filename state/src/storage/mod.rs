@@ -118,6 +118,9 @@ impl DataStateStorage for KeyValueDataStateStorage {
 
         self.memory_storage.insert(key, value);
 
+        info!("Memory storage: {:?}", self.memory_storage);
+        info!("Len memory storage: {}", self.memory_storage.len());
+
         let action = StorageAction::Insert;
         if let Some(action_listeners) = self.listeners.get(&action) {
             for listener in action_listeners.iter() {

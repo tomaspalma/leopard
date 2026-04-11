@@ -392,7 +392,6 @@ impl NodeState for DefaultNodeState {
 
                             match stream.read_to_end(&mut buffer).await {
                                 Ok(_) => {
-                                    info!("Buffers length: {}", buffer.len());
                                     if buffer.len() < 16 {
                                         error!("Buffer too small");
                                         continue;
@@ -403,8 +402,6 @@ impl NodeState for DefaultNodeState {
                                         u16::from_be_bytes(buffer[8..10].try_into().unwrap());
                                     let sender_address =
                                         NodeAddress::new(addr.ip().to_string(), sender_port);
-
-                                    println!("Sender address: {:?}", sender_address);
 
                                     route_handler
                                         .handle(

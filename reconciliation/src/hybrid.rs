@@ -26,7 +26,7 @@ use crate::ReconciliationProtocol;
 pub struct HybridReconciliationProtocolDeserializer {}
 
 impl ProtocolDeserializer for HybridReconciliationProtocolDeserializer {
-    fn deserialize(&self, bytes: Vec<u8>) -> Arc<dyn Message> {
+    fn deserialize(&self, bytes: Vec<u8>) -> Arc<dyn Message + Send + Sync> {
         Arc::new(TestMessage::new(Arc::new(TestMessageType::new()), None))
     }
 }

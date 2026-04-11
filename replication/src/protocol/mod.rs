@@ -72,7 +72,7 @@ impl HintedHandoffDeserializer {
 }
 
 impl ProtocolDeserializer for HintedHandoffDeserializer {
-    fn deserialize(&self, data: Vec<u8>) -> Arc<dyn Message> {
+    fn deserialize(&self, data: Vec<u8>) -> Arc<dyn Message + Send + Sync> {
         Arc::new(TestMessage::new(Arc::new(TestMessageType::new()), None))
     }
 }
