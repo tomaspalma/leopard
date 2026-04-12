@@ -3,7 +3,6 @@ pub mod state;
 
 use runtime::spawn;
 
-use serde_json::to_string_pretty;
 use tokio::fs::{read_to_string, write};
 use tracing::info;
 

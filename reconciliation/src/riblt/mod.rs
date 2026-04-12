@@ -84,8 +84,6 @@ impl ReceivingState {
     }
 }
 
-
-
 pub const RIBLT_PROTOCOL_ID: u64 = 1;
 const BATCH_SIZE: usize = 5;
 const BATCH_INTERVAL: Duration = Duration::from_millis(5000);
@@ -115,6 +113,18 @@ impl RIBLT {
         riblt.is_empty()
     }
 
+    async fn get_neighbor_sending_state_status(
+        neighbor: &NodeAddress,
+        sending_states: &Arc<RwLock<HashMap<NodeAddress, SendingState>>>,
+    ) -> Option<ReconciliationState> {
+        let lock = sending_states.read().await;
+        if let Some(status) = lock.get(&neighbor) {
+            Some(status.state.clone())
+        } else {
+            None
+        }
+    }
+
     fn update_symbols(
         symbols: &mut HashSet<RIBLTSymbol>,
         items: Vec<Box<dyn DataStateItem + Send + Sync>>,
@@ -133,7 +143,7 @@ impl RIBLT {
         neighbor_address: NodeAddress,
         protocol_id: u64,
         sending_states: Arc<RwLock<HashMap<NodeAddress, SendingState>>>,
-        ) {
+    ) {
         info!(
             "Running sending symbols sequence from {:?} to {:?}",
             own_address, neighbor_address
@@ -150,16 +160,17 @@ impl RIBLT {
             return;
         }
 
-        while sending_states.read().await.contains_key(&neighbor_address) {
-            let current_state = {
-                if let Some(status) = sending_states.read().await.get(&neighbor_address) {
-                    status.state.clone()
-                } else {
-                    break;
-                }
-            };
-
-            if current_state == ReconciliationState::AwaitingConfirmation {
+        while sending_states
+            .clone()
+            .read()
+            .await
+            .contains_key(&neighbor_address)
+        {
+            if Self::get_neighbor_sending_state_status(&neighbor_address, &sending_states)
+                .await
+                .unwrap()
+                == ReconciliationState::AwaitingConfirmation
+            {
                 sleep(Duration::from_millis(100)).await;
                 wait_time_ms += 100;
 
@@ -175,8 +186,6 @@ impl RIBLT {
             }
 
             wait_time_ms = 0;
-
-            info!("Current index: {}", current_index);
 
             let mut symbols = Vec::new();
             let session_id;
@@ -237,7 +246,7 @@ impl RIBLT {
         port: NodeAddress,
         protocol_id: u64,
         sending_states: Arc<RwLock<HashMap<NodeAddress, SendingState>>>,
-        ) -> Result<(), String> {
+    ) -> Result<(), String> {
         info!("Ran reconciliation mechanism");
 
         let connection_targets = state.membership().read().await.valid_connection_targets();
@@ -257,11 +266,7 @@ impl RIBLT {
                 "Initializing neighbor reconciliation for neighbor {:?}",
                 info
             );
-            Self::init_sending_state(
-                state.clone(),
-                sending_states.clone(),
-                info.clone(),
-            ).await;
+            Self::init_sending_state(state.clone(), sending_states.clone(), info.clone()).await;
             info!(
                 "Finished initializing neighbor reconciliation for neighbor {:?}",
                 info
@@ -291,7 +296,7 @@ impl RIBLT {
 
     pub async fn check_if_already_sending(
         sending_states: Arc<RwLock<HashMap<NodeAddress, SendingState>>>,
-            neighbor: NodeAddress,
+        neighbor: NodeAddress,
     ) -> bool {
         sending_states.read().await.contains_key(&neighbor)
     }
