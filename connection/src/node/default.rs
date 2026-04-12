@@ -17,7 +17,6 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use zeromq::Socket;
 
-use std::io::{Bytes, Read};
 use std::sync::Arc;
 
 pub struct PeriodicDefaultNodeSocketTask {

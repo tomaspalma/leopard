@@ -7,7 +7,8 @@ use runtime::spawn;
 
 use deserializer::RIBLTDeserializer;
 
-use dashmap::DashMap;
+use std::collections::{HashMap, HashSet};
+use tokio::sync::RwLock;
 
 use std::sync::Arc;
 use tracing::info;
@@ -26,7 +27,7 @@ use crate::riblt::messages::{
 use riblt::{RatelessIBLT, UnmanagedRatelessIBLT};
 
 use metrics::counter;
-use std::collections::HashSet;
+
 use tokio::time::{sleep, Duration};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -41,6 +42,7 @@ pub struct SendingState {
     pub state: ReconciliationState,
     pub local_iblt: RatelessIBLT<RIBLTSymbol, HashSet<RIBLTSymbol>>,
     pub start_time: Instant,
+    pub session_id: String,
 }
 
 impl SendingState {
@@ -48,11 +50,13 @@ impl SendingState {
         state: ReconciliationState,
         local_iblt: RatelessIBLT<RIBLTSymbol, HashSet<RIBLTSymbol>>,
         start_time: Instant,
+        session_id: String,
     ) -> Self {
         Self {
             state,
             local_iblt,
             start_time,
+            session_id,
         }
     }
 }
@@ -61,6 +65,7 @@ pub struct ReceivingState {
     pub local_iblt: RatelessIBLT<RIBLTSymbol, HashSet<RIBLTSymbol>>,
     pub remote_iblt: UnmanagedRatelessIBLT<RIBLTSymbol>,
     pub start_time: Instant,
+    pub session_id: String,
 }
 
 impl ReceivingState {
@@ -68,11 +73,13 @@ impl ReceivingState {
         local_iblt: RatelessIBLT<RIBLTSymbol, HashSet<RIBLTSymbol>>,
         remote_iblt: UnmanagedRatelessIBLT<RIBLTSymbol>,
         start_time: Instant,
+        session_id: String,
     ) -> Self {
         Self {
             local_iblt,
             remote_iblt,
             start_time,
+            session_id,
         }
     }
 }
@@ -88,8 +95,8 @@ pub struct RIBLT {
     state: Arc<DefaultNodeState>,
     port: NodeAddress,
     deserializer: Arc<RIBLTDeserializer>,
-    sending_states: Arc<DashMap<NodeAddress, SendingState>>,
-    pub receiving_states: Arc<DashMap<NodeAddress, ReceivingState>>,
+    sending_states: Arc<RwLock<HashMap<NodeAddress, SendingState>>>,
+    pub receiving_states: Arc<RwLock<HashMap<NodeAddress, ReceivingState>>>,
 }
 
 impl RIBLT {
@@ -99,8 +106,8 @@ impl RIBLT {
             state,
             port,
             deserializer: Arc::new(RIBLTDeserializer::default()),
-            sending_states: Arc::new(DashMap::new()),
-            receiving_states: Arc::new(DashMap::new()),
+            sending_states: Arc::new(RwLock::new(HashMap::new())),
+            receiving_states: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -125,7 +132,7 @@ impl RIBLT {
         own_address: NodeAddress,
         neighbor_address: NodeAddress,
         protocol_id: u64,
-        sending_states: Arc<DashMap<NodeAddress, SendingState>>,
+        sending_states: Arc<RwLock<HashMap<NodeAddress, SendingState>>>,
         ) {
         info!(
             "Running sending symbols sequence from {:?} to {:?}",
@@ -135,7 +142,7 @@ impl RIBLT {
         let mut current_index = 0;
         let mut wait_time_ms = 0;
 
-        if let None = sending_states.get(&neighbor_address) {
+        if !sending_states.read().await.contains_key(&neighbor_address) {
             info!(
                 "Neighbor {:?} not found in neighbor states, aborting sending symbols sequence",
                 neighbor_address
@@ -143,9 +150,9 @@ impl RIBLT {
             return;
         }
 
-        while sending_states.contains_key(&neighbor_address) {
+        while sending_states.read().await.contains_key(&neighbor_address) {
             let current_state = {
-                if let Some(status) = sending_states.get(&neighbor_address) {
+                if let Some(status) = sending_states.read().await.get(&neighbor_address) {
                     status.state.clone()
                 } else {
                     break;
@@ -158,7 +165,7 @@ impl RIBLT {
 
                 if wait_time_ms >= 5000 {
                     info!("Timeout waiting for confirmation from {:?}, reverting to SendingSymbols to send next batch", neighbor_address);
-                    if let Some(mut status) = sending_states.get_mut(&neighbor_address) {
+                    if let Some(status) = sending_states.write().await.get_mut(&neighbor_address) {
                         status.state = ReconciliationState::SendingSymbols;
                     }
                     wait_time_ms = 0;
@@ -172,12 +179,16 @@ impl RIBLT {
             info!("Current index: {}", current_index);
 
             let mut symbols = Vec::new();
+            let session_id;
 
             {
-                let mut status_guard = match sending_states.get_mut(&neighbor_address) {
+                let mut states_guard = sending_states.write().await;
+                let status_guard = match states_guard.get_mut(&neighbor_address) {
                     Some(guard) => guard,
                     None => break,
                 };
+
+                session_id = status_guard.session_id.clone();
 
                 for _ in 0..BATCH_SIZE {
                     let coded_symbol = status_guard.local_iblt.get_coded_symbol(current_index);
@@ -205,6 +216,7 @@ impl RIBLT {
                         RIBLTMessageType::new(RIBLTMessageTypeValues::SendSymbol),
                         Some(protocol_id),
                         symbols,
+                        session_id,
                     )),
                 )
                 .await
@@ -224,7 +236,7 @@ impl RIBLT {
         state: Arc<DefaultNodeState>,
         port: NodeAddress,
         protocol_id: u64,
-        sending_states: Arc<DashMap<NodeAddress, SendingState>>,
+        sending_states: Arc<RwLock<HashMap<NodeAddress, SendingState>>>,
         ) -> Result<(), String> {
         info!("Ran reconciliation mechanism");
 
@@ -233,7 +245,7 @@ impl RIBLT {
         info!("Valid connection targets: {:?}", connection_targets);
 
         for info in connection_targets {
-            if let Some(_) = sending_states.get(&info) {
+            if let Some(_) = sending_states.read().await.get(&info) {
                 info!(
                     "Already have reconciliation in progress with neighbor {:?}, skipping",
                     info
@@ -249,7 +261,7 @@ impl RIBLT {
                 state.clone(),
                 sending_states.clone(),
                 info.clone(),
-            );
+            ).await;
             info!(
                 "Finished initializing neighbor reconciliation for neighbor {:?}",
                 info
@@ -277,16 +289,16 @@ impl RIBLT {
         Ok(())
     }
 
-    pub fn check_if_already_sending(
-        sending_states: Arc<DashMap<NodeAddress, SendingState>>,
+    pub async fn check_if_already_sending(
+        sending_states: Arc<RwLock<HashMap<NodeAddress, SendingState>>>,
             neighbor: NodeAddress,
     ) -> bool {
-        sending_states.contains_key(&neighbor)
+        sending_states.read().await.contains_key(&neighbor)
     }
 
-    pub fn init_sending_state(
+    pub async fn init_sending_state(
         state: Arc<DefaultNodeState>,
-        sending_states: Arc<DashMap<NodeAddress, SendingState>>,
+        sending_states: Arc<RwLock<HashMap<NodeAddress, SendingState>>>,
         neighbor: NodeAddress,
     ) {
         let mut symbols = HashSet::new();
@@ -299,20 +311,22 @@ impl RIBLT {
             }
         }
 
-        sending_states.insert(
+        sending_states.write().await.insert(
             neighbor,
             SendingState::new(
                 ReconciliationState::SendingSymbols,
                 RatelessIBLT::new(symbols),
                 Instant::now(),
+                uuid::Uuid::new_v4().to_string(),
             ),
         );
     }
 
-    pub fn init_receiving_state(
+    pub async fn init_receiving_state(
         state: Arc<DefaultNodeState>,
-        receiving_states: Arc<DashMap<NodeAddress, ReceivingState>>,
+        receiving_states: Arc<RwLock<HashMap<NodeAddress, ReceivingState>>>,
         neighbor: NodeAddress,
+        session_id: String,
     ) {
         let mut symbols = HashSet::new();
         if let Some(storage) = state.get_storage("default".to_string()) {
@@ -324,12 +338,13 @@ impl RIBLT {
             }
         }
 
-        receiving_states.insert(
+        receiving_states.write().await.insert(
             neighbor,
             ReceivingState::new(
                 RatelessIBLT::new(symbols),
                 UnmanagedRatelessIBLT::new(),
                 Instant::now(),
+                session_id,
             ),
         );
     }

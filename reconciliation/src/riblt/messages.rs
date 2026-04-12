@@ -137,11 +137,20 @@ impl riblt::Symbol for RIBLTCodedSymbol {
 pub struct RIBLTDecodedAllMessage {
     _type: RIBLTMessageType,
     protocol_id: Option<u64>,
+    session_id: String,
 }
 
 impl RIBLTDecodedAllMessage {
-    pub fn new(_type: RIBLTMessageType, protocol_id: Option<u64>) -> Self {
-        Self { _type, protocol_id }
+    pub fn new(_type: RIBLTMessageType, protocol_id: Option<u64>, session_id: String) -> Self {
+        Self {
+            _type,
+            protocol_id,
+            session_id,
+        }
+    }
+
+    pub fn session_id(&self) -> &String {
+        &self.session_id
     }
 }
 
@@ -188,6 +197,7 @@ pub struct RIBLTSendSymbolMessage {
     _type: RIBLTMessageType,
     protocol_id: Option<u64>,
     symbol: Vec<RIBLTCodedSymbol>,
+    session_id: String,
 }
 
 impl RIBLTSendSymbolMessage {
@@ -195,16 +205,22 @@ impl RIBLTSendSymbolMessage {
         _type: RIBLTMessageType,
         protocol_id: Option<u64>,
         symbol: Vec<RIBLTCodedSymbol>,
+        session_id: String,
     ) -> Self {
         Self {
             _type,
             protocol_id,
             symbol,
+            session_id,
         }
     }
 
     pub fn symbols(&self) -> &Vec<RIBLTCodedSymbol> {
         &self.symbol
+    }
+
+    pub fn session_id(&self) -> &String {
+        &self.session_id
     }
 }
 
@@ -250,11 +266,20 @@ impl Message for RIBLTSendSymbolMessage {
 pub struct RIBLTRequestMoreSymbolsMessage {
     _type: RIBLTMessageType,
     protocol_id: Option<u64>,
+    session_id: String,
 }
 
 impl RIBLTRequestMoreSymbolsMessage {
-    pub fn new(_type: RIBLTMessageType, protocol_id: Option<u64>) -> Self {
-        Self { _type, protocol_id }
+    pub fn new(_type: RIBLTMessageType, protocol_id: Option<u64>, session_id: String) -> Self {
+        Self {
+            _type,
+            protocol_id,
+            session_id,
+        }
+    }
+
+    pub fn session_id(&self) -> &String {
+        &self.session_id
     }
 }
 

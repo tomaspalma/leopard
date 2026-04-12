@@ -16,7 +16,8 @@ use connection::{
     request::handler::default::{TestMessage, TestMessageType},
     route::{default::NodeSocketRouteId, RouteHandler, RouteStorage, RouteTask},
 };
-use dashmap::DashMap;
+use std::collections::HashMap;
+use tokio::sync::RwLock;
 use membership::{Membership, MembershipNeighbor, MembershipNeighbors};
 use message::Message;
 use protocol::{deserializer::ProtocolDeserializer, Protocol};
@@ -144,8 +145,12 @@ where
 {
     fn state(&self) {
         info!("Reconciliation States:");
-        for r in self.sending_states.iter() {
-            info!("  {:?}: {:?}", r.key(), r.value().state);
-        }
+        let states = self.sending_states.clone();
+        tokio::spawn(async move {
+            let guard = states.read().await;
+            for (k, v) in guard.iter() {
+                info!("  {:?}: {:?}", k, v.state);
+            }
+        });
     }
 }

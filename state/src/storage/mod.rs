@@ -14,7 +14,7 @@ use item::{DataStateItem, DefaultDataStateItem};
 use dashmap::DashMap;
 
 use serde::{Serialize, de::DeserializeOwned};
-use std::path::Path;
+use std::{path::Path, sync::Arc};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum StorageAction {
@@ -40,7 +40,7 @@ impl PersistentDataStorage {
     pub async fn save<T: Serialize>(&self, data: &T) -> std::io::Result<()> {
         let _guard = self.write_lock.lock().await;
 
-        let serialized = to_string_pretty(data)
+        let serialized = serde_json::to_string_pretty(data)
             .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
 
         let tmp_filename = format!("{}.tmp", self.filename);
@@ -73,7 +73,7 @@ pub trait DataStateStorage {
 }
 
 pub struct KeyValueDataStateStorage {
-    memory_storage: DashMap<String, String>,
+    memory_storage: Arc<DashMap<String, String>>,
     persistent_storage: PersistentDataStorage,
     listeners: DashMap<StorageAction, Vec<StorageListener>>,
 }
@@ -97,7 +97,7 @@ impl KeyValueDataStateStorage {
         }
 
         Self {
-            memory_storage,
+            memory_storage: std::sync::Arc::new(memory_storage),
             persistent_storage,
             listeners: DashMap::new(),
         }
@@ -133,7 +133,7 @@ impl DataStateStorage for KeyValueDataStateStorage {
         spawn!({
             persistent_storage_clone
                 .clone()
-                .save(&memory_storage_clone)
+                .save(&*memory_storage_clone)
                 .await
                 .unwrap()
         });
