@@ -26,14 +26,12 @@ impl CsvRecorder {
             println!("Metrics exporter started for directory: {}", directory);
             let _ = create_dir_all(&directory).await;
             let mut interval = interval(flush_interval);
+            let start_time = std::time::Instant::now();
 
             loop {
                 interval.tick().await;
 
-                let timestamp = SystemTime::now()
-                    .duration_since(UNIX_EPOCH)
-                    .unwrap_or_default()
-                    .as_millis();
+                let timestamp = start_time.elapsed().as_millis();
 
                 let counters = registry.get_counter_handles();
                 if counters.is_empty() {
