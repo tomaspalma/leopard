@@ -31,12 +31,15 @@ impl
         Arc::new(DefaultMembershipNeighborRepresentation::new(Arc::new(
             RwLock::new(vec![
                 Arc::new(RwLock::new(DefaultMembershipNeighbor::new(
+                    "node9000".to_string(),
                     NodeAddress::new("127.0.0.1".to_string(), 9000),
                 ))),
                 Arc::new(RwLock::new(DefaultMembershipNeighbor::new(
+                    "node9001".to_string(),
                     NodeAddress::new("127.0.0.1".to_string(), 9001),
                 ))),
                 Arc::new(RwLock::new(DefaultMembershipNeighbor::new(
+                    "node9002".to_string(),
                     NodeAddress::new("127.0.0.1".to_string(), 9002),
                 ))),
             ]),

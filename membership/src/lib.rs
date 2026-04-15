@@ -21,9 +21,9 @@ pub struct DefaultMembershipNeighbor {
 }
 
 impl DefaultMembershipNeighbor {
-    pub fn new(port: NodeAddress) -> Self {
+    pub fn new(id: String, port: NodeAddress) -> Self {
         Self {
-            identifier: Arc::new(DefaultNodeIdentifier::new(port)),
+            identifier: Arc::new(DefaultNodeIdentifier::new(id, port)),
             taints: Vec::new(),
         }
     }
