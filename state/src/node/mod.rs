@@ -391,7 +391,9 @@ impl NodeState for DefaultNodeState {
                             let mut buffer = Vec::new();
 
                             match stream.read_to_end(&mut buffer).await {
-                                Ok(_) => {
+                                Ok(size) => {
+                                    metrics::counter!("total_bytes_received", "node" => format!("{:?}", local_identifier)).increment(size as u64);
+
                                     if buffer.len() < 16 {
                                         error!("Buffer too small");
                                         continue;
