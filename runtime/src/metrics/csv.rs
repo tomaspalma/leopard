@@ -33,7 +33,7 @@ impl CsvRecorder {
                 let timestamp = SystemTime::now()
                     .duration_since(UNIX_EPOCH)
                     .unwrap_or_default()
-                    .as_secs_f64();
+                    .as_millis();
 
                 let counters = registry.get_counter_handles();
                 if counters.is_empty() {
@@ -79,7 +79,7 @@ impl CsvRecorder {
                                 let _ = file.write_all(b"timestamp,value,labels\n").await;
                             }
                         }
-                        let line = format!("{:.3},{},\"{}\"\n", timestamp, val, labels_str);
+                        let line = format!("{},{},\"{}\"\n", timestamp, val, labels_str);
                         if let Err(e) = file.write_all(line.as_bytes()).await {
                             println!("Error writing to file {}: {}", file_name, e);
                         }
