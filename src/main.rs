@@ -1,5 +1,7 @@
 mod experiments;
 
+use log::info;
+
 use std::time::Duration;
 
 use clap::{Parser, Subcommand};
@@ -31,6 +33,8 @@ async fn main() {
 
     tracing_subscriber::fmt::init();
 
+    info!("Setting recorder");
+
     let recorder = CsvRecorder::new();
     recorder
         .clone()
@@ -38,7 +42,11 @@ async fn main() {
     set_global_recorder(recorder).expect("Failed to set global metrics recorder");
 
     match &cli.command {
-        Commands::CustomNodes { node_type, protocol, nodes } => {
+        Commands::CustomNodes {
+            node_type,
+            protocol,
+            nodes,
+        } => {
             experiments::custom_nodes(node_type.clone(), protocol.clone(), nodes.clone()).await;
         }
     }
