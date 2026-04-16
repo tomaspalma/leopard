@@ -1,27 +1,27 @@
-use metrics::{counter, histogram};
+use metrics::{counter, gauge, histogram};
 use runtime::spawn;
 
 use riblt::{symbol::PeelableResult, UnmanagedRatelessIBLT};
 
 use crate::riblt::{
     messages::{RIBLTMessageType, RIBLTMessageTypeValues, RIBLTSymbol},
-    {SendingState, ReceivingState},
+    {ReceivingState, SendingState},
 };
 
 use connection::{
     node::{id::NodeIdentifier, port::NodeAddress},
     route::RouteTask,
 };
-use std::collections::HashMap;
-use tokio::sync::RwLock;
 use protocol::deserializer::ProtocolDeserializer;
 use state::node::{DefaultNodeState, NodeState};
+use std::collections::HashMap;
 use std::sync::Arc;
+use tokio::sync::RwLock;
 use tracing::{error, info};
 
 use crate::riblt::{
     messages::{RIBLTDecodedAllMessage, RIBLTRequestMoreSymbolsMessage, RIBLTSendSymbolMessage},
-    RIBLTDeserializer, RIBLT, RIBLT_PROTOCOL_ID, ReconciliationState,
+    RIBLTDeserializer, ReconciliationState, RIBLT, RIBLT_PROTOCOL_ID,
 };
 
 pub struct ReceiveNeighborSymbolsTask {
@@ -48,13 +48,21 @@ impl ReceiveNeighborSymbolsTask {
 
     async fn receive_symbols_neighbor_decoded(&self, neighbor: NodeAddress, session_id: String) {
         info!("Neighbor successfully decoded symbols");
-        
-        let should_remove = self.sending_states.read().await.get(&neighbor).map_or(false, |state| state.session_id == session_id);
-        
+
+        let should_remove = self
+            .sending_states
+            .read()
+            .await
+            .get(&neighbor)
+            .map_or(false, |state| state.session_id == session_id);
+
         if should_remove {
             self.sending_states.write().await.remove(&neighbor);
         } else if self.sending_states.read().await.contains_key(&neighbor) {
-            info!("Session ID mismatch, ignoring FinishedDecoding for neighbor {:?}", neighbor);
+            info!(
+                "Session ID mismatch, ignoring FinishedDecoding for neighbor {:?}",
+                neighbor
+            );
         }
     }
 
@@ -93,33 +101,38 @@ impl ReceiveNeighborSymbolsTask {
         });
     }
 
-    async fn handle_received_symbols(&self, message: RIBLTSendSymbolMessage, neighbor: NodeAddress) {
-        let (local_coded_symbols, remote_coded_symbols) = match self.receiving_states.write().await.get_mut(&neighbor) {
-            Some(status) => {
-                for symbol in message.symbols() {
-                    let mut cs = riblt::CodedSymbol::new();
-                    cs.sum = symbol.sum.clone();
-                    cs.hash = symbol.hash;
-                    cs.count = symbol.count;
-                    status.remote_iblt.add_coded_symbol(&cs);
+    async fn handle_received_symbols(
+        &self,
+        message: RIBLTSendSymbolMessage,
+        neighbor: NodeAddress,
+    ) {
+        let (local_coded_symbols, remote_coded_symbols) =
+            match self.receiving_states.write().await.get_mut(&neighbor) {
+                Some(status) => {
+                    for symbol in message.symbols() {
+                        let mut cs = riblt::CodedSymbol::new();
+                        cs.sum = symbol.sum.clone();
+                        cs.hash = symbol.hash;
+                        cs.count = symbol.count;
+                        status.remote_iblt.add_coded_symbol(&cs);
+                    }
+
+                    let coded_symbols_len = status.remote_iblt.coded_symbols.len() as usize;
+                    status.local_iblt.extend_coded_symbols(coded_symbols_len);
+
+                    (
+                        status.local_iblt.coded_symbols.clone(),
+                        status.remote_iblt.coded_symbols.clone(),
+                    )
                 }
-
-                let coded_symbols_len = status.remote_iblt.coded_symbols.len() as usize;
-                status.local_iblt.extend_coded_symbols(coded_symbols_len);
-
-                (
-                    status.local_iblt.coded_symbols.clone(),
-                    status.remote_iblt.coded_symbols.clone(),
-                )
-            }
-            None => {
-                error!("Failed to get IBLT for neighbor {:?}", neighbor);
-                return;
-            }
-        };
+                None => {
+                    error!("Failed to get IBLT for neighbor {:?}", neighbor);
+                    return;
+                }
+            };
 
         let neighbor_clone = neighbor.clone();
-        
+
         let (is_peeling_successful, new_symbols) = tokio::task::spawn_blocking(move || {
             let local_iblt = UnmanagedRatelessIBLT {
                 coded_symbols: local_coded_symbols,
@@ -144,10 +157,14 @@ impl ReceiveNeighborSymbolsTask {
             (successful, result)
         }).await.unwrap();
 
+        let differences_found = !new_symbols.is_empty();
         self.apply_reconciliation_result(new_symbols);
 
         if is_peeling_successful {
             info!("Peeling successful for neighbor {:?}", neighbor);
+            runtime::metrics::csv::finish_iteration(format!("{:?}", neighbor));
+            gauge!("reconciliation_had_differences", "target" => format!("{:?}", neighbor))
+                .set(if differences_found { 1.0 } else { 0.0 });
 
             {
                 self.receiving_states.write().await.remove(&neighbor);
@@ -171,8 +188,11 @@ impl ReceiveNeighborSymbolsTask {
                     .await;
             });
         } else {
-            info!("Peeling unsuccessful for neighbor {:?}, requesting more symbols", neighbor);
-            
+            info!(
+                "Peeling unsuccessful for neighbor {:?}, requesting more symbols",
+                neighbor
+            );
+
             let state_clone = self.state.clone();
             let id_clone = self.identifier.connection_info().clone();
             let neighbor_clone = neighbor.clone();
@@ -219,20 +239,27 @@ impl ReceiveNeighborSymbolsTask {
 
         info!("Checking if neighbor {:?} is already reconciling", neighbor);
         if !self.receiving_states.read().await.contains_key(&neighbor) {
-            info!("Initializing neighbor reconciliation for neighbor {:?}", neighbor);
+            info!(
+                "Initializing neighbor reconciliation for neighbor {:?}",
+                neighbor
+            );
             let state_clone = self.state.clone();
             let receiving_states_clone = self.receiving_states.clone();
             let neighbor_clone = neighbor.clone();
             let session_id_clone = msg_session_id.clone();
-            
+
             RIBLT::init_receiving_state(
                 state_clone,
                 receiving_states_clone,
                 neighbor_clone,
                 session_id_clone,
-            ).await;
-            
-            info!("Finished initializing neighbor reconciliation for neighbor {:?}", neighbor);
+            )
+            .await;
+
+            info!(
+                "Finished initializing neighbor reconciliation for neighbor {:?}",
+                neighbor
+            );
         }
 
         self.handle_received_symbols(message, neighbor).await;
@@ -242,9 +269,9 @@ impl ReceiveNeighborSymbolsTask {
 impl RouteTask for ReceiveNeighborSymbolsTask {
     fn run(self: Arc<Self>, message: Vec<u8>, neighbor: NodeAddress) {
         let deserialized_message = RIBLTDeserializer::new().deserialize(message);
-        
+
         let msg_type_box = deserialized_message.get_type().value();
-        
+
         let riblt_type = msg_type_box
             .as_any()
             .downcast_ref::<RIBLTMessageTypeValues>()
@@ -257,33 +284,48 @@ impl RouteTask for ReceiveNeighborSymbolsTask {
                 match msg_enum {
                     RIBLTMessageTypeValues::SendSymbol => {
                         info!("Received SendSymbol from {:?}", neighbor);
-                        if let Some(msg) = deserialized_message.as_any().downcast_ref::<RIBLTSendSymbolMessage>() {
-                            this.receive_incoming_symbols(
-                                msg.clone(), 
-                                neighbor, 
-                            ).await;
+                        if let Some(msg) = deserialized_message
+                            .as_any()
+                            .downcast_ref::<RIBLTSendSymbolMessage>()
+                        {
+                            this.receive_incoming_symbols(msg.clone(), neighbor).await;
                         } else {
                             error!("Failed to downcast message to RIBLTSendSymbolMessage");
                         }
                     }
                     RIBLTMessageTypeValues::FinishedDecoding => {
                         info!("Received FinishedDecoding from {:?}", neighbor);
-                        if let Some(msg) = deserialized_message.as_any().downcast_ref::<RIBLTDecodedAllMessage>() {
-                            this.receive_symbols_neighbor_decoded(neighbor, msg.session_id().clone()).await;
+                        if let Some(msg) = deserialized_message
+                            .as_any()
+                            .downcast_ref::<RIBLTDecodedAllMessage>()
+                        {
+                            this.receive_symbols_neighbor_decoded(
+                                neighbor,
+                                msg.session_id().clone(),
+                            )
+                            .await;
                         } else {
                             error!("Failed to downcast message to RIBLTDecodedAllMessage");
                         }
                     }
                     RIBLTMessageTypeValues::RequestMoreSymbols => {
                         info!("Received RequestMoreSymbols from {:?}", neighbor);
-                        
-                        if let Some(msg) = deserialized_message.as_any().downcast_ref::<RIBLTRequestMoreSymbolsMessage>() {
-                            if let Some(status) = this.sending_states.write().await.get_mut(&neighbor) {
+
+                        if let Some(msg) = deserialized_message
+                            .as_any()
+                            .downcast_ref::<RIBLTRequestMoreSymbolsMessage>()
+                        {
+                            if let Some(status) =
+                                this.sending_states.write().await.get_mut(&neighbor)
+                            {
                                 if status.session_id == *msg.session_id() {
                                     info!("Status found for {:?} with matching session_id, setting state to SendingSymbols", neighbor);
                                     status.state = ReconciliationState::SendingSymbols;
                                 } else {
-                                    info!("Status found for {:?}, but session_id mismatched", neighbor);
+                                    info!(
+                                        "Status found for {:?}, but session_id mismatched",
+                                        neighbor
+                                    );
                                 }
                             } else {
                                 info!("No status found for neighbor {:?}", neighbor);

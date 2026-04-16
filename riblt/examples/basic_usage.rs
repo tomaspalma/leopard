@@ -1,6 +1,6 @@
-use std::hash::{DefaultHasher, Hash, Hasher};
 use bincode;
 use riblt;
+use std::hash::{DefaultHasher, Hash, Hasher};
 
 // Example implementation of a struct that implements the Symbol trait
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -50,28 +50,54 @@ fn main() {
 
     // A set of symbols we have on our local server
     let local_items: HashSet<SimpleSymbol> = HashSet::from([
-        SimpleSymbol { unique_id: 7, timestamp: 0},
-        SimpleSymbol { unique_id: 15, timestamp: 0},
-        SimpleSymbol { unique_id: 16, timestamp: 0},
-        SimpleSymbol { unique_id: 17, timestamp: 0}, //local only
+        SimpleSymbol {
+            unique_id: 7,
+            timestamp: 0,
+        },
+        SimpleSymbol {
+            unique_id: 15,
+            timestamp: 0,
+        },
+        SimpleSymbol {
+            unique_id: 16,
+            timestamp: 0,
+        },
+        SimpleSymbol {
+            unique_id: 17,
+            timestamp: 0,
+        }, //local only
     ]);
     let mut managed_local_iblt = riblt::RatelessIBLT::new(local_items);
 
     // A set of symbols on a remote server
     let remote_items: HashSet<SimpleSymbol> = HashSet::from([
-        SimpleSymbol { unique_id: 7, timestamp: 0},
-        SimpleSymbol { unique_id: 15, timestamp: 0},
-        SimpleSymbol { unique_id: 16, timestamp: 0},
-        SimpleSymbol { unique_id: 18, timestamp: 0}, //remote only
+        SimpleSymbol {
+            unique_id: 7,
+            timestamp: 0,
+        },
+        SimpleSymbol {
+            unique_id: 15,
+            timestamp: 0,
+        },
+        SimpleSymbol {
+            unique_id: 16,
+            timestamp: 0,
+        },
+        SimpleSymbol {
+            unique_id: 18,
+            timestamp: 0,
+        }, //remote only
     ]);
     let mut managed_remote_iblt = riblt::RatelessIBLT::new(remote_items);
 
-    let mut local_copy_of_remote : riblt::UnmanagedRatelessIBLT<SimpleSymbol> = riblt::UnmanagedRatelessIBLT::new();
+    let mut local_copy_of_remote: riblt::UnmanagedRatelessIBLT<SimpleSymbol> =
+        riblt::UnmanagedRatelessIBLT::new();
     for i in 0..20 {
         println!("Getting coded symbol {}", i);
         let one_coded_symbol = managed_remote_iblt.get_coded_symbol(i);
         let encoded_coded_symbol = bincode::serialize(&one_coded_symbol).unwrap();
-        let decoded_coded_symbol : riblt::CodedSymbol<SimpleSymbol> = bincode::deserialize(&encoded_coded_symbol).unwrap();
+        let decoded_coded_symbol: riblt::CodedSymbol<SimpleSymbol> =
+            bincode::deserialize(&encoded_coded_symbol).unwrap();
         local_copy_of_remote.add_coded_symbol(&decoded_coded_symbol);
 
         let mut collapsed = managed_local_iblt.collapse(&local_copy_of_remote);
@@ -82,7 +108,6 @@ fn main() {
             break;
         }
     }
-
 
     // for i in 0..10_000 {
     //     local_items.insert(SimpleSymbol {
@@ -102,7 +127,6 @@ fn main() {
     // let test_data_encoded = test_data.encode_to_bytes();
     // let test_data_decoded = SimpleSymbol::decode_from_bytes(&test_data_encoded);
     // println!("{:?}", test_data_decoded);
-
 
     // println!("{:?}", managed_local_iblt.coded_symbols);
     // managed_local_iblt.get_coded_symbol(1);

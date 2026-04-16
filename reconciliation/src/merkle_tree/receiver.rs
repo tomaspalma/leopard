@@ -59,7 +59,7 @@ impl ReceiveMerkleTreeMessageTask {
                 self.handle_data_request(msg.protocol(), neighbor, key);
             }
             MerkleTreeMessageWrapper::DataResponse(key, value) => {
-                self.handle_data_response(key, value);
+                self.handle_data_response(neighbor, key, value);
             }
             _ => info!("Received unknown message type from {:?}", neighbor),
         }
@@ -110,6 +110,7 @@ impl ReceiveMerkleTreeMessageTask {
             });
         } else {
             info!("Root hash match. In sync.");
+            runtime::metrics::csv::finish_iteration(format!("{:?}", neighbor));
         }
     }
 
@@ -250,8 +251,9 @@ impl ReceiveMerkleTreeMessageTask {
         }
     }
 
-    fn handle_data_response(&self, key: &String, value: &String) {
-        counter!("merkle_tree_data_response_received").increment(1);
+    fn handle_data_response(&self, neighbor: NodeAddress, key: &String, value: &String) {
+        counter!("merkle_tree_data_response_received", "neighbor" => format!("{:?}", neighbor))
+            .increment(1);
         info!(
             "Received DataResponse for key {:?}. Evaluating for local tree and storage insertion.",
             key
@@ -259,6 +261,7 @@ impl ReceiveMerkleTreeMessageTask {
         let state_clone = self.state.clone();
         let key_clone = key.clone();
         let value_clone = value.clone();
+        let neighbor_clone = neighbor.clone();
 
         spawn!({
             if let Some(storage) = state_clone.get_storage("default".to_string()) {
@@ -284,6 +287,8 @@ impl ReceiveMerkleTreeMessageTask {
                         key_clone
                     );
                 }
+
+                runtime::metrics::csv::finish_iteration(format!("{:?}", neighbor_clone));
             }
         });
     }

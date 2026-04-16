@@ -20,7 +20,8 @@ use tracing::info;
 use crate::NodeService;
 
 pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
-pub type ActionCallback = Arc<dyn Fn(Option<axum::body::Bytes>) -> BoxFuture<'static, ()> + Send + Sync>;
+pub type ActionCallback =
+    Arc<dyn Fn(Option<axum::body::Bytes>) -> BoxFuture<'static, ()> + Send + Sync>;
 
 #[derive(Clone)]
 pub struct AfterRequestAction {
@@ -91,14 +92,20 @@ impl NodeHTTPService {
             .unwrap_or_else(|| req.uri().path().to_string());
 
         let (parts, body) = req.into_parts();
-        let bytes = axum::body::to_bytes(body, usize::MAX).await.unwrap_or_default();
+        let bytes = axum::body::to_bytes(body, usize::MAX)
+            .await
+            .unwrap_or_default();
         let req = Request::from_parts(parts, axum::body::Body::from(bytes.clone()));
 
         let res = next.run(req).await;
 
         for action in actions.as_ref() {
             if action.method == req_method && action.path == matched_path {
-                let action_bytes = if bytes.is_empty() { None } else { Some(bytes.clone()) };
+                let action_bytes = if bytes.is_empty() {
+                    None
+                } else {
+                    Some(bytes.clone())
+                };
                 (action.action)(action_bytes).await;
             }
         }

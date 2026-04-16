@@ -16,8 +16,6 @@ use connection::{
     request::handler::default::{TestMessage, TestMessageType},
     route::{default::NodeSocketRouteId, RouteHandler, RouteStorage, RouteTask},
 };
-use std::collections::HashMap;
-use tokio::sync::RwLock;
 use membership::{Membership, MembershipNeighbor, MembershipNeighbors};
 use message::Message;
 use protocol::{deserializer::ProtocolDeserializer, Protocol};
@@ -26,6 +24,8 @@ use runtime::{
     time::{PeriodTimeUnit, TokioPeriodTimeUnit},
 };
 use state::{node::NodeState, storage::StorageAction};
+use std::collections::HashMap;
+use tokio::sync::RwLock;
 
 use crate::{
     riblt::{
@@ -108,14 +108,8 @@ where
                         let receiving_states = receiving_states.clone();
 
                         Box::pin(async move {
-                            Self::reconciliation_mechanism(
-                                state,
-                                port,
-                                protocol_id,
-                                sending_states,
-                                
-                            )
-                            .await
+                            Self::reconciliation_mechanism(state, port, protocol_id, sending_states)
+                                .await
                         })
                     }),
                     Arc::new(TokioPeriodTimeUnit::new(std::time::Duration::from_secs(5))),

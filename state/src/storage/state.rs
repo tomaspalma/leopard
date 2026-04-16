@@ -1,9 +1,7 @@
 use async_trait::async_trait;
 
 use crate::storage::{
-    DataStateStorage, KeyValueDataStateStorage,
-    item::DataStateItem,
-    StorageAction, StorageListener,
+    DataStateStorage, KeyValueDataStateStorage, StorageAction, StorageListener, item::DataStateItem,
 };
 
 #[async_trait]

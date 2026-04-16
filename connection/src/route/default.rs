@@ -92,7 +92,13 @@ impl DefaultRouteHandler {
 impl RouteHandler for DefaultRouteHandler {
     type RouteId = NodeSocketRouteId;
 
-    async fn handle(&self, request: Vec<u8>, protocol: u64, local_address: NodeAddress, sender_address: NodeAddress) {
+    async fn handle(
+        &self,
+        request: Vec<u8>,
+        protocol: u64,
+        local_address: NodeAddress,
+        sender_address: NodeAddress,
+    ) {
         let route = self
             .storage
             .get(NodeSocketRouteId::new(local_address.clone(), protocol));

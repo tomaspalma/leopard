@@ -86,7 +86,6 @@ impl ReceivingState {
 
 pub const RIBLT_PROTOCOL_ID: u64 = 1;
 const BATCH_SIZE: usize = 5;
-const BATCH_INTERVAL: Duration = Duration::from_millis(5000);
 
 pub struct RIBLT {
     id: u64,

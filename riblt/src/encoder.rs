@@ -1,7 +1,7 @@
 use crate::mapping;
 use crate::symbol;
 
-/// Constant for block size. 
+/// Constant for block size.
 /// As it can be computationally expensive to iterate over the set, it makes sense to generate
 /// a 'block' of coded symbols at a time.
 ///
@@ -31,7 +31,7 @@ where
 //     I: IntoIterator<Item = T> + Clone,
 // {
 //     type Item = T;
-// 
+//
 //     fn next(&mut self) -> Option<Self::Item> {
 //         todo!();
 //     }
@@ -117,7 +117,6 @@ where
         peel_one_symbol(&mut self.coded_symbols)
     }
 
-
     /// Peel all symbols from the RatelessIBLT that we possibly can
     ///
     /// It is not expected that this would be called on a RatelessIBLT as we still have access to
@@ -175,7 +174,7 @@ where
 //     T: symbol::Symbol,
 // {
 //     type Item = T;
-// 
+//
 //     fn next(&mut self) -> Option<Self::Item> {
 //         //TODO
 //         None
@@ -359,8 +358,7 @@ mod tests {
         let remote_only: HashSet<SimpleSymbol> =
             items_remote.difference(&items_local).cloned().collect();
 
-
-        let iblt_remote_unmanaged : UnmanagedRatelessIBLT<SimpleSymbol> = UnmanagedRatelessIBLT {
+        let iblt_remote_unmanaged: UnmanagedRatelessIBLT<SimpleSymbol> = UnmanagedRatelessIBLT {
             coded_symbols: iblt_remote.coded_symbols.clone(),
         };
 

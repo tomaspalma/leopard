@@ -165,7 +165,17 @@ impl NodeSocket for DefaultNodeSocket {
 
                 match stream.write_all(&message_to_send).await {
                     Ok(_) => {
-                        metrics::counter!("total_bytes_sent", "target" => format!("{:?}", target)).increment(message_to_send.len() as u64);
+                        let bytes_sent = message_to_send.len() as u64;
+                        let target_str = format!("{:?}", target);
+
+                        metrics::counter!("total_bytes_sent", "target" => target_str.clone())
+                            .increment(bytes_sent);
+
+                        if message.protocol() == Some(1) {
+                            metrics::counter!("riblt_bytes_sent", "target" => target_str)
+                                .increment(bytes_sent);
+                        }
+
                         let _ = stream.flush().await;
                     }
                     Err(e) => {

@@ -1,11 +1,19 @@
 use metrics::{Key, KeyName, Metadata, Recorder, SharedString, Unit};
 use metrics_util::registry::{AtomicStorage, Registry};
 use std::sync::Arc;
-use std::time::Duration;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::sync::OnceLock;
 use tokio::fs::{OpenOptions, create_dir_all};
 use tokio::io::AsyncWriteExt;
-use tokio::time::interval;
+use tokio::sync::broadcast;
+
+pub fn export_trigger() -> broadcast::Sender<String> {
+    static SENDER: OnceLock<broadcast::Sender<String>> = OnceLock::new();
+    SENDER.get_or_init(|| broadcast::channel(100).0).clone()
+}
+
+pub fn finish_iteration(target: String) {
+    let _ = export_trigger().send(target);
+}
 
 #[derive(Clone)]
 pub struct CsvRecorder {
@@ -19,71 +27,137 @@ impl CsvRecorder {
         }
     }
 
-    pub fn start_exporter(self, directory: String, flush_interval: Duration) {
+    fn format_label(value: &str) -> String {
+        if value.starts_with("NodeAddress {") {
+            let host_start = value.find("host: \"").unwrap_or(0) + 7;
+            let host_end = value[host_start..].find("\"").unwrap_or(0) + host_start;
+            let host = &value[host_start..host_end];
+
+            let port_start = value.find("port: ").unwrap_or(0) + 6;
+            let port_end = value[port_start..]
+                .find(" }")
+                .map(|i| i + port_start)
+                .unwrap_or(value.len());
+            let port = &value[port_start..port_end];
+
+            format!("{}:{}", host, port)
+        } else {
+            value.to_string()
+        }
+    }
+
+    async fn write_metric_line(
+        directory: &str,
+        key: &Key,
+        iteration: usize,
+        timestamp: u128,
+        val: String,
+    ) {
+        let file_name = format!("{}/{}.csv", directory, key.name());
+
+        let labels: Vec<String> = key
+            .labels()
+            .map(|l| {
+                let formatted_value = Self::format_label(l.value());
+                format!("{}={}", l.key(), formatted_value)
+            })
+            .collect();
+        let labels_str = labels.join(";");
+
+        if let Ok(mut file) = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&file_name)
+            .await
+        {
+            if let Ok(metadata) = file.metadata().await {
+                if metadata.len() == 0 {
+                    let _ = file.write_all(b"iteration,timestamp,value,labels\n").await;
+                }
+            }
+            let line = format!("{},{},{},\"{}\"\n", iteration, timestamp, val, labels_str);
+            if let Err(e) = file.write_all(line.as_bytes()).await {
+                println!("Error writing to file {}: {}", file_name, e);
+            }
+        } else {
+            println!("Failed to open or create file: {}", file_name);
+        }
+    }
+
+    async fn export_counters(
+        registry: &Arc<Registry<Key, AtomicStorage>>,
+        directory: &str,
+        iteration: usize,
+        timestamp: u128,
+        target: &str,
+    ) {
+        let counters = registry.get_counter_handles();
+        for (key, counter) in counters {
+            if key
+                .labels()
+                .any(|l| l.value() == target || Self::format_label(l.value()) == target)
+            {
+                let val = counter
+                    .swap(0, std::sync::atomic::Ordering::Relaxed)
+                    .to_string();
+                Self::write_metric_line(directory, &key, iteration, timestamp, val).await;
+            }
+        }
+    }
+
+    async fn export_gauges(
+        registry: &Arc<Registry<Key, AtomicStorage>>,
+        directory: &str,
+        iteration: usize,
+        timestamp: u128,
+        target: &str,
+    ) {
+        let gauges = registry.get_gauge_handles();
+        for (key, gauge) in gauges {
+            if key
+                .labels()
+                .any(|l| l.value() == target || Self::format_label(l.value()) == target)
+            {
+                let val = gauge.load(std::sync::atomic::Ordering::Relaxed).to_string();
+                Self::write_metric_line(directory, &key, iteration, timestamp, val).await;
+            }
+        }
+    }
+
+    pub fn start_exporter(self, directory: String) {
         let registry = self.registry.clone();
 
         tokio::spawn(async move {
             println!("Metrics exporter started for directory: {}", directory);
             let _ = create_dir_all(&directory).await;
-            let mut interval = interval(flush_interval);
             let start_time = std::time::Instant::now();
+            let mut rx = export_trigger().subscribe();
+            let mut iterations = std::collections::HashMap::new();
 
             loop {
-                interval.tick().await;
+                if let Ok(target) = rx.recv().await {
+                    let iteration = iterations.entry(target.clone()).or_insert(1);
+                    let current_iteration = *iteration;
+                    *iteration += 1;
 
-                let timestamp = start_time.elapsed().as_millis();
+                    let timestamp = start_time.elapsed().as_millis();
 
-                let counters = registry.get_counter_handles();
-                if counters.is_empty() {
-                    // println!("No metrics to export yet.");
-                }
-
-                for (key, counter) in counters {
-                    let val = counter.load(std::sync::atomic::Ordering::Relaxed);
-                    let file_name = format!("{}/{}.csv", directory, key.name());
-
-                    let labels: Vec<String> = key
-                        .labels()
-                        .map(|l| {
-                            let value = l.value();
-                            let formatted_value = if value.starts_with("NodeAddress {") {
-                                let host_start = value.find("host: \"").unwrap_or(0) + 7;
-                                let host_end =
-                                    value[host_start..].find("\"").unwrap_or(0) + host_start;
-                                let host = &value[host_start..host_end];
-
-                                let port_start = value.find("port: ").unwrap_or(0) + 6;
-                                let port_end =
-                                    value[port_start..].find(" }").map(|i| i + port_start).unwrap_or(value.len());
-                                let port = &value[port_start..port_end];
-
-                                format!("{}:{}", host, port)
-                            } else {
-                                value.to_string()
-                            };
-                            format!("{}={}", l.key(), formatted_value)
-                        })
-                        .collect();
-                    let labels_str = labels.join(";");
-
-                    if let Ok(mut file) = OpenOptions::new()
-                        .create(true)
-                        .append(true)
-                        .open(&file_name)
-                        .await
-                    {
-                        if let Ok(metadata) = file.metadata().await {
-                            if metadata.len() == 0 {
-                                let _ = file.write_all(b"timestamp,value,labels\n").await;
-                            }
-                        }
-                        let line = format!("{},{},\"{}\"\n", timestamp, val, labels_str);
-                        if let Err(e) = file.write_all(line.as_bytes()).await {
-                            println!("Error writing to file {}: {}", file_name, e);
-                        }
-                    } else {
-                        println!("Failed to open or create file: {}", file_name);
-                    }
+                    Self::export_counters(
+                        &registry,
+                        &directory,
+                        current_iteration,
+                        timestamp,
+                        &target,
+                    )
+                    .await;
+                    Self::export_gauges(
+                        &registry,
+                        &directory,
+                        current_iteration,
+                        timestamp,
+                        &target,
+                    )
+                    .await;
                 }
             }
         });

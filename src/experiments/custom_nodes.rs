@@ -12,7 +12,7 @@ use config::node::DefaultNodeConfig;
 use node::Node;
 
 use state::storage::state::DefaultDataState;
-use tracing::{info, Instrument};
+use tracing::{Instrument, info};
 
 use std::sync::Arc;
 
@@ -30,11 +30,14 @@ pub fn default_task(
         Box::pin(async move {
             let node_name = format!("{}:{}", ip_clone, port);
             let span = tracing::info_span!("node", name = %node_name);
-            
+
             async move {
                 info!("Starting node at {}:{}", ip_clone, port);
                 let config = Arc::new(DefaultNodeConfig::new());
-                let node_id = DefaultNodeIdentifier::new(node_name.clone(), NodeAddress::new(ip_clone.clone(), port));
+                let node_id = DefaultNodeIdentifier::new(
+                    node_name.clone(),
+                    NodeAddress::new(ip_clone.clone(), port),
+                );
 
                 let node_state = Arc::new(DefaultNodeState::new(
                     config.clone(),
@@ -50,10 +53,10 @@ pub fn default_task(
                 let mut node = Node::new(
                     node_state.clone(),
                     config.clone(),
-                    Box::new(DefaultNodeIdentifier::new(node_name.clone(), NodeAddress::new(
-                        ip_clone.clone(),
-                        port,
-                    ))),
+                    Box::new(DefaultNodeIdentifier::new(
+                        node_name.clone(),
+                        NodeAddress::new(ip_clone.clone(), port),
+                    )),
                 );
 
                 node.add_protocol(Box::new(DefaultMembershipProtocol::new()));
@@ -82,7 +85,9 @@ pub fn default_task(
                 node.init().await.unwrap();
 
                 Ok(())
-            }.instrument(span).await
+            }
+            .instrument(span)
+            .await
         })
     })
 }

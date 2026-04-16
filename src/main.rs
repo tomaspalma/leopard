@@ -11,6 +11,9 @@ use runtime::metrics::csv::CsvRecorder;
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
 struct Cli {
+    #[arg(long, default_value = "default_run")]
+    run_id: String,
+
     #[command(subcommand)]
     command: Commands,
 }
@@ -35,10 +38,9 @@ async fn main() {
 
     info!("Setting recorder");
 
+    let output_dir = format!("./metrics_output/{}", cli.run_id);
     let recorder = CsvRecorder::new();
-    recorder
-        .clone()
-        .start_exporter("./metrics_output".to_string(), Duration::from_secs(5));
+    recorder.clone().start_exporter(output_dir);
     set_global_recorder(recorder).expect("Failed to set global metrics recorder");
 
     match &cli.command {
