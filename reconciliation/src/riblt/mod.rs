@@ -26,8 +26,6 @@ use crate::riblt::messages::{
 };
 use riblt::{RatelessIBLT, UnmanagedRatelessIBLT};
 
-use metrics::counter;
-
 use tokio::time::{sleep, Duration};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -214,8 +212,6 @@ impl RIBLT {
                 status_guard.state = ReconciliationState::AwaitingConfirmation;
             }
 
-            let symbols_len = symbols.len() as u64;
-
             state
                 .send_through_socket(
                     own_address.clone(),
@@ -229,9 +225,6 @@ impl RIBLT {
                 )
                 .await
                 .unwrap();
-
-            counter!("riblt_symbols_sent", "neighbor" => format!("{:?}", neighbor_address))
-                .increment(symbols_len);
 
             info!(
                 "Sent batch of {} symbols up to index {}",

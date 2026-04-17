@@ -230,8 +230,6 @@ impl ReceiveNeighborSymbolsTask {
         neighbor: NodeAddress,
     ) {
         info!("Received RIBLT message");
-        counter!("riblt_symbols_received", "neighbor" => format!("{:?}", neighbor))
-            .increment(message.symbols().len() as u64);
 
         let msg_session_id = message.session_id().clone();
 
