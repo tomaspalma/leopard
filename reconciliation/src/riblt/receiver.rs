@@ -1,5 +1,6 @@
 use metrics::{counter, gauge, histogram};
 use runtime::spawn;
+use runtime::metrics::experiment::get_context;
 
 use riblt::{symbol::PeelableResult, UnmanagedRatelessIBLT};
 
@@ -162,6 +163,16 @@ impl ReceiveNeighborSymbolsTask {
 
         if is_peeling_successful {
             info!("Peeling successful for neighbor {:?}", neighbor);
+            let context = get_context();
+            counter!(
+                "reconciliation_completed",
+                "protocol" => "riblt",
+                "neighbor" => format!("{:?}", neighbor),
+                "run_id" => context.run_id().to_string(),
+                "trial" => context.trial().to_string(),
+                "similarity" => context.similarity().to_string()
+            )
+            .increment(1);
             runtime::metrics::csv::finish_iteration(format!("{:?}", neighbor));
             gauge!("reconciliation_had_differences", "target" => format!("{:?}", neighbor))
                 .set(if differences_found { 1.0 } else { 0.0 });

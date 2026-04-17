@@ -2,17 +2,22 @@ mod experiments;
 
 use log::info;
 
-use std::time::Duration;
-
 use clap::{Parser, Subcommand};
 use metrics::set_global_recorder;
 use runtime::metrics::csv::CsvRecorder;
+use runtime::metrics::experiment::{ExperimentContext, set_context};
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
 struct Cli {
     #[arg(long, default_value = "default_run")]
     run_id: String,
+
+    #[arg(long, default_value = "1")]
+    trial: String,
+
+    #[arg(long, default_value = "unknown")]
+    similarity: String,
 
     #[command(subcommand)]
     command: Commands,
@@ -39,6 +44,11 @@ async fn main() {
     info!("Setting recorder");
 
     let output_dir = format!("./metrics_output/{}", cli.run_id);
+    let _ = set_context(ExperimentContext::new(
+        cli.run_id.clone(),
+        cli.trial.clone(),
+        cli.similarity.clone(),
+    ));
     let recorder = CsvRecorder::new();
     recorder.clone().start_exporter(output_dir);
     set_global_recorder(recorder).expect("Failed to set global metrics recorder");

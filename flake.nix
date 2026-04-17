@@ -22,6 +22,10 @@
           buildInputs = [
             rustNightly
             pkgs.pkg-config
+            (pkgs.python3.withPackages (ps: with ps; [
+              pandas
+              matplotlib
+            ]))
           ];
 
           shellHook = ''

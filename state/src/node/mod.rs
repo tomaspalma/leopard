@@ -10,6 +10,7 @@ use connection::{node::default::NodeSocketRoute, route::RouteTask};
 use errors::node::NodeInitError;
 use message::Message;
 use runtime::spawn;
+use runtime::metrics::experiment::get_context;
 use runtime::time::TokioPeriodTimeUnit;
 
 use tokio::io::AsyncReadExt;
@@ -392,7 +393,69 @@ impl NodeState for DefaultNodeState {
 
                             match stream.read_to_end(&mut buffer).await {
                                 Ok(size) => {
-                                    metrics::counter!("total_bytes_received", "node" => format!("{:?}", local_identifier)).increment(size as u64);
+                                    let protocol_id = if buffer.len() >= 8 {
+                                        u64::from_be_bytes(buffer[0..8].try_into().unwrap_or([0; 8]))
+                                    } else {
+                                        0
+                                    };
+                                    let protocol_label = match protocol_id {
+                                        1 => "riblt",
+                                        2 => "merkle",
+                                        _ => "other",
+                                    };
+                                    let context = get_context();
+
+                                    metrics::counter!(
+                                        "total_bytes_received",
+                                        "node" => format!("{:?}", local_identifier),
+                                        "protocol" => protocol_label,
+                                        "run_id" => context.run_id().to_string(),
+                                        "trial" => context.trial().to_string(),
+                                        "similarity" => context.similarity().to_string()
+                                    )
+                                    .increment(size as u64);
+
+                                    match protocol_id {
+                                        1 => {
+                                            metrics::counter!(
+                                                "riblt_bytes_received",
+                                                "node" => format!("{:?}", local_identifier),
+                                                "run_id" => context.run_id().to_string(),
+                                                "trial" => context.trial().to_string(),
+                                                "similarity" => context.similarity().to_string()
+                                            )
+                                            .increment(size as u64);
+                                            metrics::counter!(
+                                                "protocol_bytes_received",
+                                                "node" => format!("{:?}", local_identifier),
+                                                "protocol" => "riblt",
+                                                "run_id" => context.run_id().to_string(),
+                                                "trial" => context.trial().to_string(),
+                                                "similarity" => context.similarity().to_string()
+                                            )
+                                            .increment(size as u64);
+                                        }
+                                        2 => {
+                                            metrics::counter!(
+                                                "merkle_bytes_received",
+                                                "node" => format!("{:?}", local_identifier),
+                                                "run_id" => context.run_id().to_string(),
+                                                "trial" => context.trial().to_string(),
+                                                "similarity" => context.similarity().to_string()
+                                            )
+                                            .increment(size as u64);
+                                            metrics::counter!(
+                                                "protocol_bytes_received",
+                                                "node" => format!("{:?}", local_identifier),
+                                                "protocol" => "merkle",
+                                                "run_id" => context.run_id().to_string(),
+                                                "trial" => context.trial().to_string(),
+                                                "similarity" => context.similarity().to_string()
+                                            )
+                                            .increment(size as u64);
+                                        }
+                                        _ => {}
+                                    }
 
                                     if buffer.len() < 16 {
                                         error!("Buffer too small");

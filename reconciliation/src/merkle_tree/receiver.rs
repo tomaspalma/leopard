@@ -1,4 +1,5 @@
 use metrics::counter;
+use runtime::metrics::experiment::get_context;
 use std::sync::Arc;
 use tracing::{error, info};
 
@@ -110,6 +111,16 @@ impl ReceiveMerkleTreeMessageTask {
             });
         } else {
             info!("Root hash match. In sync.");
+            let context = get_context();
+            counter!(
+                "reconciliation_completed",
+                "protocol" => "merkle",
+                "neighbor" => format!("{:?}", neighbor),
+                "run_id" => context.run_id().to_string(),
+                "trial" => context.trial().to_string(),
+                "similarity" => context.similarity().to_string()
+            )
+            .increment(1);
             runtime::metrics::csv::finish_iteration(format!("{:?}", neighbor));
         }
     }
@@ -288,6 +299,16 @@ impl ReceiveMerkleTreeMessageTask {
                     );
                 }
 
+                let context = get_context();
+                counter!(
+                    "reconciliation_completed",
+                    "protocol" => "merkle",
+                    "neighbor" => format!("{:?}", neighbor_clone),
+                    "run_id" => context.run_id().to_string(),
+                    "trial" => context.trial().to_string(),
+                    "similarity" => context.similarity().to_string()
+                )
+                .increment(1);
                 runtime::metrics::csv::finish_iteration(format!("{:?}", neighbor_clone));
             }
         });

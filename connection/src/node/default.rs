@@ -9,6 +9,7 @@ use tracing::{error, info};
 use async_trait::async_trait;
 use message::Message;
 use runtime::spawn;
+use runtime::metrics::experiment::get_context;
 use runtime::{
     Task,
     time::{PeriodTimeUnit, TokioPeriodTimeUnit},
@@ -167,13 +168,64 @@ impl NodeSocket for DefaultNodeSocket {
                     Ok(_) => {
                         let bytes_sent = message_to_send.len() as u64;
                         let target_str = format!("{:?}", target);
+                        let context = get_context();
+                        let protocol_id = message.protocol().unwrap_or(0);
+                        let protocol_label = match protocol_id {
+                            1 => "riblt",
+                            2 => "merkle",
+                            _ => "other",
+                        };
 
-                        metrics::counter!("total_bytes_sent", "target" => target_str.clone())
-                            .increment(bytes_sent);
+                        metrics::counter!(
+                            "total_bytes_sent",
+                            "target" => target_str.clone(),
+                            "protocol" => protocol_label,
+                            "run_id" => context.run_id().to_string(),
+                            "trial" => context.trial().to_string(),
+                            "similarity" => context.similarity().to_string()
+                        )
+                        .increment(bytes_sent);
 
-                        if message.protocol() == Some(1) {
-                            metrics::counter!("riblt_bytes_sent", "target" => target_str)
+                        match protocol_id {
+                            1 => {
+                                metrics::counter!(
+                                    "riblt_bytes_sent",
+                                    "target" => target_str.clone(),
+                                    "run_id" => context.run_id().to_string(),
+                                    "trial" => context.trial().to_string(),
+                                    "similarity" => context.similarity().to_string()
+                                )
                                 .increment(bytes_sent);
+                                metrics::counter!(
+                                    "protocol_bytes_sent",
+                                    "target" => target_str,
+                                    "protocol" => "riblt",
+                                    "run_id" => context.run_id().to_string(),
+                                    "trial" => context.trial().to_string(),
+                                    "similarity" => context.similarity().to_string()
+                                )
+                                .increment(bytes_sent);
+                            }
+                            2 => {
+                                metrics::counter!(
+                                    "merkle_bytes_sent",
+                                    "target" => target_str.clone(),
+                                    "run_id" => context.run_id().to_string(),
+                                    "trial" => context.trial().to_string(),
+                                    "similarity" => context.similarity().to_string()
+                                )
+                                .increment(bytes_sent);
+                                metrics::counter!(
+                                    "protocol_bytes_sent",
+                                    "target" => target_str,
+                                    "protocol" => "merkle",
+                                    "run_id" => context.run_id().to_string(),
+                                    "trial" => context.trial().to_string(),
+                                    "similarity" => context.similarity().to_string()
+                                )
+                                .increment(bytes_sent);
+                            }
+                            _ => {}
                         }
 
                         let _ = stream.flush().await;

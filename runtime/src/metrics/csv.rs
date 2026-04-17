@@ -1,5 +1,6 @@
 use metrics::{Key, KeyName, Metadata, Recorder, SharedString, Unit};
 use metrics_util::registry::{AtomicStorage, Registry};
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::OnceLock;
 use tokio::fs::{OpenOptions, create_dir_all};
@@ -55,14 +56,25 @@ impl CsvRecorder {
     ) {
         let file_name = format!("{}/{}.csv", directory, key.name());
 
-        let labels: Vec<String> = key
+        let labels: Vec<(String, String)> = key
             .labels()
             .map(|l| {
                 let formatted_value = Self::format_label(l.value());
-                format!("{}={}", l.key(), formatted_value)
+                (l.key().to_string(), formatted_value)
             })
             .collect();
-        let labels_str = labels.join(";");
+
+        let label_map: HashMap<String, String> = labels.iter().cloned().collect();
+        let node_label = label_map
+            .get("target")
+            .or_else(|| label_map.get("node"))
+            .or_else(|| label_map.get("neighbor"))
+            .cloned()
+            .unwrap_or_default();
+        let protocol = label_map.get("protocol").cloned().unwrap_or_default();
+        let run_id = label_map.get("run_id").cloned().unwrap_or_default();
+        let trial = label_map.get("trial").cloned().unwrap_or_default();
+        let similarity = label_map.get("similarity").cloned().unwrap_or_default();
 
         if let Ok(mut file) = OpenOptions::new()
             .create(true)
@@ -72,10 +84,25 @@ impl CsvRecorder {
         {
             if let Ok(metadata) = file.metadata().await {
                 if metadata.len() == 0 {
-                    let _ = file.write_all(b"iteration,timestamp,value,labels\n").await;
+                    let _ = file
+                        .write_all(
+                            b"iteration,timestamp,value,node,protocol,run_id,trial,similarity,labels\n",
+                        )
+                        .await;
                 }
             }
-            let line = format!("{},{},{},\"{}\"\n", iteration, timestamp, val, labels_str);
+            let line = format!(
+                "{},{},{},\"{}\",\"{}\",\"{}\",\"{}\",\"{}\",\"{}\"\n",
+                iteration,
+                timestamp,
+                val,
+                node_label,
+                protocol,
+                run_id,
+                trial,
+                similarity,
+                node_label
+            );
             if let Err(e) = file.write_all(line.as_bytes()).await {
                 println!("Error writing to file {}: {}", file_name, e);
             }
