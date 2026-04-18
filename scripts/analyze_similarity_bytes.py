@@ -94,6 +94,7 @@ def make_summary(merged):
                 "protocol",
                 "similarity",
                 "mean_total_bytes",
+                "std_total_bytes",
                 "median_total_bytes",
                 "trials",
                 "max_total_bytes",
@@ -103,13 +104,65 @@ def make_summary(merged):
 
     summary = merged.groupby(["protocol", "similarity_numeric"], as_index=False).agg(
         mean_total_bytes=("total_bytes", "mean"),
+        std_total_bytes=("total_bytes", "std"),
         median_total_bytes=("total_bytes", "median"),
         trials=("total_bytes", "count"),
         max_total_bytes=("total_bytes", "max"),
         min_total_bytes=("total_bytes", "min"),
     )
+    summary["std_total_bytes"] = summary["std_total_bytes"].fillna(0)
     summary = summary.rename(columns={"similarity_numeric": "similarity"})
     return summary.sort_values(["protocol", "similarity"])
+
+
+def make_protocol_comparison(summary):
+    if summary.empty:
+        return pd.DataFrame(
+            columns=[
+                "similarity",
+                "riblt_mean_total_bytes",
+                "merkle_mean_total_bytes",
+                "riblt_std_total_bytes",
+                "merkle_std_total_bytes",
+                "riblt_trials",
+                "merkle_trials",
+                "riblt_minus_merkle",
+                "riblt_to_merkle_ratio",
+            ]
+        )
+
+    pivot = summary.pivot_table(
+        index="similarity",
+        columns="protocol",
+        values=["mean_total_bytes", "std_total_bytes", "trials"],
+        aggfunc="first",
+    )
+
+    def get_metric(metric_name, protocol_name):
+        key = (metric_name, protocol_name)
+        if key in pivot.columns:
+            return pivot[key]
+        return pd.Series(index=pivot.index, dtype=float)
+
+    comparison = pd.DataFrame(
+        {
+            "similarity": pivot.index,
+            "riblt_mean_total_bytes": get_metric("mean_total_bytes", "riblt"),
+            "merkle_mean_total_bytes": get_metric("mean_total_bytes", "merkle"),
+            "riblt_std_total_bytes": get_metric("std_total_bytes", "riblt"),
+            "merkle_std_total_bytes": get_metric("std_total_bytes", "merkle"),
+            "riblt_trials": get_metric("trials", "riblt"),
+            "merkle_trials": get_metric("trials", "merkle"),
+        }
+    ).reset_index(drop=True)
+
+    comparison["riblt_minus_merkle"] = (
+        comparison["riblt_mean_total_bytes"] - comparison["merkle_mean_total_bytes"]
+    )
+    comparison["riblt_to_merkle_ratio"] = comparison[
+        "riblt_mean_total_bytes"
+    ] / comparison["merkle_mean_total_bytes"].replace({0: pd.NA})
+    return comparison.sort_values("similarity")
 
 
 def plot_summary(summary, output_dir):
@@ -119,10 +172,12 @@ def plot_summary(summary, output_dir):
     plt.figure(figsize=(10, 6))
     for protocol, group in summary.groupby("protocol"):
         group = group.sort_values("similarity")
-        plt.plot(
+        plt.errorbar(
             group["similarity"],
             group["mean_total_bytes"],
+            yerr=group["std_total_bytes"],
             marker="o",
+            capsize=3,
             label=protocol,
         )
 
@@ -163,6 +218,12 @@ def main():
     summary = make_summary(merged)
     summary.to_csv(
         os.path.join(args.output_dir, "summary_by_similarity.csv"), index=False
+    )
+
+    comparison = make_protocol_comparison(summary)
+    comparison.to_csv(
+        os.path.join(args.output_dir, "protocol_comparison_by_similarity.csv"),
+        index=False,
     )
 
     plot_summary(summary, args.output_dir)

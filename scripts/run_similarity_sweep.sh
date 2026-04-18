@@ -34,4 +34,6 @@ for size in "${size_values[@]}"; do
   done
 done
 
-echo "Sweep finished. Analyze with: python3 scripts/analyze_similarity_bytes.py metrics_output"
+echo "Sweep finished. Analyzing with: python3 scripts/analyze_similarity_bytes.py metrics_output"
+
+python3 scripts/analyze_similarity_bytes.py metrics_output

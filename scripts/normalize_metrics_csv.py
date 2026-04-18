@@ -55,7 +55,7 @@ def normalize_file(path: Path) -> bool:
                         "run_id": run_id,
                         "trial": trial,
                         "similarity": similarity,
-                        "labels": node,
+                        "labels": labels,
                     }
                 )
                 continue
@@ -102,7 +102,7 @@ def normalize_file(path: Path) -> bool:
                         "run_id": run_id,
                         "trial": trial,
                         "similarity": similarity,
-                        "labels": node,
+                        "labels": labels,
                     }
                 )
 
