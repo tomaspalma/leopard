@@ -15,6 +15,10 @@ OUTPUT_ROOT=${OUTPUT_ROOT:-"sweep"}
 echo "Generating datasets for sweep..."
 python3 generate_data.py --default-matrix --sizes "$SIZES" --similarities "$SIMILARITIES" --seed "$SEED"
 
+echo "Removing metrics_output folder"
+rm -rf metrics_output
+mkdir -p metrics_output
+
 IFS=',' read -r -a similarity_values <<< "$SIMILARITIES"
 IFS=',' read -r -a protocol_values <<< "$PROTOCOLS"
 IFS=',' read -r -a size_values <<< "$SIZES"

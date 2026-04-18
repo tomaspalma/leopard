@@ -56,8 +56,8 @@ def load_metric_rows(metrics_root, metric_name):
     return pd.DataFrame(rows)
 
 
-def aggregate_total_bytes(df_sent, df_received):
-    if df_sent.empty and df_received.empty:
+def aggregate_transmitted_bytes(df_sent):
+    if df_sent.empty:
         return pd.DataFrame()
 
     sent = (
@@ -67,20 +67,8 @@ def aggregate_total_bytes(df_sent, df_received):
         .sum()
         .rename(columns={"value": "bytes_sent"})
     )
-    recv = (
-        df_received.groupby(
-            ["run_id", "protocol", "trial", "similarity"], as_index=False
-        )["value"]
-        .sum()
-        .rename(columns={"value": "bytes_received"})
-    )
-
-    merged = sent.merge(
-        recv,
-        on=["run_id", "protocol", "trial", "similarity"],
-        how="outer",
-    ).fillna(0)
-    merged["total_bytes"] = merged["bytes_sent"] + merged["bytes_received"]
+    merged = sent.copy()
+    merged["transmitted_bytes"] = merged["bytes_sent"]
 
     merged = merged[merged["protocol"].isin(["riblt", "merkle"])].copy()
     merged["similarity_numeric"] = pd.to_numeric(merged["similarity"], errors="coerce")
@@ -93,24 +81,24 @@ def make_summary(merged):
             columns=[
                 "protocol",
                 "similarity",
-                "mean_total_bytes",
-                "std_total_bytes",
-                "median_total_bytes",
+                "mean_transmitted_bytes",
+                "std_transmitted_bytes",
+                "median_transmitted_bytes",
                 "trials",
-                "max_total_bytes",
-                "min_total_bytes",
+                "max_transmitted_bytes",
+                "min_transmitted_bytes",
             ]
         )
 
     summary = merged.groupby(["protocol", "similarity_numeric"], as_index=False).agg(
-        mean_total_bytes=("total_bytes", "mean"),
-        std_total_bytes=("total_bytes", "std"),
-        median_total_bytes=("total_bytes", "median"),
-        trials=("total_bytes", "count"),
-        max_total_bytes=("total_bytes", "max"),
-        min_total_bytes=("total_bytes", "min"),
+        mean_transmitted_bytes=("transmitted_bytes", "mean"),
+        std_transmitted_bytes=("transmitted_bytes", "std"),
+        median_transmitted_bytes=("transmitted_bytes", "median"),
+        trials=("transmitted_bytes", "count"),
+        max_transmitted_bytes=("transmitted_bytes", "max"),
+        min_transmitted_bytes=("transmitted_bytes", "min"),
     )
-    summary["std_total_bytes"] = summary["std_total_bytes"].fillna(0)
+    summary["std_transmitted_bytes"] = summary["std_transmitted_bytes"].fillna(0)
     summary = summary.rename(columns={"similarity_numeric": "similarity"})
     return summary.sort_values(["protocol", "similarity"])
 
@@ -120,10 +108,10 @@ def make_protocol_comparison(summary):
         return pd.DataFrame(
             columns=[
                 "similarity",
-                "riblt_mean_total_bytes",
-                "merkle_mean_total_bytes",
-                "riblt_std_total_bytes",
-                "merkle_std_total_bytes",
+                "riblt_mean_transmitted_bytes",
+                "merkle_mean_transmitted_bytes",
+                "riblt_std_transmitted_bytes",
+                "merkle_std_transmitted_bytes",
                 "riblt_trials",
                 "merkle_trials",
                 "riblt_minus_merkle",
@@ -134,7 +122,7 @@ def make_protocol_comparison(summary):
     pivot = summary.pivot_table(
         index="similarity",
         columns="protocol",
-        values=["mean_total_bytes", "std_total_bytes", "trials"],
+        values=["mean_transmitted_bytes", "std_transmitted_bytes", "trials"],
         aggfunc="first",
     )
 
@@ -147,21 +135,28 @@ def make_protocol_comparison(summary):
     comparison = pd.DataFrame(
         {
             "similarity": pivot.index,
-            "riblt_mean_total_bytes": get_metric("mean_total_bytes", "riblt"),
-            "merkle_mean_total_bytes": get_metric("mean_total_bytes", "merkle"),
-            "riblt_std_total_bytes": get_metric("std_total_bytes", "riblt"),
-            "merkle_std_total_bytes": get_metric("std_total_bytes", "merkle"),
+            "riblt_mean_transmitted_bytes": get_metric(
+                "mean_transmitted_bytes", "riblt"
+            ),
+            "merkle_mean_transmitted_bytes": get_metric(
+                "mean_transmitted_bytes", "merkle"
+            ),
+            "riblt_std_transmitted_bytes": get_metric("std_transmitted_bytes", "riblt"),
+            "merkle_std_transmitted_bytes": get_metric(
+                "std_transmitted_bytes", "merkle"
+            ),
             "riblt_trials": get_metric("trials", "riblt"),
             "merkle_trials": get_metric("trials", "merkle"),
         }
     ).reset_index(drop=True)
 
     comparison["riblt_minus_merkle"] = (
-        comparison["riblt_mean_total_bytes"] - comparison["merkle_mean_total_bytes"]
+        comparison["riblt_mean_transmitted_bytes"]
+        - comparison["merkle_mean_transmitted_bytes"]
     )
     comparison["riblt_to_merkle_ratio"] = comparison[
-        "riblt_mean_total_bytes"
-    ] / comparison["merkle_mean_total_bytes"].replace({0: pd.NA})
+        "riblt_mean_transmitted_bytes"
+    ] / comparison["merkle_mean_transmitted_bytes"].replace({0: pd.NA})
     return comparison.sort_values("similarity")
 
 
@@ -174,16 +169,16 @@ def plot_summary(summary, output_dir):
         group = group.sort_values("similarity")
         plt.errorbar(
             group["similarity"],
-            group["mean_total_bytes"],
-            yerr=group["std_total_bytes"],
+            group["mean_transmitted_bytes"],
+            yerr=group["std_transmitted_bytes"],
             marker="o",
             capsize=3,
             label=protocol,
         )
 
     plt.xlabel("Similarity (Jaccard)")
-    plt.ylabel("Mean Total Bytes (Sent + Received)")
-    plt.title("Reconciliation Bytes vs Similarity")
+    plt.ylabel("Mean Bytes Transmitted (Sent)")
+    plt.title("Reconciliation Transmitted Bytes vs Similarity")
     plt.grid(True)
     plt.legend()
     plt.tight_layout()
@@ -209,11 +204,12 @@ def main():
     args = parser.parse_args()
 
     sent_df = load_metric_rows(args.metrics_root, "protocol_bytes_sent")
-    recv_df = load_metric_rows(args.metrics_root, "protocol_bytes_received")
-    merged = aggregate_total_bytes(sent_df, recv_df)
+    merged = aggregate_transmitted_bytes(sent_df)
 
     os.makedirs(args.output_dir, exist_ok=True)
-    merged.to_csv(os.path.join(args.output_dir, "trial_totals.csv"), index=False)
+    merged.to_csv(
+        os.path.join(args.output_dir, "trial_transmitted_totals.csv"), index=False
+    )
 
     summary = make_summary(merged)
     summary.to_csv(
