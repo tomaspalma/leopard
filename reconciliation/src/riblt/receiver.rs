@@ -173,7 +173,7 @@ impl ReceiveNeighborSymbolsTask {
                 "similarity" => context.similarity().to_string()
             )
             .increment(1);
-            runtime::metrics::csv::finish_iteration(format!("{:?}", neighbor));
+            runtime::metrics::csv::finish_iteration(format!("{:?}", neighbor), "riblt");
             gauge!("reconciliation_had_differences", "target" => format!("{:?}", neighbor))
                 .set(if differences_found { 1.0 } else { 0.0 });
 

@@ -121,7 +121,7 @@ impl ReceiveMerkleTreeMessageTask {
                 "similarity" => context.similarity().to_string()
             )
             .increment(1);
-            runtime::metrics::csv::finish_iteration(format!("{:?}", neighbor));
+            runtime::metrics::csv::finish_iteration(format!("{:?}", neighbor), "merkle");
         }
     }
 
@@ -309,7 +309,7 @@ impl ReceiveMerkleTreeMessageTask {
                     "similarity" => context.similarity().to_string()
                 )
                 .increment(1);
-                runtime::metrics::csv::finish_iteration(format!("{:?}", neighbor_clone));
+                runtime::metrics::csv::finish_iteration(format!("{:?}", neighbor_clone), "merkle");
             }
         });
     }

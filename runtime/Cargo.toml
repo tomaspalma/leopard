@@ -9,3 +9,6 @@ async-trait = "0.1.83"
 tracing = "0.1.44"
 metrics = "0.24.3"
 metrics-util = "0.20.1"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"

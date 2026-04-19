@@ -6,7 +6,7 @@ ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT_DIR"
 
 SIZES=${SIZES:-"100"}
-SIMILARITIES=${SIMILARITIES:-"0.50,0.70,0.85,0.95,0.99"}
+SIMILARITIES=${SIMILARITIES:-"0,0.10,0.25,0.50,0.70,0.85,0.95,0.99"}
 TRIALS=${TRIALS:-"5"}
 PROTOCOLS=${PROTOCOLS:-"riblt,merkle"}
 SEED=${SEED:-"12345"}
@@ -19,9 +19,9 @@ echo "Removing metrics_output folder"
 rm -rf metrics_output
 mkdir -p metrics_output
 
-IFS=',' read -r -a similarity_values <<< "$SIMILARITIES"
-IFS=',' read -r -a protocol_values <<< "$PROTOCOLS"
-IFS=',' read -r -a size_values <<< "$SIZES"
+IFS=',' read -r -a similarity_values <<<"$SIMILARITIES"
+IFS=',' read -r -a protocol_values <<<"$PROTOCOLS"
+IFS=',' read -r -a size_values <<<"$SIZES"
 
 for size in "${size_values[@]}"; do
   for sim in "${similarity_values[@]}"; do
@@ -41,3 +41,5 @@ done
 echo "Sweep finished. Analyzing with: python3 scripts/analyze_similarity_bytes.py metrics_output"
 
 python3 scripts/analyze_similarity_bytes.py metrics_output
+python3 scripts/analyze_similarity_resources.py metrics_output
+python3 scripts/analyze_similarity_duration.py metrics_output

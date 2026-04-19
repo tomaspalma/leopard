@@ -2,8 +2,9 @@ import argparse
 import os
 from pathlib import Path
 
-import pandas as pd
 import matplotlib.pyplot as plt
+import matplotlib.ticker as mticker
+import pandas as pd
 
 
 def parse_labels(label_str):
@@ -164,21 +165,28 @@ def plot_summary(summary, output_dir):
     if summary.empty:
         return
     os.makedirs(output_dir, exist_ok=True)
+    bytes_per_megabyte = 1024 * 1024
     plt.figure(figsize=(10, 6))
     for protocol, group in summary.groupby("protocol"):
         group = group.sort_values("similarity")
         plt.errorbar(
             group["similarity"],
-            group["mean_transmitted_bytes"],
-            yerr=group["std_transmitted_bytes"],
+            group["mean_transmitted_bytes"] / bytes_per_megabyte,
+            yerr=group["std_transmitted_bytes"] / bytes_per_megabyte,
             marker="o",
             capsize=3,
             label=protocol,
         )
 
     plt.xlabel("Similarity (Jaccard)")
-    plt.ylabel("Mean Bytes Transmitted (Sent)")
-    plt.title("Reconciliation Transmitted Bytes vs Similarity")
+    plt.ylabel("Mean Data Transmitted (MB)")
+    plt.title("Reconciliation Transmitted Data vs Similarity")
+    plt.yscale("log")
+    ax = plt.gca()
+    ax.yaxis.set_major_locator(mticker.LogLocator(base=10, subs=(1.0, 2.0, 5.0)))
+    ax.yaxis.set_major_formatter(
+        mticker.FuncFormatter(lambda value, _pos: f"{value:g}")
+    )
     plt.grid(True)
     plt.legend()
     plt.tight_layout()

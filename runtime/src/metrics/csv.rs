@@ -1,3 +1,6 @@
+use crate::metrics::experiment::get_context;
+use crate::metrics::resource::process_usage_snapshot;
+use metrics::gauge;
 use metrics::{Key, KeyName, Metadata, Recorder, SharedString, Unit};
 use metrics_util::registry::{AtomicStorage, Registry};
 use std::collections::HashMap;
@@ -12,7 +15,30 @@ pub fn export_trigger() -> broadcast::Sender<String> {
     SENDER.get_or_init(|| broadcast::channel(100).0).clone()
 }
 
-pub fn finish_iteration(target: String) {
+pub fn finish_iteration(target: String, protocol: &str) {
+    if let Some(usage) = process_usage_snapshot() {
+        let context = get_context();
+        gauge!(
+            "process_cpu_time_seconds_total",
+            "target" => target.clone(),
+            "protocol" => protocol.to_string(),
+            "run_id" => context.run_id().to_string(),
+            "trial" => context.trial().to_string(),
+            "similarity" => context.similarity().to_string()
+        )
+        .set(usage.cpu_seconds);
+
+        gauge!(
+            "process_rss_memory_bytes",
+            "target" => target.clone(),
+            "protocol" => protocol.to_string(),
+            "run_id" => context.run_id().to_string(),
+            "trial" => context.trial().to_string(),
+            "similarity" => context.similarity().to_string()
+        )
+        .set(usage.rss_bytes as f64);
+    }
+
     let _ = export_trigger().send(target);
 }
 
