@@ -6,7 +6,6 @@ use tracing::error;
 
 pub use tokio;
 
-pub mod builder;
 pub mod macros;
 pub mod metrics;
 pub mod time;
