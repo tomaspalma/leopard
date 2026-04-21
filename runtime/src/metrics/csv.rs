@@ -171,7 +171,8 @@ impl CsvRecorder {
                 .labels()
                 .any(|l| l.value() == target || Self::format_label(l.value()) == target)
             {
-                let val = gauge.load(std::sync::atomic::Ordering::Relaxed).to_string();
+                let raw = gauge.load(std::sync::atomic::Ordering::Relaxed);
+                let val = f64::from_bits(raw).to_string();
                 Self::write_metric_line(directory, &key, iteration, timestamp, val).await;
             }
         }

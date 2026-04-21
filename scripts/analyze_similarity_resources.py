@@ -67,8 +67,11 @@ def round_values(df, value_column):
     if df.empty:
         return pd.DataFrame()
 
+    if value_column not in df.columns:
+        return pd.DataFrame()
+
     out = (
-        df[df["iteration"].notna() & df["value"].notna()]
+        df[df["iteration"].notna() & df[value_column].notna()]
         .groupby(
             ["run_id", "protocol", "trial", "similarity", "iteration"], as_index=False
         )[value_column]
