@@ -1,0 +1,12 @@
+[package]
+name = "dsl"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+connection = { path = "../connection" }
+runtime = { path = "../runtime" }
+state = { path = "../state" }
+config = { path = "../config" }
+
+tracing = "0.1"
