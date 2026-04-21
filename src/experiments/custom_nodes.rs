@@ -2,6 +2,7 @@ use connection::node::port::NodeAddress;
 use connection::{node::id::DefaultNodeIdentifier, route::default::DefaultRouteHandler};
 use membership_protocols::DefaultMembershipProtocol;
 use reconciliation::merkle_tree::protocol::MerkleTreeReconciliationProtocol;
+use reconciliation::rbf_riblt::RbfRibltProtocol;
 use reconciliation::riblt::RIBLT;
 use runtime::{RUNTIME, Task};
 
@@ -70,6 +71,12 @@ pub fn default_task(
                     }
                     "riblt" => {
                         node.add_protocol(Box::new(RIBLT::new(
+                            node_state.clone(),
+                            NodeAddress::new(ip_clone.clone(), port),
+                        )));
+                    }
+                    "rbf_riblt" => {
+                        node.add_protocol(Box::new(RbfRibltProtocol::new(
                             node_state.clone(),
                             NodeAddress::new(ip_clone.clone(), port),
                         )));

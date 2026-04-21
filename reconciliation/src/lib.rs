@@ -14,6 +14,7 @@ pub mod hybrid;
 pub mod merkle_tree;
 pub mod pbs;
 pub mod pin_sketch;
+pub mod rbf_riblt;
 pub mod riblt;
 
 #[async_trait]
