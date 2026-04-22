@@ -6,6 +6,8 @@ import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 import pandas as pd
 
+SUPPORTED_PROTOCOLS = ["riblt", "merkle", "rbf_riblt"]
+
 
 def parse_labels(label_str):
     parsed = {}
@@ -85,7 +87,7 @@ def build_round_durations(df):
         .rename(columns={"timestamp_ms": "round_completed_timestamp_ms"})
     )
 
-    rounds = rounds[rounds["protocol"].isin(["riblt", "merkle"])].copy()
+    rounds = rounds[rounds["protocol"].isin(SUPPORTED_PROTOCOLS)].copy()
     rounds["similarity_numeric"] = pd.to_numeric(rounds["similarity"], errors="coerce")
 
     # Iteration counters come from per-target export cycles and may not be globally

@@ -173,6 +173,7 @@ impl NodeSocket for DefaultNodeSocket {
                         let protocol_label = match protocol_id {
                             1 => "riblt",
                             2 => "merkle",
+                            3 => "rbf_riblt",
                             _ => "other",
                         };
 
@@ -219,6 +220,17 @@ impl NodeSocket for DefaultNodeSocket {
                                     "protocol_bytes_sent",
                                     "target" => target_str,
                                     "protocol" => "merkle",
+                                    "run_id" => context.run_id().to_string(),
+                                    "trial" => context.trial().to_string(),
+                                    "similarity" => context.similarity().to_string()
+                                )
+                                .increment(bytes_sent);
+                            }
+                            3 => {
+                                metrics::counter!(
+                                    "protocol_bytes_sent",
+                                    "target" => target_str,
+                                    "protocol" => "rbf_riblt",
                                     "run_id" => context.run_id().to_string(),
                                     "trial" => context.trial().to_string(),
                                     "similarity" => context.similarity().to_string()

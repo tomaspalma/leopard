@@ -7,7 +7,7 @@ cd "$ROOT_DIR"
 
 if [ "$#" -lt 2 ] || [ "$#" -gt 5 ]; then
     echo "Usage: $0 <protocol> <dataset_prefix> [run_id] [trial] [similarity]"
-    echo "  protocol:       merkle | riblt"
+    echo "  protocol:       merkle | riblt | rbf_riblt"
     echo "  dataset_prefix: prefix used by data/<prefix>_nodeX.json"
     echo "  run_id:         optional metrics run id (default: <protocol>_<dataset_prefix>)"
     echo "  trial:          optional trial label (default: 1)"

@@ -6,8 +6,10 @@ use std::{
 };
 
 use connection::{node::port::NodeAddress, route::RouteTask};
+use metrics::{counter, gauge, histogram};
 use protocol::deserializer::ProtocolDeserializer;
 use riblt::{symbol::PeelableResult, UnmanagedRatelessIBLT};
+use runtime::metrics::experiment::get_context;
 use runtime::spawn;
 use state::node::NodeState;
 use tracing::{error, info};
@@ -309,6 +311,7 @@ impl ReceiveRbfRibltMessageTask {
                 None => return,
             };
 
+        let neighbor_clone = neighbor.clone();
         let (is_peeling_successful, new_hashes) =
             tokio::task::spawn_blocking(move || {
                 let local_iblt = UnmanagedRatelessIBLT {
@@ -318,9 +321,17 @@ impl ReceiveRbfRibltMessageTask {
                     coded_symbols: remote_coded_symbols,
                 };
 
+                let decode_start = std::time::Instant::now();
                 let mut collapsed = local_iblt.collapse(&remote_iblt);
                 let peel_symbols = collapsed.peel_all_symbols();
                 let result = Self::filter_remote_peeled_symbols(peel_symbols);
+
+                histogram!(
+                    "rbf_riblt_decode_duration_seconds",
+                    "neighbor" => format!("{:?}", neighbor_clone)
+                )
+                .record(decode_start.elapsed().as_secs_f64());
+
                 let successful = collapsed.is_empty();
                 (successful, result)
             })
@@ -516,6 +527,8 @@ impl ReceiveRbfRibltMessageTask {
         self.protocol.scom_receiving_states.write().await.remove(&neighbor);
         self.protocol.bloom_sending_states.write().await.remove(&neighbor);
 
+        let differences_found = !message.entries().is_empty();
+
         if let Some(state) = self.protocol.bloom_receiving_states.write().await.get_mut(&neighbor) {
             state.riblt_started = false;
             state.filters.clear();
@@ -542,8 +555,29 @@ impl ReceiveRbfRibltMessageTask {
                 .last_reconciled_fingerprint
                 .write()
                 .await
-                .insert(neighbor, hasher.finish());
+                .insert(neighbor.clone(), hasher.finish());
         }
+
+        let context = get_context();
+        counter!(
+            "reconciliation_completed",
+            "protocol" => "rbf_riblt",
+            "neighbor" => format!("{:?}", neighbor),
+            "run_id" => context.run_id().to_string(),
+            "trial" => context.trial().to_string(),
+            "similarity" => context.similarity().to_string()
+        )
+        .increment(1);
+        gauge!(
+            "reconciliation_had_differences",
+            "target" => format!("{:?}", neighbor),
+            "protocol" => "rbf_riblt",
+            "run_id" => context.run_id().to_string(),
+            "trial" => context.trial().to_string(),
+            "similarity" => context.similarity().to_string()
+        )
+        .set(if differences_found { 1.0 } else { 0.0 });
+        runtime::metrics::csv::finish_iteration(format!("{:?}", neighbor), "rbf_riblt");
     }
 }
 
@@ -560,6 +594,17 @@ impl RouteTask for ReceiveRbfRibltMessageTask {
         let this = self.clone();
         spawn!({
             if let Some(msg_enum) = msg_type {
+                let context = get_context();
+                counter!(
+                    "protocol_round_trip_count",
+                    "target" => format!("{:?}", neighbor),
+                    "protocol" => "rbf_riblt",
+                    "run_id" => context.run_id().to_string(),
+                    "trial" => context.trial().to_string(),
+                    "similarity" => context.similarity().to_string()
+                )
+                .increment(1);
+
                 match msg_enum {
                     RbfRibltMessageTypeValues::Handshake => {
                         if let Some(msg) = deserialized_message

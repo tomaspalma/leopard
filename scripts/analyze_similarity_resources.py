@@ -6,6 +6,8 @@ import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 import pandas as pd
 
+SUPPORTED_PROTOCOLS = ["riblt", "merkle", "rbf_riblt"]
+
 
 def parse_labels(label_str):
     parsed = {}
@@ -77,7 +79,7 @@ def round_values(df, value_column):
         )[value_column]
         .max()
     )
-    out = out[out["protocol"].isin(["riblt", "merkle"])].copy()
+    out = out[out["protocol"].isin(SUPPORTED_PROTOCOLS)].copy()
     out["similarity_numeric"] = pd.to_numeric(out["similarity"], errors="coerce")
     return out
 

@@ -6,6 +6,8 @@ import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 import pandas as pd
 
+SUPPORTED_PROTOCOLS = ["riblt", "merkle", "rbf_riblt"]
+
 
 def parse_labels(label_str):
     result = {}
@@ -71,7 +73,7 @@ def aggregate_transmitted_bytes(df_sent):
     merged = sent.copy()
     merged["transmitted_bytes"] = merged["bytes_sent"]
 
-    merged = merged[merged["protocol"].isin(["riblt", "merkle"])].copy()
+    merged = merged[merged["protocol"].isin(SUPPORTED_PROTOCOLS)].copy()
     merged["similarity_numeric"] = pd.to_numeric(merged["similarity"], errors="coerce")
     return merged
 

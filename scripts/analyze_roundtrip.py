@@ -5,6 +5,8 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import pandas as pd
 
+SUPPORTED_PROTOCOLS = ["riblt", "merkle", "rbf_riblt"]
+
 
 def parse_labels(label_str):
     parsed = {}
@@ -72,7 +74,7 @@ def build_round_trip_counts(df):
         return pd.DataFrame()
 
     message_rows = message_rows[
-        message_rows["protocol"].isin(["riblt", "merkle"])
+        message_rows["protocol"].isin(SUPPORTED_PROTOCOLS)
     ].copy()
     message_rows["similarity_numeric"] = pd.to_numeric(
         message_rows["similarity"], errors="coerce"

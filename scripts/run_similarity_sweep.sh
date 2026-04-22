@@ -6,9 +6,9 @@ ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT_DIR"
 
 SIZES=${SIZES:-"10"}
-SIMILARITIES=${SIMILARITIES:-"0.10,0.25,0.50"}
+SIMILARITIES=${SIMILARITIES:-"0,0.10,0.25,0.50,0.70,0.85,0.95,0.99"}
 TRIALS=${TRIALS:-"5"}
-PROTOCOLS=${PROTOCOLS:-"riblt,merkle"}
+PROTOCOLS=${PROTOCOLS:-"riblt,merkle,rbf_riblt"}
 SEED=${SEED:-"12345"}
 OUTPUT_ROOT=${OUTPUT_ROOT:-"sweep"}
 
