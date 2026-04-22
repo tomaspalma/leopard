@@ -13,7 +13,7 @@ SEED=${SEED:-"12345"}
 OUTPUT_ROOT=${OUTPUT_ROOT:-"sweep"}
 
 echo "Generating datasets for sweep..."
-python3 generate_data.py --default-matrix --sizes "$SIZES" --similarities "$SIMILARITIES" --seed "$SEED"
+python3 scripts/generate_data.py --default-matrix --sizes "$SIZES" --similarities "$SIMILARITIES" --seed "$SEED"
 
 echo "Removing metrics_output folder"
 rm -rf metrics_output

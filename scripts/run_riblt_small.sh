@@ -5,7 +5,7 @@ cd "$(dirname "$0")/.."
 
 if [ ! -d "data" ] || [ ! -f "data/small_node1.json" ]; then
     echo "Generating test data..."
-    python3 generate_data.py --default-matrix
+    python3 scripts/generate_data.py --default-matrix
 fi
 
 echo "Running RIBLT tests..."

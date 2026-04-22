@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Go to project root so we can find generate_requests.py
+# Go to project root so we can find scripts/generate_requests.py
 cd "$(dirname "$0")/.."
 
 # Check if count argument is provided
@@ -23,7 +23,7 @@ PORTS=(3000 3001 3002)
 for PORT in "${PORTS[@]}"; do
   echo "=================================================="
   echo "Sending $COUNT requests to 127.0.0.1:$PORT..."
-  python3 generate_requests.py --count "$COUNT" --port "$PORT"
+  python3 scripts/generate_requests.py --count "$COUNT" --port "$PORT"
 done
 
 echo "=================================================="
