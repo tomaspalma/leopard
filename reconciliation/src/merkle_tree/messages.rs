@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::any::Any;
 use std::sync::Arc;
 
-use message::{Message, MessageType, MessageTypeValues};
+use message::{impl_protocol_message, MessageType, MessageTypeValues};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum MerkleTreeMessageWrapper {
@@ -71,38 +71,6 @@ impl MerkleTreeMessage {
     }
 }
 
-impl Message for MerkleTreeMessage {
-    fn as_any(&self) -> &dyn Any {
-        self
-    }
-
-    fn get_type(&self) -> Arc<dyn MessageType + Send + Sync> {
-        Arc::new(self._type.clone())
-    }
-
-    fn content(&self) -> Arc<Vec<u8>> {
-        Arc::new(vec![])
-    }
-
-    fn protocol(&self) -> Option<u64> {
-        self.protocol_id
-    }
-
-    fn serialize(&self, protocol: Option<u64>, sender_port: u16) -> Result<Vec<u8>, ()> {
-        let body_bytes = serialize(&self.wrapper).map_err(|_| ())?;
-
-        let mut packet = Vec::with_capacity(body_bytes.len() + 16);
-
-        if let Some(id) = protocol {
-            packet.extend_from_slice(&id.to_be_bytes());
-        } else {
-            packet.extend_from_slice(&[0; 8]);
-        }
-
-        packet.extend_from_slice(&sender_port.to_be_bytes());
-        packet.extend_from_slice(&[0; 6]);
-        packet.extend_from_slice(&body_bytes);
-
-        Ok(packet)
-    }
-}
+impl_protocol_message!(MerkleTreeMessage, this, {
+    serialize(&this.wrapper).map_err(|_| ())?
+});

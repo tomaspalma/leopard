@@ -1,7 +1,6 @@
 use crate::node::{
     NodeSocket, NodeSocketTaskMetadata, PeriodicNodeSocketTask, port::NodeAddress,
 };
-use crate::protocol::id_translator::ProtocolIdTranslator;
 use crate::request::handler::{RequestHandler, default::DefaultRequestHandler};
 use crate::route::{
     Route, RouteHandler, RouteTask,
@@ -10,7 +9,7 @@ use crate::route::{
 use tracing::{error, info};
 
 use async_trait::async_trait;
-use message::Message;
+use message::{Message, ProtocolIDTranslator};
 use runtime::spawn;
 use runtime::metrics::experiment::get_context;
 use runtime::{
@@ -173,7 +172,7 @@ impl NodeSocket for DefaultNodeSocket {
                         let target_str = format!("{:?}", target);
                         let context = get_context();
                         let protocol_id = message.protocol().unwrap_or(0);
-                        let protocol_label = ProtocolIdTranslator::translate(protocol_id);
+                        let protocol_label = ProtocolIDTranslator::translate(protocol_id);
 
                         metrics::counter!(
                             "total_bytes_sent",

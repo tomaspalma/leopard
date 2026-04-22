@@ -1,6 +1,4 @@
-use std::sync::Arc;
-
-use message::{Message, MessageType, MessageTypeValues};
+use message::{impl_protocol_message, MessageType, MessageTypeValues};
 use rkyv::{rancor::Error, Archive, Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Archive)]
@@ -286,247 +284,37 @@ pub enum RbfRibltMessageWrapper {
     ValueFetchResponse(RbfRibltValueFetchResponseMessage),
 }
 
-impl Message for RbfRibltHandshakeMessage {
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
+impl_protocol_message!(RbfRibltHandshakeMessage, this, {
+    let wrapper = RbfRibltMessageWrapper::Handshake(this.clone());
+    rkyv::to_bytes::<Error>(&wrapper).map_err(|_| ())?
+});
 
-    fn get_type(&self) -> Arc<dyn MessageType + Send + Sync> {
-        Arc::new(self._type.clone())
-    }
+impl_protocol_message!(RbfRibltBloomFilterSliceMessage, this, {
+    let wrapper = RbfRibltMessageWrapper::BloomFilterSlice(this.clone());
+    rkyv::to_bytes::<Error>(&wrapper).map_err(|_| ())?
+});
 
-    fn content(&self) -> Arc<Vec<u8>> {
-        Arc::new(vec![])
-    }
+impl_protocol_message!(RbfRibltSComSendSymbolMessage, this, {
+    let wrapper = RbfRibltMessageWrapper::SComSendSymbol(this.clone());
+    rkyv::to_bytes::<Error>(&wrapper).map_err(|_| ())?
+});
 
-    fn protocol(&self) -> Option<u64> {
-        self.protocol_id
-    }
+impl_protocol_message!(RbfRibltSComDecodedAllMessage, this, {
+    let wrapper = RbfRibltMessageWrapper::SComDecodedAll(this.clone());
+    rkyv::to_bytes::<Error>(&wrapper).map_err(|_| ())?
+});
 
-    fn serialize(&self, protocol: Option<u64>, sender_port: u16) -> Result<Vec<u8>, ()> {
-        let wrapper = RbfRibltMessageWrapper::Handshake(self.clone());
-        let body_bytes = rkyv::to_bytes::<Error>(&wrapper).map_err(|_| ())?;
+impl_protocol_message!(RbfRibltSComRequestMoreSymbolsMessage, this, {
+    let wrapper = RbfRibltMessageWrapper::SComRequestMoreSymbols(this.clone());
+    rkyv::to_bytes::<Error>(&wrapper).map_err(|_| ())?
+});
 
-        let mut packet = Vec::with_capacity(body_bytes.len() + 16);
-        if let Some(id) = protocol {
-            packet.extend_from_slice(&id.to_be_bytes());
-        } else {
-            packet.extend_from_slice(&[0; 8]);
-        }
-        packet.extend_from_slice(&sender_port.to_be_bytes());
-        packet.extend_from_slice(&[0; 6]);
-        packet.extend_from_slice(&body_bytes);
+impl_protocol_message!(RbfRibltValueFetchRequestMessage, this, {
+    let wrapper = RbfRibltMessageWrapper::ValueFetchRequest(this.clone());
+    rkyv::to_bytes::<Error>(&wrapper).map_err(|_| ())?
+});
 
-        Ok(packet)
-    }
-}
-
-impl Message for RbfRibltBloomFilterSliceMessage {
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-
-    fn get_type(&self) -> Arc<dyn MessageType + Send + Sync> {
-        Arc::new(self._type.clone())
-    }
-
-    fn content(&self) -> Arc<Vec<u8>> {
-        Arc::new(vec![])
-    }
-
-    fn protocol(&self) -> Option<u64> {
-        self.protocol_id
-    }
-
-    fn serialize(&self, protocol: Option<u64>, sender_port: u16) -> Result<Vec<u8>, ()> {
-        let wrapper = RbfRibltMessageWrapper::BloomFilterSlice(self.clone());
-        let body_bytes = rkyv::to_bytes::<Error>(&wrapper).map_err(|_| ())?;
-
-        let mut packet = Vec::with_capacity(body_bytes.len() + 16);
-        if let Some(id) = protocol {
-            packet.extend_from_slice(&id.to_be_bytes());
-        } else {
-            packet.extend_from_slice(&[0; 8]);
-        }
-        packet.extend_from_slice(&sender_port.to_be_bytes());
-        packet.extend_from_slice(&[0; 6]);
-        packet.extend_from_slice(&body_bytes);
-
-        Ok(packet)
-    }
-}
-
-impl Message for RbfRibltSComSendSymbolMessage {
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-
-    fn get_type(&self) -> Arc<dyn MessageType + Send + Sync> {
-        Arc::new(self._type.clone())
-    }
-
-    fn content(&self) -> Arc<Vec<u8>> {
-        Arc::new(vec![])
-    }
-
-    fn protocol(&self) -> Option<u64> {
-        self.protocol_id
-    }
-
-    fn serialize(&self, protocol: Option<u64>, sender_port: u16) -> Result<Vec<u8>, ()> {
-        let wrapper = RbfRibltMessageWrapper::SComSendSymbol(self.clone());
-        let body_bytes = rkyv::to_bytes::<Error>(&wrapper).map_err(|_| ())?;
-
-        let mut packet = Vec::with_capacity(body_bytes.len() + 16);
-        if let Some(id) = protocol {
-            packet.extend_from_slice(&id.to_be_bytes());
-        } else {
-            packet.extend_from_slice(&[0; 8]);
-        }
-        packet.extend_from_slice(&sender_port.to_be_bytes());
-        packet.extend_from_slice(&[0; 6]);
-        packet.extend_from_slice(&body_bytes);
-
-        Ok(packet)
-    }
-}
-
-impl Message for RbfRibltSComDecodedAllMessage {
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-
-    fn get_type(&self) -> Arc<dyn MessageType + Send + Sync> {
-        Arc::new(self._type.clone())
-    }
-
-    fn content(&self) -> Arc<Vec<u8>> {
-        Arc::new(vec![])
-    }
-
-    fn protocol(&self) -> Option<u64> {
-        self.protocol_id
-    }
-
-    fn serialize(&self, protocol: Option<u64>, sender_port: u16) -> Result<Vec<u8>, ()> {
-        let wrapper = RbfRibltMessageWrapper::SComDecodedAll(self.clone());
-        let body_bytes = rkyv::to_bytes::<Error>(&wrapper).map_err(|_| ())?;
-
-        let mut packet = Vec::with_capacity(body_bytes.len() + 16);
-        if let Some(id) = protocol {
-            packet.extend_from_slice(&id.to_be_bytes());
-        } else {
-            packet.extend_from_slice(&[0; 8]);
-        }
-        packet.extend_from_slice(&sender_port.to_be_bytes());
-        packet.extend_from_slice(&[0; 6]);
-        packet.extend_from_slice(&body_bytes);
-
-        Ok(packet)
-    }
-}
-
-impl Message for RbfRibltSComRequestMoreSymbolsMessage {
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-
-    fn get_type(&self) -> Arc<dyn MessageType + Send + Sync> {
-        Arc::new(self._type.clone())
-    }
-
-    fn content(&self) -> Arc<Vec<u8>> {
-        Arc::new(vec![])
-    }
-
-    fn protocol(&self) -> Option<u64> {
-        self.protocol_id
-    }
-
-    fn serialize(&self, protocol: Option<u64>, sender_port: u16) -> Result<Vec<u8>, ()> {
-        let wrapper = RbfRibltMessageWrapper::SComRequestMoreSymbols(self.clone());
-        let body_bytes = rkyv::to_bytes::<Error>(&wrapper).map_err(|_| ())?;
-
-        let mut packet = Vec::with_capacity(body_bytes.len() + 16);
-        if let Some(id) = protocol {
-            packet.extend_from_slice(&id.to_be_bytes());
-        } else {
-            packet.extend_from_slice(&[0; 8]);
-        }
-        packet.extend_from_slice(&sender_port.to_be_bytes());
-        packet.extend_from_slice(&[0; 6]);
-        packet.extend_from_slice(&body_bytes);
-
-        Ok(packet)
-    }
-}
-
-impl Message for RbfRibltValueFetchRequestMessage {
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-
-    fn get_type(&self) -> Arc<dyn MessageType + Send + Sync> {
-        Arc::new(self._type.clone())
-    }
-
-    fn content(&self) -> Arc<Vec<u8>> {
-        Arc::new(vec![])
-    }
-
-    fn protocol(&self) -> Option<u64> {
-        self.protocol_id
-    }
-
-    fn serialize(&self, protocol: Option<u64>, sender_port: u16) -> Result<Vec<u8>, ()> {
-        let wrapper = RbfRibltMessageWrapper::ValueFetchRequest(self.clone());
-        let body_bytes = rkyv::to_bytes::<Error>(&wrapper).map_err(|_| ())?;
-
-        let mut packet = Vec::with_capacity(body_bytes.len() + 16);
-        if let Some(id) = protocol {
-            packet.extend_from_slice(&id.to_be_bytes());
-        } else {
-            packet.extend_from_slice(&[0; 8]);
-        }
-        packet.extend_from_slice(&sender_port.to_be_bytes());
-        packet.extend_from_slice(&[0; 6]);
-        packet.extend_from_slice(&body_bytes);
-
-        Ok(packet)
-    }
-}
-
-impl Message for RbfRibltValueFetchResponseMessage {
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-
-    fn get_type(&self) -> Arc<dyn MessageType + Send + Sync> {
-        Arc::new(self._type.clone())
-    }
-
-    fn content(&self) -> Arc<Vec<u8>> {
-        Arc::new(vec![])
-    }
-
-    fn protocol(&self) -> Option<u64> {
-        self.protocol_id
-    }
-
-    fn serialize(&self, protocol: Option<u64>, sender_port: u16) -> Result<Vec<u8>, ()> {
-        let wrapper = RbfRibltMessageWrapper::ValueFetchResponse(self.clone());
-        let body_bytes = rkyv::to_bytes::<Error>(&wrapper).map_err(|_| ())?;
-
-        let mut packet = Vec::with_capacity(body_bytes.len() + 16);
-        if let Some(id) = protocol {
-            packet.extend_from_slice(&id.to_be_bytes());
-        } else {
-            packet.extend_from_slice(&[0; 8]);
-        }
-        packet.extend_from_slice(&sender_port.to_be_bytes());
-        packet.extend_from_slice(&[0; 6]);
-        packet.extend_from_slice(&body_bytes);
-
-        Ok(packet)
-    }
-}
+impl_protocol_message!(RbfRibltValueFetchResponseMessage, this, {
+    let wrapper = RbfRibltMessageWrapper::ValueFetchResponse(this.clone());
+    rkyv::to_bytes::<Error>(&wrapper).map_err(|_| ())?
+});

@@ -3,7 +3,7 @@ pub mod id;
 pub mod port;
 
 use crate::route::RouteHandler;
-use crate::{node::port::ConnectionInfo, request::handler::RequestHandler};
+use crate::{request::handler::RequestHandler};
 
 use async_trait::async_trait;
 use message::Message;

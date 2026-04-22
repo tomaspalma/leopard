@@ -2,7 +2,7 @@ use std::sync::Arc;
 use tracing::info;
 
 use async_trait::async_trait;
-use message::Message;
+use message::{Message};
 use protocol::{deserializer::ProtocolDeserializer, Protocol, ProtocolIDGenerator};
 use state::node::{DefaultNodeState, NodeState};
 
