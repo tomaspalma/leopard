@@ -25,6 +25,19 @@ impl ProtocolIDGenerator {
     }
 }
 
+pub struct ProtocolIdTranslator;
+
+impl ProtocolIdTranslator {
+    pub fn translate(protocol_id: u64) -> &'static str {
+        match protocol_id {
+            1 => "riblt",
+            2 => "merkle",
+            3 => "rbf_riblt",
+            _ => "other",
+        }
+    }
+}
+
 #[async_trait]
 pub trait Protocol<S, T, M, R, N, MN, CI, CV, PTU, PT, RHandler, RStorage>
 where

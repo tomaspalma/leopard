@@ -1,4 +1,7 @@
-use crate::node::{NodeSocket, NodeSocketTaskMetadata, PeriodicNodeSocketTask, port::NodeAddress};
+use crate::node::{
+    NodeSocket, NodeSocketTaskMetadata, PeriodicNodeSocketTask, port::NodeAddress,
+};
+use crate::protocol::id_translator::ProtocolIdTranslator;
 use crate::request::handler::{RequestHandler, default::DefaultRequestHandler};
 use crate::route::{
     Route, RouteHandler, RouteTask,
@@ -170,12 +173,7 @@ impl NodeSocket for DefaultNodeSocket {
                         let target_str = format!("{:?}", target);
                         let context = get_context();
                         let protocol_id = message.protocol().unwrap_or(0);
-                        let protocol_label = match protocol_id {
-                            1 => "riblt",
-                            2 => "merkle",
-                            3 => "rbf_riblt",
-                            _ => "other",
-                        };
+                        let protocol_label = ProtocolIdTranslator::translate(protocol_id);
 
                         metrics::counter!(
                             "total_bytes_sent",
@@ -200,7 +198,7 @@ impl NodeSocket for DefaultNodeSocket {
                                 metrics::counter!(
                                     "protocol_bytes_sent",
                                     "target" => target_str,
-                                    "protocol" => "riblt",
+                                    "protocol" => protocol_label,
                                     "run_id" => context.run_id().to_string(),
                                     "trial" => context.trial().to_string(),
                                     "similarity" => context.similarity().to_string()
@@ -219,7 +217,7 @@ impl NodeSocket for DefaultNodeSocket {
                                 metrics::counter!(
                                     "protocol_bytes_sent",
                                     "target" => target_str,
-                                    "protocol" => "merkle",
+                                    "protocol" => protocol_label,
                                     "run_id" => context.run_id().to_string(),
                                     "trial" => context.trial().to_string(),
                                     "similarity" => context.similarity().to_string()
@@ -230,7 +228,7 @@ impl NodeSocket for DefaultNodeSocket {
                                 metrics::counter!(
                                     "protocol_bytes_sent",
                                     "target" => target_str,
-                                    "protocol" => "rbf_riblt",
+                                    "protocol" => protocol_label,
                                     "run_id" => context.run_id().to_string(),
                                     "trial" => context.trial().to_string(),
                                     "similarity" => context.similarity().to_string()
