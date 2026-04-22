@@ -83,7 +83,7 @@ impl ReceivingState {
 }
 
 pub const RIBLT_PROTOCOL_ID: u64 = 1;
-const BATCH_SIZE: usize = 5;
+const BATCH_SIZE: usize = 30;
 
 pub struct RIBLT {
     id: u64,

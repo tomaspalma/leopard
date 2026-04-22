@@ -18,13 +18,13 @@ def parse_labels(label_str):
     return parsed
 
 
-def load_reconciliation_rows(metrics_root):
+def load_metric_rows(metrics_root, metric_name):
     rows = []
     for run_dir in Path(metrics_root).iterdir():
         if not run_dir.is_dir():
             continue
 
-        metric_file = run_dir / "reconciliation_completed.csv"
+        metric_file = run_dir / f"{metric_name}.csv"
         if not metric_file.exists():
             continue
 
@@ -43,6 +43,7 @@ def load_reconciliation_rows(metrics_root):
                 {
                     "run_dir": run_dir.name,
                     "iteration": pd.to_numeric(row.get("iteration"), errors="coerce"),
+                    "timestamp": pd.to_numeric(row.get("timestamp"), errors="coerce"),
                     "value": pd.to_numeric(row.get("value"), errors="coerce"),
                     "protocol": protocol
                     if isinstance(protocol, str) and protocol
@@ -66,23 +67,21 @@ def build_round_trip_counts(df):
     if df.empty:
         return pd.DataFrame()
 
-    completed = df[(df["value"] > 0) & df["iteration"].notna()].copy()
-    if completed.empty:
+    message_rows = df[df["iteration"].notna() & df["value"].notna()].copy()
+    if message_rows.empty:
         return pd.DataFrame()
 
-    completed = completed[completed["protocol"].isin(["riblt", "merkle"])].copy()
-    completed["similarity_numeric"] = pd.to_numeric(
-        completed["similarity"], errors="coerce"
+    message_rows = message_rows[
+        message_rows["protocol"].isin(["riblt", "merkle"])
+    ].copy()
+    message_rows["similarity_numeric"] = pd.to_numeric(
+        message_rows["similarity"], errors="coerce"
     )
 
-    return (
-        completed.groupby(
-            ["run_id", "protocol", "trial", "similarity", "similarity_numeric"],
-            as_index=False,
-        )
-        .size()
-        .rename(columns={"size": "round_trips"})
-    )
+    # Each row corresponds to one completed reconciliation round for one neighbor.
+    # Value already represents the per-round counter exported at reconciliation finish.
+    rounds = message_rows.rename(columns={"value": "round_trips"}).copy()
+    return rounds
 
 
 def make_round_trip_summary(round_trips):
@@ -194,9 +193,17 @@ def plot_round_trip_summary(summary, output_dir):
     plt.close()
 
 
+def print_missing_metric_hint(metrics_root):
+    print("No protocol round-trip metrics found.")
+    print(
+        "Run experiments after this change so each run contains protocol_round_trip_count.csv under metrics_output/<run_id>/"
+    )
+    print(f"Searched in: {metrics_root}")
+
+
 def main():
     parser = argparse.ArgumentParser(
-        description="Analyze reconciliation round trips across similarity levels"
+        description="Analyze protocol message round trips across similarity levels"
     )
     parser.add_argument(
         "metrics_root",
@@ -211,12 +218,17 @@ def main():
     )
     args = parser.parse_args()
 
-    completed_df = load_reconciliation_rows(args.metrics_root)
-    round_trips = build_round_trip_counts(completed_df)
+    messages_df = load_metric_rows(args.metrics_root, "protocol_round_trip_count")
+    round_trips = build_round_trip_counts(messages_df)
+
+    if messages_df.empty:
+        print_missing_metric_hint(args.metrics_root)
+        return
 
     os.makedirs(args.output_dir, exist_ok=True)
     round_trips.to_csv(
-        os.path.join(args.output_dir, "round_trips_by_trial.csv"), index=False
+        os.path.join(args.output_dir, "round_trip_samples_by_iteration.csv"),
+        index=False,
     )
 
     round_trip_summary = make_round_trip_summary(round_trips)

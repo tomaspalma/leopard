@@ -290,9 +290,22 @@ impl RouteTask for ReceiveNeighborSymbolsTask {
 
         spawn!({
             if let Some(msg_enum) = riblt_type {
+                let context = get_context();
+                metrics::counter!(
+                    "protocol_round_trip_count",
+                    "target" => format!("{:?}", neighbor),
+                    "protocol" => "riblt",
+                    "run_id" => context.run_id().to_string(),
+                    "trial" => context.trial().to_string(),
+                    "similarity" => context.similarity().to_string()
+                )
+                .increment(1);
+
                 match msg_enum {
                     RIBLTMessageTypeValues::SendSymbol => {
                         info!("Received SendSymbol from {:?}", neighbor);
+            
+
                         if let Some(msg) = deserialized_message
                             .as_any()
                             .downcast_ref::<RIBLTSendSymbolMessage>()

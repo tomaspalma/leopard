@@ -323,6 +323,17 @@ impl RouteTask for ReceiveMerkleTreeMessageTask {
             .as_any()
             .downcast_ref::<MerkleTreeMessage>()
         {
+            let context = get_context();
+                metrics::counter!(
+                    "protocol_round_trip_count",
+                    "target" => format!("{:?}", neighbor),
+                    "protocol" => "merkle",
+                    "run_id" => context.run_id().to_string(),
+                    "trial" => context.trial().to_string(),
+                    "similarity" => context.similarity().to_string()
+                )
+                .increment(1);
+
             self.handle_message(msg, neighbor);
         } else {
             error!("Failed to downcast MerkleTreeMessage");
