@@ -90,9 +90,11 @@ impl MerkleTreeReconciliationProtocol {
         let root_hash = tree.get_root_hash();
         info!("Sending SyncRoot to {:?}", target);
 
+        let session_id = uuid::Uuid::new_v4().to_string();
         let msg = MerkleTreeMessage::new(
             Some(protocol_id),
             MerkleTreeMessageType::new(MerkleTreeMessageTypeValues::SyncRoot),
+            session_id,
             MerkleTreeMessageWrapper::SyncRoot(root_hash),
         );
 

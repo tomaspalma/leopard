@@ -33,10 +33,10 @@ impl ProtocolDeserializer for MerkleTreeDeserializer {
 
         let body_bytes = &bytes[16..];
 
-        let wrapper: MerkleTreeMessageWrapper =
+        let (session_id, wrapper): (String, MerkleTreeMessageWrapper) =
             deserialize(body_bytes).expect("Failed to deserialize MerkleTreeMessage");
 
-        let msg_type_val = match wrapper {
+        let msg_type_val = match &wrapper {
             MerkleTreeMessageWrapper::SyncRoot(_) => MerkleTreeMessageTypeValues::SyncRoot,
             MerkleTreeMessageWrapper::SyncNodeRequest(_) => {
                 MerkleTreeMessageTypeValues::SyncNodeRequest
@@ -52,6 +52,6 @@ impl ProtocolDeserializer for MerkleTreeDeserializer {
 
         let msg_type = MerkleTreeMessageType::new(msg_type_val);
 
-        Arc::new(MerkleTreeMessage::new(protocol_id, msg_type, wrapper))
+        Arc::new(MerkleTreeMessage::new(protocol_id, msg_type, session_id, wrapper))
     }
 }

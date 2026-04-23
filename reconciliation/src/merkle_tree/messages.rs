@@ -50,6 +50,7 @@ impl MessageType for MerkleTreeMessageType {
 pub struct MerkleTreeMessage {
     protocol_id: Option<u64>,
     _type: MerkleTreeMessageType,
+    session_id: String,
     wrapper: MerkleTreeMessageWrapper,
 }
 
@@ -57,11 +58,13 @@ impl MerkleTreeMessage {
     pub fn new(
         protocol_id: Option<u64>,
         _type: MerkleTreeMessageType,
+        session_id: String,
         wrapper: MerkleTreeMessageWrapper,
     ) -> Self {
         Self {
             protocol_id,
             _type,
+            session_id,
             wrapper,
         }
     }
@@ -69,8 +72,12 @@ impl MerkleTreeMessage {
     pub fn wrapper(&self) -> &MerkleTreeMessageWrapper {
         &self.wrapper
     }
+
+    pub fn session_id(&self) -> &str {
+        &self.session_id
+    }
 }
 
 impl_protocol_message!(MerkleTreeMessage, this, {
-    serialize(&this.wrapper).map_err(|_| ())?
+    serialize(&(this.session_id.clone(), this.wrapper.clone())).map_err(|_| ())?
 });
