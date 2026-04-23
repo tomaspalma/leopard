@@ -5,8 +5,8 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT_DIR"
 
-SIZES=${SIZES:-"10"}
-SIMILARITIES=${SIMILARITIES:-"0,0.10,0.25,0.50,0.70,0.85,0.95,0.99"}
+SIZES=${SIZES:-"10000"}
+SIMILARITIES=${SIMILARITIES:-"0,0.10,0.25,0.35,0.50,0.70,0.85,0.95,0.99"}
 TRIALS=${TRIALS:-"5"}
 PROTOCOLS=${PROTOCOLS:-"riblt,merkle,rbf_riblt"}
 SEED=${SEED:-"12345"}
@@ -32,7 +32,7 @@ for size in "${size_values[@]}"; do
       for trial in $(seq 1 "$TRIALS"); do
         run_id="${OUTPUT_ROOT}_${protocol}_n${size}_sim${sim_clean}_t${trial}"
         echo "Running $run_id"
-        timeout 20s ./scripts/run_experiment.sh "$protocol" "$dataset_prefix" "$run_id" "$trial" "$sim" || true
+        ./scripts/run_experiment.sh "$protocol" "$dataset_prefix" "$run_id" "$trial" "$sim"
       done
     done
   done

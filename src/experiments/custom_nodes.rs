@@ -99,7 +99,8 @@ pub fn default_task(
     })
 }
 
-pub async fn custom_nodes(node_type: String, protocol: String, nodes: Vec<String>) {
+pub async fn custom_nodes(node_type: String, protocol: String, nodes: Vec<String>, exit_on_reconciliation: bool) {
+    let node_count = nodes.len();
     for node_str in nodes {
         let parts: Vec<&str> = node_str.split(',').collect();
 
@@ -125,5 +126,10 @@ pub async fn custom_nodes(node_type: String, protocol: String, nodes: Vec<String
 
     RUNTIME.write().unwrap().init().unwrap();
 
-    std::future::pending::<()>().await;
+    if exit_on_reconciliation {
+        runtime::metrics::csv::set_expected_pairs(node_count * (node_count - 1));
+        runtime::metrics::csv::shutdown_complete_notify().notified().await;
+    } else {
+        std::future::pending::<()>().await;
+    }
 }

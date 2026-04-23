@@ -577,7 +577,11 @@ impl ReceiveRbfRibltMessageTask {
             "similarity" => context.similarity().to_string()
         )
         .set(if differences_found { 1.0 } else { 0.0 });
-        runtime::metrics::csv::finish_iteration(format!("{:?}", neighbor), "rbf_riblt");
+        runtime::metrics::csv::finish_iteration(
+            format!("{:?}", self.protocol.state.node_identifier().connection_info()),
+            format!("{:?}", neighbor),
+            "rbf_riblt",
+        );
     }
 }
 

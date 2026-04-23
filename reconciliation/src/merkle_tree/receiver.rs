@@ -121,7 +121,11 @@ impl ReceiveMerkleTreeMessageTask {
                 "similarity" => context.similarity().to_string()
             )
             .increment(1);
-            runtime::metrics::csv::finish_iteration(format!("{:?}", neighbor), "merkle");
+            runtime::metrics::csv::finish_iteration(
+                format!("{:?}", self.identifier.connection_info()),
+                format!("{:?}", neighbor),
+                "merkle",
+            );
         }
     }
 
@@ -273,6 +277,7 @@ impl ReceiveMerkleTreeMessageTask {
         let key_clone = key.clone();
         let value_clone = value.clone();
         let neighbor_clone = neighbor.clone();
+        let self_addr = format!("{:?}", self.identifier.connection_info());
 
         spawn!({
             if let Some(storage) = state_clone.get_storage("default".to_string()) {
@@ -309,7 +314,11 @@ impl ReceiveMerkleTreeMessageTask {
                     "similarity" => context.similarity().to_string()
                 )
                 .increment(1);
-                runtime::metrics::csv::finish_iteration(format!("{:?}", neighbor_clone), "merkle");
+                runtime::metrics::csv::finish_iteration(
+                    self_addr,
+                    format!("{:?}", neighbor_clone),
+                    "merkle",
+                );
             }
         });
     }

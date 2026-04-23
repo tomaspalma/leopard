@@ -19,6 +19,9 @@ struct Cli {
     #[arg(long, default_value = "unknown")]
     similarity: String,
 
+    #[arg(long, action = clap::ArgAction::SetTrue)]
+    exit_on_reconciliation: bool,
+
     #[command(subcommand)]
     command: Commands,
 }
@@ -59,7 +62,7 @@ async fn main() {
             protocol,
             nodes,
         } => {
-            experiments::custom_nodes(node_type.clone(), protocol.clone(), nodes.clone()).await;
+            experiments::custom_nodes(node_type.clone(), protocol.clone(), nodes.clone(), cli.exit_on_reconciliation).await;
         }
     }
 }

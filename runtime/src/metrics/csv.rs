@@ -3,19 +3,40 @@ use crate::metrics::resource::process_usage_snapshot;
 use metrics::gauge;
 use metrics::{Key, KeyName, Metadata, Recorder, SharedString, Unit};
 use metrics_util::registry::{AtomicStorage, Registry};
-use std::collections::HashMap;
-use std::sync::Arc;
-use std::sync::OnceLock;
+use std::collections::{HashMap, HashSet};
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex, OnceLock};
 use tokio::fs::{OpenOptions, create_dir_all};
 use tokio::io::AsyncWriteExt;
-use tokio::sync::broadcast;
+use tokio::sync::{Notify, broadcast};
+
+static EXPECTED_PAIRS: AtomicUsize = AtomicUsize::new(0);
+
+fn completed_pairs() -> &'static Mutex<HashSet<(String, String)>> {
+    static PAIRS: OnceLock<Mutex<HashSet<(String, String)>>> = OnceLock::new();
+    PAIRS.get_or_init(|| Mutex::new(HashSet::new()))
+}
+
+fn shutdown_notify() -> &'static Notify {
+    static NOTIFY: OnceLock<Notify> = OnceLock::new();
+    NOTIFY.get_or_init(Notify::new)
+}
+
+pub fn shutdown_complete_notify() -> &'static Notify {
+    static NOTIFY: OnceLock<Notify> = OnceLock::new();
+    NOTIFY.get_or_init(Notify::new)
+}
+
+pub fn set_expected_pairs(n: usize) {
+    EXPECTED_PAIRS.store(n, Ordering::Relaxed);
+}
 
 pub fn export_trigger() -> broadcast::Sender<String> {
     static SENDER: OnceLock<broadcast::Sender<String>> = OnceLock::new();
     SENDER.get_or_init(|| broadcast::channel(100).0).clone()
 }
 
-pub fn finish_iteration(target: String, protocol: &str) {
+pub fn finish_iteration(from: String, target: String, protocol: &str) {
     if let Some(usage) = process_usage_snapshot() {
         let context = get_context();
         gauge!(
@@ -39,7 +60,16 @@ pub fn finish_iteration(target: String, protocol: &str) {
         .set(usage.rss_bytes as f64);
     }
 
-    let _ = export_trigger().send(target);
+    let _ = export_trigger().send(target.clone());
+
+    let expected = EXPECTED_PAIRS.load(Ordering::Relaxed);
+    if expected > 0 {
+        let mut pairs = completed_pairs().lock().unwrap();
+        pairs.insert((from, target));
+        if pairs.len() >= expected {
+            shutdown_notify().notify_one();
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -189,29 +219,30 @@ impl CsvRecorder {
             let mut iterations = std::collections::HashMap::new();
 
             loop {
-                if let Ok(target) = rx.recv().await {
-                    let iteration = iterations.entry(target.clone()).or_insert(1);
-                    let current_iteration = *iteration;
-                    *iteration += 1;
-
-                    let timestamp = start_time.elapsed().as_millis();
-
-                    Self::export_counters(
-                        &registry,
-                        &directory,
-                        current_iteration,
-                        timestamp,
-                        &target,
-                    )
-                    .await;
-                    Self::export_gauges(
-                        &registry,
-                        &directory,
-                        current_iteration,
-                        timestamp,
-                        &target,
-                    )
-                    .await;
+                tokio::select! {
+                    result = rx.recv() => {
+                        if let Ok(target) = result {
+                            let iteration = iterations.entry(target.clone()).or_insert(1);
+                            let current_iteration = *iteration;
+                            *iteration += 1;
+                            let timestamp = start_time.elapsed().as_millis();
+                            Self::export_counters(&registry, &directory, current_iteration, timestamp, &target).await;
+                            Self::export_gauges(&registry, &directory, current_iteration, timestamp, &target).await;
+                        }
+                    }
+                    _ = shutdown_notify().notified() => {
+                        // Drain any exports that were queued before shutdown was signalled
+                        while let Ok(target) = rx.try_recv() {
+                            let iteration = iterations.entry(target.clone()).or_insert(1);
+                            let current_iteration = *iteration;
+                            *iteration += 1;
+                            let timestamp = start_time.elapsed().as_millis();
+                            Self::export_counters(&registry, &directory, current_iteration, timestamp, &target).await;
+                            Self::export_gauges(&registry, &directory, current_iteration, timestamp, &target).await;
+                        }
+                        shutdown_complete_notify().notify_one();
+                        return;
+                    }
                 }
             }
         });

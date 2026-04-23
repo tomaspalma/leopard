@@ -42,15 +42,18 @@ def create_pair(size, similarity, seed, prefix, output_dir):
     unique_per_node = size - intersection
 
     shared = build_base_entries(intersection, rng)
+
     node1_unique = build_unique_entries(f"{prefix}_node1_u", unique_per_node, rng)
     node2_unique = build_unique_entries(f"{prefix}_node2_u", unique_per_node, rng)
 
     node1_entries = shared + node1_unique
     node2_entries = shared + node2_unique
 
+
     node1_path = os.path.join(output_dir, f"{prefix}_node1.json")
     node2_path = os.path.join(output_dir, f"{prefix}_node2.json")
     node3_path = os.path.join(output_dir, f"{prefix}_node3.json")
+
 
     write_node_file(node1_path, node1_entries)
     write_node_file(node2_path, node2_entries)
