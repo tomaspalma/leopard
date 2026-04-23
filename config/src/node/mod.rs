@@ -38,10 +38,10 @@ impl
                     "node9001".to_string(),
                     NodeAddress::new("127.0.0.1".to_string(), 9001),
                 ))),
-                Arc::new(RwLock::new(DefaultMembershipNeighbor::new(
-                    "node9002".to_string(),
-                    NodeAddress::new("127.0.0.1".to_string(), 9002),
-                ))),
+                // Arc::new(RwLock::new(DefaultMembershipNeighbor::new(
+                //     "node9002".to_string(),
+                //     NodeAddress::new("127.0.0.1".to_string(), 9002),
+                // ))),
             ]),
         )))
     }

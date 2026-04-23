@@ -45,19 +45,19 @@ def create_pair(size, similarity, seed, prefix, output_dir):
 
     node1_unique = build_unique_entries(f"{prefix}_node1_u", unique_per_node, rng)
     node2_unique = build_unique_entries(f"{prefix}_node2_u", unique_per_node, rng)
+    node3_unique = build_unique_entries(f"{prefix}_node3_u", unique_per_node, rng)
 
     node1_entries = shared + node1_unique
     node2_entries = shared + node2_unique
-
+    node3_entries = shared + node3_unique
 
     node1_path = os.path.join(output_dir, f"{prefix}_node1.json")
     node2_path = os.path.join(output_dir, f"{prefix}_node2.json")
     node3_path = os.path.join(output_dir, f"{prefix}_node3.json")
 
-
     write_node_file(node1_path, node1_entries)
     write_node_file(node2_path, node2_entries)
-    write_node_file(node3_path, node1_entries)
+    write_node_file(node3_path, node3_entries)
 
     a = set(k for k, _ in node1_entries)
     b = set(k for k, _ in node2_entries)
@@ -128,7 +128,7 @@ def main():
         print("Generating similarity datasets...")
         for size in sizes:
             for sim in similarities:
-                prefix = f"n{size}_sim{int(round(sim * 100))}"
+                prefix = f"n{size}_sim{int(round(sim * 100)):02d}"
                 seed = args.seed + size * 1000 + int(round(sim * 100))
                 create_pair(size, sim, seed, prefix, args.output_dir)
 

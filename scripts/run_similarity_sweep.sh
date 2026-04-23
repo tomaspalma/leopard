@@ -5,7 +5,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT_DIR"
 
-SIZES=${SIZES:-"10000"}
+SIZES=${SIZES:-"100"}
 SIMILARITIES=${SIMILARITIES:-"0,0.10,0.25,0.35,0.50,0.70,0.85,0.95,0.99"}
 TRIALS=${TRIALS:-"5"}
 PROTOCOLS=${PROTOCOLS:-"riblt,merkle,rbf_riblt"}
