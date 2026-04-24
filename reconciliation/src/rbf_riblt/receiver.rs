@@ -18,12 +18,12 @@ use crate::rbf_riblt::{
     bloom::BloomFilter,
     deserializer::RbfRibltDeserializer,
     messages::{
-        RbfRibltBloomFilterSliceMessage, RbfRibltHandshakeMessage,
-        RbfRibltMessageTypeValues, RbfRibltSComDecodedAllMessage,
+        RbfRibltBloomFilterSliceMessage, RbfRibltFetchedEntry, RbfRibltHandshakeMessage,
+        RbfRibltMessageTypeValues, RbfRibltRBFStopSignalMessage, RbfRibltSComDecodedAllMessage,
         RbfRibltSComRequestMoreSymbolsMessage, RbfRibltSComSendSymbolMessage,
-        RbfRibltValueFetchRequestMessage, RbfRibltValueFetchResponseMessage, RbfRibltFetchedEntry,
+        RbfRibltValueFetchRequestMessage, RbfRibltValueFetchResponseMessage,
     },
-    BloomReceivingState, SComReconciliationState, SComReceivingState, BLOOM_C_ELEM,
+    BloomReceivingState, SComReceivingState, SComReconciliationState, BLOOM_C_ELEM,
     RBF_RIBLT_PROTOCOL_ID,
 };
 use crate::riblt::messages::RIBLTSymbol;
@@ -58,7 +58,12 @@ impl ReceiveRbfRibltMessageTask {
     }
 
     async fn process_handshake(&self, msg: &RbfRibltHandshakeMessage, neighbor: NodeAddress) {
-        let is_busy = self.protocol.scom_sending_states.read().await.contains_key(&neighbor)
+        let is_busy = self
+            .protocol
+            .scom_sending_states
+            .read()
+            .await
+            .contains_key(&neighbor)
             || self
                 .protocol
                 .scom_receiving_states
@@ -115,7 +120,11 @@ impl ReceiveRbfRibltMessageTask {
                 neighbor.clone(),
                 BloomReceivingState::new(msg.session_id().to_string(), m_bits),
             );
-            self.protocol.bloom_sending_states.write().await.remove(&neighbor);
+            self.protocol
+                .bloom_sending_states
+                .write()
+                .await
+                .remove(&neighbor);
         }
 
         info!(
@@ -126,117 +135,141 @@ impl ReceiveRbfRibltMessageTask {
         );
     }
 
+    async fn init_bloom_receiving_state_if_needed(
+        &self,
+        msg: &RbfRibltBloomFilterSliceMessage,
+        neighbor: &NodeAddress,
+    ) -> bool {
+        let mut receiving = self.protocol.bloom_receiving_states.write().await;
+        let needs_init = receiving
+            .get(neighbor)
+            .map(|s| s.session_id != msg.session_id())
+            .unwrap_or(true);
+
+        if !needs_init {
+            return true;
+        }
+
+        let storage = match self.protocol.state.get_storage("default".to_string()) {
+            Some(s) => s,
+            None => return false,
+        };
+
+        let mut state = BloomReceivingState::new(msg.session_id().to_string(), msg.m());
+        state.s_com = storage
+            .items()
+            .into_iter()
+            .map(|item| item.key().to_string())
+            .collect();
+        receiving.insert(neighbor.clone(), state);
+        true
+    }
+
+    fn partition_s_com(
+        s_com: &[String],
+        s_tn: &[String],
+        filter: &BloomFilter<String>,
+    ) -> (Vec<String>, Vec<String>) {
+        let mut new_s_com = Vec::new();
+        let mut new_s_tn = s_tn.to_vec();
+
+        for key in s_com {
+            if filter.contains(key) {
+                new_s_com.push(key.clone());
+            } else {
+                new_s_tn.push(key.clone());
+            }
+        }
+
+        (new_s_com, new_s_tn)
+    }
+
+    async fn apply_partition_to_state(
+        &self,
+        neighbor: &NodeAddress,
+        new_s_com: Vec<String>,
+        new_s_tn: Vec<String>,
+    ) -> Option<(bool, String)> {
+        let mut receiving = self.protocol.bloom_receiving_states.write().await;
+        let state = receiving.get_mut(neighbor)?;
+        let stabilized = new_s_tn.len() == state.last_true_negatives;
+        state.last_true_negatives = new_s_tn.len();
+        state.s_com = new_s_com;
+        state.s_tn = new_s_tn;
+        Some((stabilized, state.session_id.clone()))
+    }
+
+    async fn send_stop_signal(&self, neighbor: NodeAddress, session_id: String) {
+        let _ = self
+            .protocol
+            .state
+            .send_through_socket(
+                self.protocol
+                    .state
+                    .node_identifier()
+                    .connection_info()
+                    .clone(),
+                Box::new(neighbor),
+                Box::new(RbfRibltRBFStopSignalMessage::new(
+                    Some(RBF_RIBLT_PROTOCOL_ID),
+                    session_id,
+                )),
+            )
+            .await;
+    }
+
     async fn process_bloom_slice(
         &self,
         msg: &RbfRibltBloomFilterSliceMessage,
         neighbor: NodeAddress,
     ) {
-        let storage = match self.protocol.state.get_storage("default".to_string()) {
-            Some(s) => s,
+        if !self
+            .init_bloom_receiving_state_if_needed(msg, &neighbor)
+            .await
+        {
+            return;
+        }
+
+        let filter = BloomFilter::<String>::from_raw_bits(msg.m(), msg.k(), msg.bits());
+
+        let (new_s_com, new_s_tn) = {
+            let receiving = self.protocol.bloom_receiving_states.read().await;
+            let state = match receiving.get(&neighbor) {
+                Some(s) => s,
+                None => return,
+            };
+            Self::partition_s_com(&state.s_com, &state.s_tn, &filter)
+        };
+
+        let (stabilized, session_id) = match self
+            .apply_partition_to_state(&neighbor, new_s_com, new_s_tn)
+            .await
+        {
+            Some(result) => result,
             None => return,
         };
 
-        let mut maybe_start_scom = None;
-
-        {
-            let mut receiving = self.protocol.bloom_receiving_states.write().await;
-            let state = receiving
-                .entry(neighbor.clone())
-                .or_insert_with(|| BloomReceivingState::new(msg.session_id().to_string(), msg.m()));
-
-            if state.session_id != msg.session_id() {
-                *state = BloomReceivingState::new(msg.session_id().to_string(), msg.m());
-                self.protocol.bloom_sending_states.write().await.remove(&neighbor);
-            }
-
-            let filter = BloomFilter::<String>::from_bytes_with_seeds(
-                msg.m(),
-                msg.k(),
-                msg.seeds(),
-                msg.bits().as_slice(),
-            );
-            state.filters.push(filter);
-
-            state.s_com.clear();
-            state.s_tn.clear();
-
-            for item in storage.items() {
-                let key = item.key().to_string();
-                let positive = state.filters.iter().all(|f| f.contains(&key));
-                if positive {
-                    state.s_com.push(key);
-                } else {
-                    state.s_tn.push(key);
-                }
-            }
-
-            let true_negatives = state.s_tn.len();
-            let delta_true_neg = true_negatives.saturating_sub(state.last_true_negatives);
-            state.last_true_negatives = true_negatives;
-
-            let threshold = (state.m_bits / BLOOM_C_ELEM).max(1);
-            if delta_true_neg < threshold {
-                info!(
-                    "RBF bloom stop condition reached from {:?}: session={} slice={} delta_true_negatives={} threshold={}",
-                    neighbor,
-                    msg.session_id(),
-                    msg.slice_index(),
-                    delta_true_neg,
-                    threshold
-                );
-
-                if !state.riblt_started {
-                    state.riblt_started = true;
-                    maybe_start_scom = Some((state.session_id.clone(), state.s_com.clone()));
-                }
-            }
-
-            info!(
-                "RBF bloom partition for {:?}: session={} slice={} s_com={} s_tn={}",
-                neighbor,
-                msg.session_id(),
-                msg.slice_index(),
-                state.s_com.len(),
-                state.s_tn.len()
-            );
-        }
-
-        if let Some((session_id, s_com)) = maybe_start_scom {
-            info!(
-                "Starting S_com rateless reconciliation with {:?} session={} size={}",
-                neighbor,
-                session_id,
-                s_com.len()
-            );
-            RbfRibltProtocol::start_scom_reconciliation_with_neighbor(
-                self.protocol.clone(),
-                neighbor.clone(),
-                session_id,
-                s_com,
-            )
-            .await;
-
-            self.protocol.bloom_sending_states.write().await.remove(&neighbor);
+        if stabilized {
+            self.send_stop_signal(neighbor, session_id).await;
         }
     }
 
-    fn filter_remote_peeled_symbols(
+    fn partition_peeled_symbols(
         peeled_symbols: Vec<PeelableResult<RIBLTSymbol>>,
-    ) -> Vec<RIBLTSymbol> {
-        peeled_symbols
-            .into_iter()
-            .filter_map(|symbol| match symbol {
-                PeelableResult::Remote(s) => Some(s),
-                _ => None,
-            })
-            .collect()
+    ) -> (Vec<RIBLTSymbol>, Vec<RIBLTSymbol>) {
+        let mut remote = Vec::new();
+        let mut local = Vec::new();
+        for symbol in peeled_symbols {
+            match symbol {
+                PeelableResult::Remote(s) => remote.push(s),
+                PeelableResult::Local(s) => local.push(s),
+                _ => {}
+            }
+        }
+        (remote, local)
     }
 
-    async fn init_scom_receiving_state_if_needed(
-        &self,
-        neighbor: &NodeAddress,
-        session_id: &str,
-    ) {
+    async fn init_scom_receiving_state_if_needed(&self, neighbor: &NodeAddress, session_id: &str) {
         let should_reset = self
             .protocol
             .scom_receiving_states
@@ -247,7 +280,11 @@ impl ReceiveRbfRibltMessageTask {
             .unwrap_or(false);
 
         if should_reset {
-            self.protocol.scom_receiving_states.write().await.remove(neighbor);
+            self.protocol
+                .scom_receiving_states
+                .write()
+                .await
+                .remove(neighbor);
         }
 
         if self
@@ -261,7 +298,13 @@ impl ReceiveRbfRibltMessageTask {
         }
 
         let mut symbols = HashSet::new();
-        if let Some(state) = self.protocol.bloom_receiving_states.read().await.get(neighbor) {
+        if let Some(state) = self
+            .protocol
+            .bloom_receiving_states
+            .read()
+            .await
+            .get(neighbor)
+        {
             for key in &state.s_com {
                 symbols.insert(RIBLTSymbol {
                     key: key.clone(),
@@ -289,30 +332,35 @@ impl ReceiveRbfRibltMessageTask {
         self.init_scom_receiving_state_if_needed(&neighbor, message.session_id())
             .await;
 
-        let (local_coded_symbols, remote_coded_symbols) =
-            match self.protocol.scom_receiving_states.write().await.get_mut(&neighbor) {
-                Some(status) => {
-                    for symbol in message.symbols() {
-                        let mut cs = riblt::CodedSymbol::new();
-                        cs.sum = symbol.sum.clone();
-                        cs.hash = symbol.hash;
-                        cs.count = symbol.count;
-                        status.remote_iblt.add_coded_symbol(&cs);
-                    }
-
-                    let coded_symbols_len = status.remote_iblt.coded_symbols.len();
-                    status.local_iblt.extend_coded_symbols(coded_symbols_len);
-
-                    (
-                        status.local_iblt.coded_symbols.clone(),
-                        status.remote_iblt.coded_symbols.clone(),
-                    )
+        let (local_coded_symbols, remote_coded_symbols) = match self
+            .protocol
+            .scom_receiving_states
+            .write()
+            .await
+            .get_mut(&neighbor)
+        {
+            Some(status) => {
+                for symbol in message.symbols() {
+                    let mut cs = riblt::CodedSymbol::new();
+                    cs.sum = symbol.sum.clone();
+                    cs.hash = symbol.hash;
+                    cs.count = symbol.count;
+                    status.remote_iblt.add_coded_symbol(&cs);
                 }
-                None => return,
-            };
+
+                let coded_symbols_len = status.remote_iblt.coded_symbols.len();
+                status.local_iblt.extend_coded_symbols(coded_symbols_len);
+
+                (
+                    status.local_iblt.coded_symbols.clone(),
+                    status.remote_iblt.coded_symbols.clone(),
+                )
+            }
+            None => return,
+        };
 
         let neighbor_clone = neighbor.clone();
-        let (is_peeling_successful, new_hashes) =
+        let (is_peeling_successful, remote_symbols, local_symbols) =
             tokio::task::spawn_blocking(move || {
                 let local_iblt = UnmanagedRatelessIBLT {
                     coded_symbols: local_coded_symbols,
@@ -324,7 +372,7 @@ impl ReceiveRbfRibltMessageTask {
                 let decode_start = std::time::Instant::now();
                 let mut collapsed = local_iblt.collapse(&remote_iblt);
                 let peel_symbols = collapsed.peel_all_symbols();
-                let result = Self::filter_remote_peeled_symbols(peel_symbols);
+                let (remote, local) = Self::partition_peeled_symbols(peel_symbols);
 
                 histogram!(
                     "rbf_riblt_decode_duration_seconds",
@@ -333,14 +381,33 @@ impl ReceiveRbfRibltMessageTask {
                 .record(decode_start.elapsed().as_secs_f64());
 
                 let successful = collapsed.is_empty();
-                (successful, result)
+                (successful, remote, local)
             })
             .await
             .unwrap();
 
         if is_peeling_successful {
-            let missing_keys: Vec<String> = new_hashes.into_iter().map(|s| s.key).collect();
-            self.protocol.scom_receiving_states.write().await.remove(&neighbor);
+            // Keys the neighbor is missing: IBLT-local elements (we have, they don't) plus our
+            // s_tn for this neighbor (keys definitely absent from their bloom filter).
+            let mut keys_for_sender: Vec<String> =
+                local_symbols.into_iter().map(|s| s.key).collect();
+            let s_tn: Vec<String> = self
+                .protocol
+                .bloom_receiving_states
+                .read()
+                .await
+                .get(&neighbor)
+                .map(|s| s.s_tn.clone())
+                .unwrap_or_default();
+            keys_for_sender.extend(s_tn);
+
+            let missing_keys: Vec<String> = remote_symbols.into_iter().map(|s| s.key).collect();
+
+            self.protocol
+                .scom_receiving_states
+                .write()
+                .await
+                .remove(&neighbor);
 
             self.protocol
                 .pending_value_fetch_sessions
@@ -352,36 +419,49 @@ impl ReceiveRbfRibltMessageTask {
                 .protocol
                 .state
                 .send_through_socket(
-                    self.protocol.state.node_identifier().connection_info().clone(),
+                    self.protocol
+                        .state
+                        .node_identifier()
+                        .connection_info()
+                        .clone(),
                     Box::new(neighbor.clone()),
                     Box::new(RbfRibltSComDecodedAllMessage::new(
                         Some(RBF_RIBLT_PROTOCOL_ID),
                         message.session_id().clone(),
+                        keys_for_sender,
                     )),
                 )
                 .await;
 
-            if !missing_keys.is_empty() {
-                let _ = self
-                    .protocol
-                    .state
-                    .send_through_socket(
-                        self.protocol.state.node_identifier().connection_info().clone(),
-                        Box::new(neighbor),
-                        Box::new(RbfRibltValueFetchRequestMessage::new(
-                            Some(RBF_RIBLT_PROTOCOL_ID),
-                            message.session_id().clone(),
-                            missing_keys,
-                        )),
-                    )
-                    .await;
-            }
+            // Always send a fetch request so the responder piggybacks their s_tn values,
+            // even when missing_keys is empty.
+            let _ = self
+                .protocol
+                .state
+                .send_through_socket(
+                    self.protocol
+                        .state
+                        .node_identifier()
+                        .connection_info()
+                        .clone(),
+                    Box::new(neighbor),
+                    Box::new(RbfRibltValueFetchRequestMessage::new(
+                        Some(RBF_RIBLT_PROTOCOL_ID),
+                        message.session_id().clone(),
+                        missing_keys,
+                    )),
+                )
+                .await;
         } else {
             let _ = self
                 .protocol
                 .state
                 .send_through_socket(
-                    self.protocol.state.node_identifier().connection_info().clone(),
+                    self.protocol
+                        .state
+                        .node_identifier()
+                        .connection_info()
+                        .clone(),
                     Box::new(neighbor),
                     Box::new(RbfRibltSComRequestMoreSymbolsMessage::new(
                         Some(RBF_RIBLT_PROTOCOL_ID),
@@ -407,37 +487,38 @@ impl ReceiveRbfRibltMessageTask {
             .unwrap_or(false);
 
         if should_remove {
-            self.protocol.scom_sending_states.write().await.remove(&neighbor);
+            self.protocol
+                .scom_sending_states
+                .write()
+                .await
+                .remove(&neighbor);
             self.protocol
                 .pending_value_fetch_sessions
                 .write()
                 .await
                 .insert(neighbor.clone(), message.session_id().clone());
 
-            let request_keys = self
+            // The IBLT receiver computed which keys we (the sender) are missing and included
+            // them in the message. Always send the fetch request so the responder can also
+            // piggyback their s_tn values back to us.
+            let request_keys = message.keys_for_sender().clone();
+            let _ = self
                 .protocol
-                .bloom_receiving_states
-                .read()
-                .await
-                .get(&neighbor)
-                .map(|s| s.s_com.clone())
-                .unwrap_or_default();
-
-            if !request_keys.is_empty() {
-                let _ = self
-                    .protocol
-                    .state
-                    .send_through_socket(
-                        self.protocol.state.node_identifier().connection_info().clone(),
-                        Box::new(neighbor),
-                        Box::new(RbfRibltValueFetchRequestMessage::new(
-                            Some(RBF_RIBLT_PROTOCOL_ID),
-                            message.session_id().clone(),
-                            request_keys,
-                        )),
-                    )
-                    .await;
-            }
+                .state
+                .send_through_socket(
+                    self.protocol
+                        .state
+                        .node_identifier()
+                        .connection_info()
+                        .clone(),
+                    Box::new(neighbor),
+                    Box::new(RbfRibltValueFetchRequestMessage::new(
+                        Some(RBF_RIBLT_PROTOCOL_ID),
+                        message.session_id().clone(),
+                        request_keys,
+                    )),
+                )
+                .await;
         }
     }
 
@@ -446,7 +527,13 @@ impl ReceiveRbfRibltMessageTask {
         message: RbfRibltSComRequestMoreSymbolsMessage,
         neighbor: NodeAddress,
     ) {
-        if let Some(status) = self.protocol.scom_sending_states.write().await.get_mut(&neighbor) {
+        if let Some(status) = self
+            .protocol
+            .scom_sending_states
+            .write()
+            .await
+            .get_mut(&neighbor)
+        {
             if status.session_id == *message.session_id() {
                 status.state = SComReconciliationState::SendingSymbols;
             }
@@ -464,9 +551,23 @@ impl ReceiveRbfRibltMessageTask {
         };
 
         let wanted: HashSet<&str> = message.keys().iter().map(String::as_str).collect();
+
+        // Piggyback our s_tn keys — these are keys we have that the neighbor definitely lacks
+        // (they didn't pass the neighbor's bloom filter). The IBLT only reconciles s_com, so
+        // these would never be discovered through IBLT decoding alone.
+        let s_tn_keys: HashSet<String> = self
+            .protocol
+            .bloom_receiving_states
+            .read()
+            .await
+            .get(&neighbor)
+            .map(|s| s.s_tn.iter().cloned().collect())
+            .unwrap_or_default();
+
         let mut entries = Vec::new();
         for item in storage.items() {
-            if wanted.contains(item.key()) {
+            let key = item.key();
+            if wanted.contains(key) || s_tn_keys.contains(key) {
                 entries.push(RbfRibltFetchedEntry::new(
                     item.key().to_string(),
                     item.value().to_string(),
@@ -478,7 +579,11 @@ impl ReceiveRbfRibltMessageTask {
             .protocol
             .state
             .send_through_socket(
-                self.protocol.state.node_identifier().connection_info().clone(),
+                self.protocol
+                    .state
+                    .node_identifier()
+                    .connection_info()
+                    .clone(),
                 Box::new(neighbor),
                 Box::new(RbfRibltValueFetchResponseMessage::new(
                     Some(RBF_RIBLT_PROTOCOL_ID),
@@ -523,13 +628,31 @@ impl ReceiveRbfRibltMessageTask {
             .await
             .remove(&neighbor);
 
-        self.protocol.scom_sending_states.write().await.remove(&neighbor);
-        self.protocol.scom_receiving_states.write().await.remove(&neighbor);
-        self.protocol.bloom_sending_states.write().await.remove(&neighbor);
+        self.protocol
+            .scom_sending_states
+            .write()
+            .await
+            .remove(&neighbor);
+        self.protocol
+            .scom_receiving_states
+            .write()
+            .await
+            .remove(&neighbor);
+        self.protocol
+            .bloom_sending_states
+            .write()
+            .await
+            .remove(&neighbor);
 
         let differences_found = !message.entries().is_empty();
 
-        if let Some(state) = self.protocol.bloom_receiving_states.write().await.get_mut(&neighbor) {
+        if let Some(state) = self
+            .protocol
+            .bloom_receiving_states
+            .write()
+            .await
+            .get_mut(&neighbor)
+        {
             state.riblt_started = false;
             state.filters.clear();
             state.s_com.clear();
@@ -578,7 +701,10 @@ impl ReceiveRbfRibltMessageTask {
         )
         .set(if differences_found { 1.0 } else { 0.0 });
         runtime::metrics::csv::finish_iteration(
-            format!("{:?}", self.protocol.state.node_identifier().connection_info()),
+            format!(
+                "{:?}",
+                self.protocol.state.node_identifier().connection_info()
+            ),
             format!("{:?}", neighbor),
             "rbf_riblt",
         );
@@ -627,9 +753,22 @@ impl RouteTask for ReceiveRbfRibltMessageTask {
                         {
                             this.process_bloom_slice(msg, neighbor).await;
                         } else {
-                            error!(
-                                "Failed to downcast message to RbfRibltBloomFilterSliceMessage"
-                            );
+                            error!("Failed to downcast message to RbfRibltBloomFilterSliceMessage");
+                        }
+                    }
+                    RbfRibltMessageTypeValues::RBFStopSignal => {
+                        if let Some(msg) = deserialized_message
+                            .as_any()
+                            .downcast_ref::<RbfRibltRBFStopSignalMessage>()
+                        {
+                            info!("Received RBF-RIBLT stop signal from {:?}", neighbor);
+                            this.protocol
+                                .bloom_sending_states
+                                .write()
+                                .await
+                                .remove(&neighbor);
+                        } else {
+                            error!("Failed to downcast message to RbfRibltRBFStopSignalMessage");
                         }
                     }
                     RbfRibltMessageTypeValues::SComSendSymbol => {
@@ -671,7 +810,9 @@ impl RouteTask for ReceiveRbfRibltMessageTask {
                         {
                             this.handle_value_fetch_request(msg.clone(), neighbor).await;
                         } else {
-                            error!("Failed to downcast message to RbfRibltValueFetchRequestMessage");
+                            error!(
+                                "Failed to downcast message to RbfRibltValueFetchRequestMessage"
+                            );
                         }
                     }
                     RbfRibltMessageTypeValues::ValueFetchResponse => {
@@ -679,7 +820,8 @@ impl RouteTask for ReceiveRbfRibltMessageTask {
                             .as_any()
                             .downcast_ref::<RbfRibltValueFetchResponseMessage>()
                         {
-                            this.handle_value_fetch_response(msg.clone(), neighbor).await;
+                            this.handle_value_fetch_response(msg.clone(), neighbor)
+                                .await;
                         } else {
                             error!(
                                 "Failed to downcast message to RbfRibltValueFetchResponseMessage"

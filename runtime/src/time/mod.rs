@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use tokio::sync::Mutex;
-use tokio::time::{Duration, Interval, interval};
+use tokio::time::{Duration, Instant, Interval, interval_at};
 
 #[async_trait]
 pub trait PeriodTimeUnit {
@@ -14,7 +14,7 @@ pub struct TokioPeriodTimeUnit {
 impl TokioPeriodTimeUnit {
     pub fn new(duration: Duration) -> Self {
         Self {
-            interval: Mutex::new(interval(duration)),
+            interval: Mutex::new(interval_at(Instant::now() + Duration::from_secs(1), duration)),
         }
     }
 }

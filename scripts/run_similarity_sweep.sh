@@ -8,7 +8,7 @@ cd "$ROOT_DIR"
 SIZES=${SIZES:-"100"}
 SIMILARITIES=${SIMILARITIES:-"0,0.10,0.25,0.35,0.50,0.70,0.85,0.95,0.99"}
 TRIALS=${TRIALS:-"5"}
-PROTOCOLS=${PROTOCOLS:-"riblt,merkle"}
+PROTOCOLS=${PROTOCOLS:-"riblt,merkle,rbf_riblt"}
 SEED=${SEED:-"12345"}
 OUTPUT_ROOT=${OUTPUT_ROOT:-"sweep"}
 
@@ -43,3 +43,4 @@ echo "Sweep finished. Analyzing with: python3 scripts/analyze_similarity_bytes.p
 python3 scripts/analyze_similarity_bytes.py metrics_output
 python3 scripts/analyze_similarity_resources.py metrics_output
 python3 scripts/analyze_similarity_duration.py metrics_output
+python3 scripts/analyze_roundtrip.py metrics_output

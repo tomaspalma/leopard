@@ -1,5 +1,5 @@
 use std::{
-    collections::{hash_map::DefaultHasher, HashSet},
+    collections::{hash_map::DefaultHasher, HashMap, HashSet},
     hash::{Hash, Hasher},
     sync::Arc,
     time::Instant,
@@ -20,20 +20,22 @@ use membership::{Membership, MembershipNeighbor, MembershipNeighbors};
 use message::Message;
 use protocol::{deserializer::ProtocolDeserializer, Protocol};
 use runtime::time::{PeriodTimeUnit, TokioPeriodTimeUnit};
-use state::node::NodeState;
-use tokio::sync::Mutex;
-use tokio::time::{sleep, Duration};
+use state::node::{DefaultNodeState, NodeState};
+use tokio::sync::{Mutex, RwLock};
 use tracing::info;
+
+use runtime::spawn;
 
 use crate::{rbf_riblt::receiver::ReceiveRbfRibltMessageTask, ReconciliationProtocol};
 
 use super::{
+    bloom::BloomFilter,
     messages::{
         RbfRibltBloomFilterSliceMessage, RbfRibltCodedSymbol, RbfRibltHandshakeMessage,
         RbfRibltMessageType, RbfRibltMessageTypeValues, RbfRibltSComSendSymbolMessage,
     },
-    BloomSendingState, RatelessBF, RbfRibltProtocol, SComReconciliationState, SComSendingState,
-    BLOOM_HASHES, RBF_RIBLT_PROTOCOL_ID, RIBLT_BATCH_SIZE,
+    BloomSendingState, RbfRibltProtocol, SComReconciliationState, SComSendingState, BLOOM_HASHES,
+    RBF_RIBLT_PROTOCOL_ID, RIBLT_BATCH_SIZE,
 };
 use crate::riblt::messages::RIBLTSymbol;
 use riblt::RatelessIBLT;
@@ -53,245 +55,120 @@ impl RbfRibltProtocol {
         })
     }
 
-    fn compute_local_fingerprint(
-        state: &Arc<state::node::DefaultNodeState>,
-    ) -> Option<u64> {
-        let storage = state.get_storage("default".to_string())?;
-        let mut pairs: Vec<(String, String)> = storage
-            .items()
-            .into_iter()
-            .map(|item| (item.key().to_string(), item.value().to_string()))
-            .collect();
-        pairs.sort_unstable_by(|a, b| a.0.cmp(&b.0).then(a.1.cmp(&b.1)));
-
-        let mut hasher = DefaultHasher::new();
-        pairs.len().hash(&mut hasher);
-        for (k, v) in pairs {
-            k.hash(&mut hasher);
-            v.hash(&mut hasher);
-        }
-
-        Some(hasher.finish())
-    }
-
-    fn build_scom_iblt(elements: &[String]) -> RatelessIBLT<RIBLTSymbol, HashSet<RIBLTSymbol>> {
-        let mut symbols = HashSet::new();
-        for key in elements {
-            symbols.insert(RIBLTSymbol {
-                key: key.clone(),
-                value: String::new(),
-            });
-        }
-        RatelessIBLT::new(symbols)
-    }
-
-    pub async fn start_scom_reconciliation_with_neighbor(
-        protocol: Arc<Self>,
+    async fn stream_slices_to_neighbor(
+        state: Arc<DefaultNodeState>,
+        bloom_sending_states: Arc<RwLock<HashMap<NodeAddress, BloomSendingState>>>,
         neighbor: NodeAddress,
-        session_id: String,
-        s_com: Vec<String>,
     ) {
-        if protocol.scom_sending_states.read().await.contains_key(&neighbor) {
-            return;
-        }
-
-        let local_iblt = Self::build_scom_iblt(&s_com);
-        protocol.scom_sending_states.write().await.insert(
-            neighbor.clone(),
-            SComSendingState {
-                state: SComReconciliationState::SendingSymbols,
-                local_iblt,
-                session_id,
-                start_time: Instant::now(),
-            },
-        );
-
-        let protocol_clone = protocol.clone();
-        runtime::spawn!({
-            Self::scom_sending_symbols_sequence(protocol_clone, neighbor).await;
-        });
-    }
-
-    async fn scom_sending_symbols_sequence(protocol: Arc<Self>, neighbor: NodeAddress) {
-        let mut current_index = 0;
-        let mut wait_time_ms = 0;
-
-        while protocol.scom_sending_states.read().await.contains_key(&neighbor) {
-            let state = protocol
-                .scom_sending_states
-                .read()
-                .await
-                .get(&neighbor)
-                .map(|s| s.state.clone());
-
-            if state == Some(SComReconciliationState::AwaitingConfirmation) {
-                sleep(Duration::from_millis(100)).await;
-                wait_time_ms += 100;
-                if wait_time_ms >= 5000 {
-                    if let Some(status) = protocol.scom_sending_states.write().await.get_mut(&neighbor)
-                    {
-                        status.state = SComReconciliationState::SendingSymbols;
-                    }
-                    wait_time_ms = 0;
+        loop {
+            let (session_id, slice_index, m_bits) = {
+                let sending = bloom_sending_states.read().await;
+                match sending.get(&neighbor) {
+                    Some(s) => (s.session_id.clone(), s.next_slice_index, s.m_bits),
+                    None => break,
                 }
-                continue;
+            };
+
+            let storage = match state.get_storage("default".to_string()) {
+                Some(s) => s,
+                None => break,
+            };
+
+            let keys: Vec<String> = storage
+                .items()
+                .into_iter()
+                .map(|item| item.key().to_string())
+                .collect();
+
+            let mut filter = BloomFilter::<String>::from_raw_parts(m_bits, BLOOM_HASHES);
+            for key in &keys {
+                filter.insert(key);
             }
 
-            wait_time_ms = 0;
-            let mut symbols = Vec::new();
-            let session_id;
+            let slice = filter.bitslice();
+            let bits: Vec<u8> = (0..slice.len())
+                .step_by(8)
+                .map(|start| {
+                    let end = (start + 8).min(slice.len());
+                    (start..end).fold(0u8, |byte, i| {
+                        if slice[i] {
+                            byte | (1 << (i - start))
+                        } else {
+                            byte
+                        }
+                    })
+                })
+                .collect();
 
-            {
-                let mut states = protocol.scom_sending_states.write().await;
-                let Some(status) = states.get_mut(&neighbor) else {
-                    break;
-                };
-                session_id = status.session_id.clone();
-
-                for _ in 0..RIBLT_BATCH_SIZE {
-                    let coded_symbol = status.local_iblt.get_coded_symbol(current_index);
-                    symbols.push(RbfRibltCodedSymbol {
-                        sum: coded_symbol.sum,
-                        hash: coded_symbol.hash,
-                        count: coded_symbol.count,
-                    });
-                    current_index += 1;
-                }
-
-                status.state = SComReconciliationState::AwaitingConfirmation;
-            }
-
-            let msg = RbfRibltSComSendSymbolMessage::new(
-                Some(RBF_RIBLT_PROTOCOL_ID),
-                symbols,
-                session_id,
-            );
-
-            let _ = protocol
-                .state
+            let _ = state
                 .send_through_socket(
-                    protocol.state.node_identifier().connection_info().clone(),
+                    state.node_identifier().connection_info().clone(),
                     Box::new(neighbor.clone()),
-                    Box::new(msg),
+                    Box::new(RbfRibltBloomFilterSliceMessage::new(
+                        Some(RBF_RIBLT_PROTOCOL_ID),
+                        session_id,
+                        slice_index,
+                        m_bits,
+                        BLOOM_HASHES,
+                        [0, 0],
+                        bits,
+                    )),
                 )
                 .await;
+
+            if let Some(s) = bloom_sending_states.write().await.get_mut(&neighbor) {
+                s.next_slice_index += 1;
+            }
+
+            tokio::task::yield_now().await;
         }
     }
 
-    async fn periodic_bloom_exchange(protocol: Arc<Self>) -> Result<(), String> {
-        let storage = match protocol.state.get_storage("default".to_string()) {
-            Some(storage) => storage,
-            None => return Ok(()),
-        };
+    async fn start_sending_slices(&self) -> Result<(), String> {
+        info!("Starting the process of sending RBF-RIBLT slices to neighbors");
 
-        let local_fingerprint = match Self::compute_local_fingerprint(&protocol.state) {
-            Some(f) => f,
-            None => return Ok(()),
-        };
-
-        let local_keys: Vec<String> = storage
-            .items()
-            .into_iter()
-            .map(|item| item.key().to_string())
-            .collect();
-
-        let m_bits = ((local_keys.len().max(1)) as f64 / std::f64::consts::LN_2).ceil() as usize;
-        let own = protocol.state.node_identifier().connection_info().clone();
-        let targets = protocol
+        let connection_targets = self
             .state
             .membership()
             .read()
             .await
             .valid_connection_targets();
 
-        for neighbor in targets {
-            if protocol.scom_sending_states.read().await.contains_key(&neighbor)
-                || protocol.scom_receiving_states.read().await.contains_key(&neighbor)
-                || protocol
-                    .pending_value_fetch_sessions
-                    .read()
-                    .await
-                    .contains_key(&neighbor)
-            {
-                continue;
-            }
-
-            if protocol
-                .bloom_receiving_states
+        for neighbor in connection_targets {
+            if self
+                .bloom_sending_states
                 .read()
                 .await
-                .get(&neighbor)
-                .map(|s| s.riblt_started)
-                .unwrap_or(false)
+                .contains_key(&neighbor)
             {
                 continue;
             }
 
-            if protocol
-                .last_reconciled_fingerprint
-                .read()
-                .await
-                .get(&neighbor)
-                .copied()
-                == Some(local_fingerprint)
-            {
-                continue;
-            }
-
-            let (session_id, slice_index, state_m_bits, should_send_handshake) = {
-                let mut states = protocol.bloom_sending_states.write().await;
-                let entry = states.entry(neighbor.clone()).or_insert_with(|| {
-                    BloomSendingState::new(uuid::Uuid::new_v4().to_string(), m_bits)
-                });
-
-                let slice_idx = entry.next_slice_index;
-                entry.next_slice_index += 1;
-
-                (
-                    entry.session_id.clone(),
-                    slice_idx,
-                    entry.m_bits,
-                    slice_idx == 0,
-                )
+            let storage = match self.state.get_storage("default".to_string()) {
+                Some(s) => s,
+                None => continue,
             };
 
-            if should_send_handshake {
-                let handshake = RbfRibltHandshakeMessage::new(
-                    RbfRibltMessageType::new(RbfRibltMessageTypeValues::Handshake),
-                    Some(RBF_RIBLT_PROTOCOL_ID),
-                    session_id.clone(),
-                );
+            let keys: Vec<String> = storage
+                .items()
+                .into_iter()
+                .map(|item| item.key().to_string())
+                .collect();
 
-                let _ = protocol
-                    .state
-                    .send_through_socket(
-                        own.clone(),
-                        Box::new(neighbor.clone()),
-                        Box::new(handshake),
-                    )
+            let m_bits = ((keys.len().max(1)) as f64 / std::f64::consts::LN_2).ceil() as usize;
+            let session_id = uuid::Uuid::new_v4().to_string();
+            self.bloom_sending_states
+                .write()
+                .await
+                .insert(neighbor.clone(), BloomSendingState::new(session_id, m_bits));
+
+            let state = self.state.clone();
+            let bloom_sending_states = self.bloom_sending_states.clone();
+
+            spawn!({
+                RbfRibltProtocol::stream_slices_to_neighbor(state, bloom_sending_states, neighbor)
                     .await;
-            }
-
-            let seeds = [rand::random::<u64>(), rand::random::<u64>()];
-            let mut rateless_bf = RatelessBF::new(local_keys.clone(), state_m_bits);
-            rateless_bf.extend_with_seeds(seeds);
-
-            if let Some(filter) = rateless_bf.latest_filter() {
-                let msg = RbfRibltBloomFilterSliceMessage::new(
-                    Some(RBF_RIBLT_PROTOCOL_ID),
-                    session_id,
-                    slice_index,
-                    filter.bit_len(),
-                    BLOOM_HASHES,
-                    filter.seeds(),
-                    filter.to_bytes(),
-                );
-
-                let _ = protocol
-                    .state
-                    .send_through_socket(own.clone(), Box::new(neighbor), Box::new(msg))
-                    .await;
-            }
+            });
         }
 
         Ok(())
@@ -348,7 +225,7 @@ where
                     Arc::new(move || {
                         let protocol = protocol_handle.clone();
                         Box::pin(async move {
-                            RbfRibltProtocol::periodic_bloom_exchange(protocol).await?;
+                            protocol.start_sending_slices().await?;
                             Ok(())
                         })
                     }),

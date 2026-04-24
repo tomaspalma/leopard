@@ -5,6 +5,7 @@ use rkyv::{rancor::Error, Archive, Deserialize, Serialize};
 pub enum RbfRibltMessageTypeValues {
     Handshake,
     BloomFilterSlice,
+    RBFStopSignal,
     SComSendSymbol,
     SComDecodedAll,
     SComRequestMoreSymbols,
@@ -46,6 +47,27 @@ impl RbfRibltHandshakeMessage {
     pub fn new(_type: RbfRibltMessageType, protocol_id: Option<u64>, session_id: String) -> Self {
         Self {
             _type,
+            protocol_id,
+            session_id,
+        }
+    }
+
+    pub fn session_id(&self) -> &str {
+        &self.session_id
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Archive)]
+pub struct RbfRibltRBFStopSignalMessage {
+    _type: RbfRibltMessageType,
+    protocol_id: Option<u64>,
+    session_id: String,
+}
+
+impl RbfRibltRBFStopSignalMessage {
+    pub fn new(protocol_id: Option<u64>, session_id: String) -> Self {
+        Self {
+            _type: RbfRibltMessageType::new(RbfRibltMessageTypeValues::RBFStopSignal),
             protocol_id,
             session_id,
         }
@@ -158,19 +180,27 @@ pub struct RbfRibltSComDecodedAllMessage {
     _type: RbfRibltMessageType,
     protocol_id: Option<u64>,
     session_id: String,
+    /// Keys the IBLT-sender node should fetch from the IBLT-receiver.
+    /// Computed by the receiver as: (IBLT-local peeled keys) + (receiver's s_tn for this neighbor).
+    keys_for_sender: Vec<String>,
 }
 
 impl RbfRibltSComDecodedAllMessage {
-    pub fn new(protocol_id: Option<u64>, session_id: String) -> Self {
+    pub fn new(protocol_id: Option<u64>, session_id: String, keys_for_sender: Vec<String>) -> Self {
         Self {
             _type: RbfRibltMessageType::new(RbfRibltMessageTypeValues::SComDecodedAll),
             protocol_id,
             session_id,
+            keys_for_sender,
         }
     }
 
     pub fn session_id(&self) -> &String {
         &self.session_id
+    }
+
+    pub fn keys_for_sender(&self) -> &Vec<String> {
+        &self.keys_for_sender
     }
 }
 
@@ -277,6 +307,7 @@ impl RbfRibltValueFetchResponseMessage {
 pub enum RbfRibltMessageWrapper {
     Handshake(RbfRibltHandshakeMessage),
     BloomFilterSlice(RbfRibltBloomFilterSliceMessage),
+    RBFStopSignal(RbfRibltRBFStopSignalMessage),
     SComSendSymbol(RbfRibltSComSendSymbolMessage),
     SComDecodedAll(RbfRibltSComDecodedAllMessage),
     SComRequestMoreSymbols(RbfRibltSComRequestMoreSymbolsMessage),
@@ -286,6 +317,11 @@ pub enum RbfRibltMessageWrapper {
 
 impl_protocol_message!(RbfRibltHandshakeMessage, this, {
     let wrapper = RbfRibltMessageWrapper::Handshake(this.clone());
+    rkyv::to_bytes::<Error>(&wrapper).map_err(|_| ())?
+});
+
+impl_protocol_message!(RbfRibltRBFStopSignalMessage, this, {
+    let wrapper = RbfRibltMessageWrapper::RBFStopSignal(this.clone());
     rkyv::to_bytes::<Error>(&wrapper).map_err(|_| ())?
 });
 

@@ -380,11 +380,6 @@ impl NodeState for DefaultNodeState {
                 };
 
                 loop {
-                    info!(
-                        "Waiting for connection on port {}...",
-                        local_identifier.port()
-                    );
-
                     match listener.accept().await {
                         Ok((mut stream, addr)) => {
                             info!("Accepted connection from {}", addr);
