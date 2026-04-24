@@ -201,10 +201,15 @@ def plot_summary(summary, output_dir):
     plt.figure(figsize=(10, 6))
     for protocol, group in summary.groupby("protocol"):
         group = group.sort_values("similarity")
+        mean = group["mean_round_duration_seconds"]
+        yerr = [
+            mean - group["min_round_duration_seconds"],
+            group["max_round_duration_seconds"] - mean,
+        ]
         plt.errorbar(
             group["similarity"],
-            group["mean_round_duration_seconds"],
-            yerr=group["std_round_duration_seconds"],
+            mean,
+            yerr=yerr,
             marker="o",
             capsize=3,
             label=protocol,

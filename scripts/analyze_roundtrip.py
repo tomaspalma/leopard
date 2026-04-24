@@ -3,6 +3,7 @@ import os
 from pathlib import Path
 
 import matplotlib.pyplot as plt
+import matplotlib.ticker as mticker
 import pandas as pd
 
 SUPPORTED_PROTOCOLS = ["riblt", "merkle", "rbf_riblt"]
@@ -174,10 +175,12 @@ def plot_round_trip_summary(summary, output_dir):
     plt.figure(figsize=(10, 6))
     for protocol, group in summary.groupby("protocol"):
         group = group.sort_values("similarity")
+        mean = group["mean_round_trips"]
+        yerr = [mean - group["min_round_trips"], group["max_round_trips"] - mean]
         plt.errorbar(
             group["similarity"],
-            group["mean_round_trips"],
-            yerr=group["std_round_trips"],
+            mean,
+            yerr=yerr,
             marker="o",
             capsize=3,
             label=protocol,
@@ -186,6 +189,10 @@ def plot_round_trip_summary(summary, output_dir):
     plt.xlabel("Similarity (Jaccard)")
     plt.ylabel("Mean Reconciliation Round Trips")
     plt.title("Reconciliation Round Trips vs Similarity")
+    plt.yscale("log")
+    ax = plt.gca()
+    ax.yaxis.set_major_locator(mticker.LogLocator(base=10, subs=(1.0, 2.0, 5.0)))
+    ax.yaxis.set_major_formatter(mticker.FuncFormatter(lambda value, _pos: f"{value:g}"))
     plt.grid(True)
     plt.legend()
     plt.tight_layout()

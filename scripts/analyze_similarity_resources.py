@@ -211,13 +211,18 @@ def plot_metric(summary, value_col, std_col, ylabel, title, output_path):
     if summary.empty:
         return
 
+    min_col = value_col.replace("mean_", "min_")
+    max_col = value_col.replace("mean_", "max_")
+
     plt.figure(figsize=(10, 6))
     for protocol, group in summary.groupby("protocol"):
         group = group.sort_values("similarity")
+        mean = group[value_col]
+        yerr = [mean - group[min_col], group[max_col] - mean]
         plt.errorbar(
             group["similarity"],
-            group[value_col],
-            yerr=group[std_col],
+            mean,
+            yerr=yerr,
             marker="o",
             capsize=3,
             label=protocol,

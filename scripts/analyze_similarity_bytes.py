@@ -171,10 +171,15 @@ def plot_summary(summary, output_dir):
     plt.figure(figsize=(10, 6))
     for protocol, group in summary.groupby("protocol"):
         group = group.sort_values("similarity")
+        mean = group["mean_transmitted_bytes"] / bytes_per_megabyte
+        yerr = [
+            mean - group["min_transmitted_bytes"] / bytes_per_megabyte,
+            group["max_transmitted_bytes"] / bytes_per_megabyte - mean,
+        ]
         plt.errorbar(
             group["similarity"],
-            group["mean_transmitted_bytes"] / bytes_per_megabyte,
-            yerr=group["std_transmitted_bytes"] / bytes_per_megabyte,
+            mean,
+            yerr=yerr,
             marker="o",
             capsize=3,
             label=protocol,
@@ -213,7 +218,13 @@ def main():
     )
     args = parser.parse_args()
 
-    sent_df = load_metric_rows(args.metrics_root, "protocol_bytes_sent")
+    frames = []
+    for proto in SUPPORTED_PROTOCOLS:
+        df = load_metric_rows(args.metrics_root, f"{proto}_bytes_sent")
+        if not df.empty:
+            df["protocol"] = proto
+            frames.append(df)
+    sent_df = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
     merged = aggregate_transmitted_bytes(sent_df)
 
     os.makedirs(args.output_dir, exist_ok=True)
