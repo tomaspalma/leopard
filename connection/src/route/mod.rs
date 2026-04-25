@@ -1,8 +1,7 @@
 pub mod default;
 
 use async_trait::async_trait;
-use dashmap::DashMap;
-use message::{Message, MessageType};
+use message::MessageType;
 use std::sync::Arc;
 
 use crate::node::port::NodeAddress;

@@ -28,9 +28,7 @@ use state::node::{DefaultNodeState, NodeState};
 
 use std::marker::PhantomData;
 
-pub struct HintedHandoffReplicationProtocolConfig {
-    port: NodeAddress,
-}
+pub struct HintedHandoffReplicationProtocolConfig {}
 
 pub struct HintedHandoffReplicationProtocol<S, T> {
     id: u64,
@@ -58,7 +56,7 @@ impl NodeSocketTaskMetadata for HintedHandoffReplicationProtocolTaskMetadata {}
 
 #[async_trait]
 impl RouteTask for HintedHandoffReplicationProtocolTask {
-    fn run(self: Arc<Self>, message: Vec<u8>, neighbor: NodeAddress) {
+    fn run(self: Arc<Self>, _message: Vec<u8>, _neighbor: NodeAddress) {
         info!("Running hinted handoff replication protocol task");
     }
 }
@@ -72,7 +70,7 @@ impl HintedHandoffDeserializer {
 }
 
 impl ProtocolDeserializer for HintedHandoffDeserializer {
-    fn deserialize(&self, data: Vec<u8>) -> Arc<dyn Message + Send + Sync> {
+    fn deserialize(&self, _data: Vec<u8>) -> Arc<dyn Message + Send + Sync> {
         Arc::new(TestMessage::new(Arc::new(TestMessageType::new()), None))
     }
 }

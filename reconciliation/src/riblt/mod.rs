@@ -19,7 +19,7 @@ use state::{
 };
 
 use connection::node::port::NodeAddress;
-use membership::{Membership, MembershipNeighbor, MembershipNeighbors};
+use membership::Membership;
 
 use crate::riblt::messages::{
     RIBLTCodedSymbol, RIBLTMessageType, RIBLTMessageTypeValues, RIBLTSendSymbolMessage, RIBLTSymbol,

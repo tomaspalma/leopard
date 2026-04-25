@@ -877,7 +877,7 @@ impl RouteTask for ReceiveRbfRibltMessageTask {
                         }
                     }
                     RbfRibltMessageTypeValues::RBFStopSignal => {
-                        if let Some(msg) = deserialized_message
+                        if let Some(_msg) = deserialized_message
                             .as_any()
                             .downcast_ref::<RbfRibltRBFStopSignalMessage>()
                         {

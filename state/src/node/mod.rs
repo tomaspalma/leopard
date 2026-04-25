@@ -1,4 +1,4 @@
-use crate::storage::state::{DataState, DefaultDataState};
+use crate::storage::state::DataState;
 
 use dashmap::DashMap;
 
@@ -9,7 +9,6 @@ use config::node::NodeConfig;
 use connection::{node::default::NodeSocketRoute, route::RouteTask};
 use errors::node::NodeInitError;
 use message::Message;
-use runtime::metrics::experiment::get_context;
 use runtime::spawn;
 use runtime::time::TokioPeriodTimeUnit;
 
@@ -299,7 +298,7 @@ impl NodeState for DefaultNodeState {
         task: Arc<PeriodicDefaultNodeSocketTask>,
     ) -> Result<(), String> {
         match self.sockets.lock().await.get_mut(&port) {
-            Some(mut socket) => {
+            Some(socket) => {
                 socket.lock().await.add_periodic_task(task).await;
                 Ok(())
             }
@@ -358,7 +357,7 @@ impl NodeState for DefaultNodeState {
 
         for key in keys {
             let socket_arc = {
-                let mut guard = self.sockets.lock().await;
+                let guard = self.sockets.lock().await;
                 guard.get(&key).cloned()
             };
 

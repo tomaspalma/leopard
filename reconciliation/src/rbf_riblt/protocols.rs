@@ -1,8 +1,6 @@
 use std::{
-    collections::{hash_map::DefaultHasher, HashMap, HashSet},
-    hash::{Hash, Hasher},
+    collections::HashMap,
     sync::Arc,
-    time::Instant,
 };
 
 use async_trait::async_trait;
@@ -31,14 +29,11 @@ use crate::{rbf_riblt::receiver::ReceiveRbfRibltMessageTask, ReconciliationProto
 use super::{
     bloom::BloomFilter,
     messages::{
-        RbfRibltBloomFilterSliceMessage, RbfRibltCodedSymbol, RbfRibltHandshakeMessage,
-        RbfRibltMessageType, RbfRibltMessageTypeValues, RbfRibltSComSendSymbolMessage,
+        RbfRibltBloomFilterSliceMessage, RbfRibltCodedSymbol, RbfRibltSComSendSymbolMessage,
     },
     BloomSendingState, RbfRibltProtocol, SComReconciliationState, SComSendingState, BLOOM_HASHES,
     RBF_RIBLT_PROTOCOL_ID, RIBLT_BATCH_SIZE,
 };
-use crate::riblt::messages::RIBLTSymbol;
-use riblt::RatelessIBLT;
 
 impl RbfRibltProtocol {
     fn shared_handle(&self) -> Arc<Self> {

@@ -1,6 +1,5 @@
 use std::{collections::HashSet, sync::Arc};
 
-use riblt::RatelessIBLT;
 use tokio::sync::Mutex;
 use tracing::info;
 
@@ -13,23 +12,19 @@ use connection::{
         port::{ConnectionInfo, NodeAddress},
         NodeSocketTaskMetadata, PeriodicNodeSocketTask,
     },
-    request::handler::default::{TestMessage, TestMessageType},
     route::{default::NodeSocketRouteId, RouteHandler, RouteStorage, RouteTask},
 };
 use membership::{Membership, MembershipNeighbor, MembershipNeighbors};
 use message::Message;
 use protocol::{deserializer::ProtocolDeserializer, Protocol};
 use runtime::{
-    spawn,
     time::{PeriodTimeUnit, TokioPeriodTimeUnit},
 };
-use state::{node::NodeState, storage::StorageAction};
-use std::collections::HashMap;
-use tokio::sync::RwLock;
+use state::node::NodeState;
 
 use crate::{
     riblt::{
-        messages::RIBLTSymbol, receiver::ReceiveNeighborSymbolsTask, RIBLTDeserializer, RIBLT,
+        receiver::ReceiveNeighborSymbolsTask, RIBLTDeserializer, RIBLT,
     },
     ReconciliationProtocol,
 };
@@ -105,7 +100,7 @@ where
                         let port = port_for_closure.clone();
                         let protocol_id = protocol_id;
                         let sending_states = sending_states.clone();
-                        let receiving_states = receiving_states.clone();
+                        let _receiving_states = receiving_states.clone();
 
                         Box::pin(async move {
                             Self::reconciliation_mechanism(state, port, protocol_id, sending_states)

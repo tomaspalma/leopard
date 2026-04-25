@@ -1,6 +1,6 @@
 use connection::node::port::NodeAddress;
 use membership::{
-    DefaultMembershipNeighbor, DefaultMembershipNeighborRepresentation, Membership,
+    DefaultMembershipNeighbor, DefaultMembershipNeighborRepresentation,
     MembershipNeighbor, MembershipNeighbors,
 };
 use std::sync::{Arc, RwLock};

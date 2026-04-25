@@ -1,7 +1,5 @@
-use rkyv::{rancor::Error, validation::archive, Archive, Deserialize, Serialize};
+use rkyv::{rancor::Error, Archive, Deserialize, Serialize};
 
-use std::rc::Rc;
-use std::sync::Arc;
 
 use message::{impl_protocol_message, MessageType, MessageTypeValues};
 

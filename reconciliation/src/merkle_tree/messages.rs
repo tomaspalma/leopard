@@ -1,7 +1,6 @@
 use bincode::serialize;
 use serde::{Deserialize, Serialize};
 use std::any::Any;
-use std::sync::Arc;
 
 use message::{impl_protocol_message, MessageType, MessageTypeValues};
 

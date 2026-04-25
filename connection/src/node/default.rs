@@ -14,7 +14,7 @@ use runtime::{
     Task,
     time::{PeriodTimeUnit, TokioPeriodTimeUnit},
 };
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::io::AsyncWriteExt;
 use tokio::net::{TcpListener, TcpStream};
 use zeromq::Socket;
 
@@ -64,7 +64,7 @@ impl DefaultNodeSocketTaskMetadata {
 }
 
 impl RouteTask for DefaultNodeSocketTask {
-    fn run(self: Arc<Self>, message: Vec<u8>, neighbor: NodeAddress) {
+    fn run(self: Arc<Self>, _message: Vec<u8>, _neighbor: NodeAddress) {
         info!("Running task!");
     }
 }
@@ -146,7 +146,7 @@ impl NodeSocket for DefaultNodeSocket {
     }
 
     async fn bind(&mut self) -> Result<(), std::io::Error> {
-        let mut socket = zeromq::RepSocket::new();
+        let _socket = zeromq::RepSocket::new();
 
         let listener = TcpListener::bind(format!("127.0.0.1:{}", self.port.port())).await?;
 
