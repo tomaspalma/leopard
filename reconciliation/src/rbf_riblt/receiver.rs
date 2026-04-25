@@ -1,6 +1,5 @@
 use std::{
     collections::{hash_map::DefaultHasher, HashSet},
-    hash::{Hash, Hasher},
     sync::Arc,
     time::Instant,
 };
@@ -8,7 +7,7 @@ use std::{
 use connection::{node::port::NodeAddress, route::RouteTask};
 use metrics::{counter, gauge, histogram};
 use protocol::deserializer::ProtocolDeserializer;
-use riblt::{symbol::PeelableResult, UnmanagedRatelessIBLT};
+use riblt::{symbol::PeelableResult, RatelessIBLT, UnmanagedRatelessIBLT};
 use runtime::metrics::experiment::get_context;
 use runtime::spawn;
 use state::node::NodeState;
@@ -23,12 +22,105 @@ use crate::rbf_riblt::{
         RbfRibltSComRequestMoreSymbolsMessage, RbfRibltSComSendSymbolMessage,
         RbfRibltValueFetchRequestMessage, RbfRibltValueFetchResponseMessage,
     },
-    BloomReceivingState, SComReceivingState, SComReconciliationState, BLOOM_C_ELEM,
-    RBF_RIBLT_PROTOCOL_ID,
+    BloomReceivingState, BloomSendingState, SComReceivingState, SComReconciliationState,
+    SComSendingState, RBF_RIBLT_PROTOCOL_ID,
 };
 use crate::riblt::messages::RIBLTSymbol;
 
 use super::RbfRibltProtocol;
+
+fn hash_storage_pairs(pairs: &[(String, String)]) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut hasher = DefaultHasher::new();
+    pairs.len().hash(&mut hasher);
+    for (k, v) in pairs {
+        k.hash(&mut hasher);
+        v.hash(&mut hasher);
+    }
+    hasher.finish()
+}
+
+impl RbfRibltProtocol {
+    /// True if any reconciliation state exists for this neighbor — used to
+    /// guard against starting a new session while one is already running.
+    pub async fn is_session_active(&self, neighbor: &NodeAddress) -> bool {
+        self.bloom_sending_states
+            .read()
+            .await
+            .contains_key(neighbor)
+            || self
+                .bloom_receiving_states
+                .read()
+                .await
+                .contains_key(neighbor)
+            || self.scom_sending_states.read().await.contains_key(neighbor)
+            || self
+                .scom_receiving_states
+                .read()
+                .await
+                .contains_key(neighbor)
+            || self
+                .pending_value_fetch_sessions
+                .read()
+                .await
+                .contains_key(neighbor)
+    }
+
+    /// True if the session is past the bloom phase (scom or fetch in progress),
+    /// or if bloom has already transitioned to scom. Used by handshake handling
+    /// to allow bloom-phase resets while blocking scom/fetch-phase interference.
+    pub async fn is_session_busy(&self, neighbor: &NodeAddress) -> bool {
+        self.scom_sending_states.read().await.contains_key(neighbor)
+            || self
+                .scom_receiving_states
+                .read()
+                .await
+                .contains_key(neighbor)
+            || self
+                .pending_value_fetch_sessions
+                .read()
+                .await
+                .contains_key(neighbor)
+            || self
+                .bloom_receiving_states
+                .read()
+                .await
+                .get(neighbor)
+                .map(|s| s.riblt_started)
+                .unwrap_or(false)
+    }
+
+    pub async fn clear_session_state(&self, neighbor: &NodeAddress) {
+        self.pending_value_fetch_sessions
+            .write()
+            .await
+            .remove(neighbor);
+        self.scom_sending_states.write().await.remove(neighbor);
+        self.scom_receiving_states.write().await.remove(neighbor);
+        self.bloom_sending_states.write().await.remove(neighbor);
+        self.bloom_receiving_states.write().await.remove(neighbor);
+        self.reconciliation_initiated_with
+            .write()
+            .await
+            .remove(neighbor);
+    }
+
+    pub async fn update_last_reconciled_fingerprint(&self, neighbor: &NodeAddress) {
+        let Some(storage) = self.state.get_storage("default".to_string()) else {
+            return;
+        };
+        let mut pairs: Vec<(String, String)> = storage
+            .items()
+            .into_iter()
+            .map(|item| (item.key().to_string(), item.value().to_string()))
+            .collect();
+        pairs.sort_unstable_by(|a, b| a.0.cmp(&b.0).then(a.1.cmp(&b.1)));
+        self.last_reconciled_fingerprint
+            .write()
+            .await
+            .insert(neighbor.clone(), hash_storage_pairs(&pairs));
+    }
+}
 
 pub struct ReceiveRbfRibltMessageTask {
     protocol: Arc<RbfRibltProtocol>,
@@ -47,45 +139,11 @@ impl ReceiveRbfRibltMessageTask {
             .map(|item| (item.key().to_string(), item.value().to_string()))
             .collect();
         pairs.sort_unstable_by(|a, b| a.0.cmp(&b.0).then(a.1.cmp(&b.1)));
-
-        let mut hasher = DefaultHasher::new();
-        pairs.len().hash(&mut hasher);
-        for (k, v) in pairs {
-            k.hash(&mut hasher);
-            v.hash(&mut hasher);
-        }
-        Some(hasher.finish())
+        Some(hash_storage_pairs(&pairs))
     }
 
     async fn process_handshake(&self, msg: &RbfRibltHandshakeMessage, neighbor: NodeAddress) {
-        let is_busy = self
-            .protocol
-            .scom_sending_states
-            .read()
-            .await
-            .contains_key(&neighbor)
-            || self
-                .protocol
-                .scom_receiving_states
-                .read()
-                .await
-                .contains_key(&neighbor)
-            || self
-                .protocol
-                .pending_value_fetch_sessions
-                .read()
-                .await
-                .contains_key(&neighbor)
-            || self
-                .protocol
-                .bloom_receiving_states
-                .read()
-                .await
-                .get(&neighbor)
-                .map(|s| s.riblt_started)
-                .unwrap_or(false);
-
-        if is_busy {
+        if self.protocol.is_session_busy(&neighbor).await {
             return;
         }
 
@@ -192,7 +250,13 @@ impl ReceiveRbfRibltMessageTask {
     ) -> Option<(bool, String)> {
         let mut receiving = self.protocol.bloom_receiving_states.write().await;
         let state = receiving.get_mut(neighbor)?;
-        let stabilized = new_s_tn.len() == state.last_true_negatives;
+        if new_s_tn.len() == state.last_true_negatives {
+            state.consecutive_stable_rounds += 1;
+        } else {
+            state.consecutive_stable_rounds = 0;
+        }
+        let stabilized =
+            state.consecutive_stable_rounds >= crate::rbf_riblt::STABLE_ROUNDS_REQUIRED;
         state.last_true_negatives = new_s_tn.len();
         state.s_com = new_s_com;
         state.s_tn = new_s_tn;
@@ -218,6 +282,93 @@ impl ReceiveRbfRibltMessageTask {
             .await;
     }
 
+    async fn start_scom_phase(&self, neighbor: NodeAddress) {
+        info!("Starting scom phase");
+        // Atomically check+set riblt_started to prevent duplicate starts
+        // from in-flight bloom slices arriving after stabilization.
+        let s_com = {
+            let mut receiving = self.protocol.bloom_receiving_states.write().await;
+            match receiving.get_mut(&neighbor) {
+                Some(state) if !state.riblt_started => {
+                    state.riblt_started = true;
+                    state.s_com.clone()
+                }
+                _ => return,
+            }
+        };
+
+        let storage = match self.protocol.state.get_storage("default".to_string()) {
+            Some(s) => s,
+            None => return,
+        };
+
+        let mut symbols = HashSet::new();
+        for key in s_com {
+            let value = storage
+                .get(&key)
+                .await
+                .map(|item| item.value().to_string())
+                .unwrap_or_default();
+            symbols.insert(RIBLTSymbol { key, value });
+        }
+
+        let session_id = uuid::Uuid::new_v4().to_string();
+
+        self.protocol.scom_sending_states.write().await.insert(
+            neighbor.clone(),
+            SComSendingState {
+                state: SComReconciliationState::SendingSymbols,
+                local_iblt: RatelessIBLT::new(symbols),
+                session_id,
+                start_time: Instant::now(),
+            },
+        );
+
+        let state = self.protocol.state.clone();
+        let scom_sending_states = self.protocol.scom_sending_states.clone();
+
+        spawn!({
+            RbfRibltProtocol::stream_scom_symbols_to_neighbor(state, scom_sending_states, neighbor)
+                .await;
+        });
+    }
+
+    async fn start_reverse_stream(&self, neighbor: NodeAddress) {
+        info!("Starting reverse stream phase");
+        let s_com = {
+            let receiving = self.protocol.bloom_receiving_states.read().await;
+            match receiving.get(&neighbor) {
+                Some(s) => s.s_com.clone(),
+                None => return,
+            }
+        };
+
+        let m_bits = ((s_com.len().max(1)) as f64 / std::f64::consts::LN_2).ceil() as usize;
+        let session_id = uuid::Uuid::new_v4().to_string();
+
+        // Guard: don't start a second reverse stream if one is already running.
+        {
+            let mut sending = self.protocol.bloom_sending_states.write().await;
+            if sending.contains_key(&neighbor) {
+                return;
+            }
+            sending.insert(neighbor.clone(), BloomSendingState::new(session_id, m_bits));
+        }
+
+        let state = self.protocol.state.clone();
+        let bloom_sending_states = self.protocol.bloom_sending_states.clone();
+
+        spawn!({
+            RbfRibltProtocol::stream_fixed_slices_to_neighbor(
+                state,
+                bloom_sending_states,
+                neighbor,
+                s_com,
+            )
+            .await;
+        });
+    }
+
     async fn process_bloom_slice(
         &self,
         msg: &RbfRibltBloomFilterSliceMessage,
@@ -230,7 +381,8 @@ impl ReceiveRbfRibltMessageTask {
             return;
         }
 
-        let filter = BloomFilter::<String>::from_raw_bits(msg.m(), msg.k(), msg.bits());
+        let filter =
+            BloomFilter::<String>::from_raw_bits(msg.m(), msg.k(), msg.bits(), msg.seeds());
 
         let (new_s_com, new_s_tn) = {
             let receiving = self.protocol.bloom_receiving_states.read().await;
@@ -250,7 +402,20 @@ impl ReceiveRbfRibltMessageTask {
         };
 
         if stabilized {
-            self.send_stop_signal(neighbor, session_id).await;
+            self.send_stop_signal(neighbor.clone(), session_id).await;
+
+            let is_initiator = self
+                .protocol
+                .reconciliation_initiated_with
+                .read()
+                .await
+                .contains(&neighbor);
+
+            if is_initiator {
+                self.start_scom_phase(neighbor).await;
+            } else {
+                self.start_reverse_stream(neighbor).await;
+            }
         }
     }
 
@@ -297,20 +462,27 @@ impl ReceiveRbfRibltMessageTask {
             return;
         }
 
-        let mut symbols = HashSet::new();
-        if let Some(state) = self
+        let s_com: Vec<String> = self
             .protocol
             .bloom_receiving_states
             .read()
             .await
             .get(neighbor)
-        {
-            for key in &state.s_com {
-                symbols.insert(RIBLTSymbol {
-                    key: key.clone(),
-                    value: String::new(),
-                });
-            }
+            .map(|state| state.s_com.clone())
+            .unwrap_or_default();
+
+        let storage = self.protocol.state.get_storage("default".to_string());
+        let mut symbols = HashSet::new();
+        for key in s_com {
+            let value = if let Some(ref s) = storage {
+                s.get(&key)
+                    .await
+                    .map(|item| item.value().to_string())
+                    .unwrap_or_default()
+            } else {
+                String::new()
+            };
+            symbols.insert(RIBLTSymbol { key, value });
         }
 
         self.protocol.scom_receiving_states.write().await.insert(
@@ -622,64 +794,12 @@ impl ReceiveRbfRibltMessageTask {
             }
         }
 
-        self.protocol
-            .pending_value_fetch_sessions
-            .write()
-            .await
-            .remove(&neighbor);
-
-        self.protocol
-            .scom_sending_states
-            .write()
-            .await
-            .remove(&neighbor);
-        self.protocol
-            .scom_receiving_states
-            .write()
-            .await
-            .remove(&neighbor);
-        self.protocol
-            .bloom_sending_states
-            .write()
-            .await
-            .remove(&neighbor);
-
         let differences_found = !message.entries().is_empty();
 
-        if let Some(state) = self
-            .protocol
-            .bloom_receiving_states
-            .write()
-            .await
-            .get_mut(&neighbor)
-        {
-            state.riblt_started = false;
-            state.filters.clear();
-            state.s_com.clear();
-            state.s_tn.clear();
-            state.last_true_negatives = 0;
-        }
-
-        if let Some(storage) = self.protocol.state.get_storage("default".to_string()) {
-            let mut pairs: Vec<(String, String)> = storage
-                .items()
-                .into_iter()
-                .map(|item| (item.key().to_string(), item.value().to_string()))
-                .collect();
-            pairs.sort_unstable_by(|a, b| a.0.cmp(&b.0).then(a.1.cmp(&b.1)));
-            let mut hasher = std::collections::hash_map::DefaultHasher::new();
-            use std::hash::{Hash, Hasher};
-            pairs.len().hash(&mut hasher);
-            for (k, v) in pairs {
-                k.hash(&mut hasher);
-                v.hash(&mut hasher);
-            }
-            self.protocol
-                .last_reconciled_fingerprint
-                .write()
-                .await
-                .insert(neighbor.clone(), hasher.finish());
-        }
+        self.protocol
+            .update_last_reconciled_fingerprint(&neighbor)
+            .await;
+        self.protocol.clear_session_state(&neighbor).await;
 
         let context = get_context();
         counter!(

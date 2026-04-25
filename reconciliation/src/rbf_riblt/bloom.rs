@@ -1,7 +1,8 @@
 use std::{
     cmp::max,
+    collections::hash_map::DefaultHasher,
     f64::consts::LN_2,
-    hash::{BuildHasher, Hash, RandomState},
+    hash::{Hash, Hasher},
     marker::PhantomData,
     time::{Duration, Instant},
 };
@@ -10,7 +11,7 @@ use bitvec::{bitvec, slice::BitSlice, vec::BitVec};
 
 pub struct BloomFilter<T: ?Sized> {
     base: BitVec,
-    hashers: [RandomState; 2],
+    seeds: [u64; 2],
     hashes: u64,
     _marker: PhantomData<T>,
     t_enc: Duration,
@@ -21,6 +22,13 @@ impl<T> BloomFilter<T>
 where
     T: ?Sized,
 {
+    fn hash_with_seed(seed: u64, value: &(impl Hash + ?Sized)) -> u64 {
+        let mut hasher = DefaultHasher::new();
+        seed.hash(&mut hasher);
+        value.hash(&mut hasher);
+        hasher.finish()
+    }
+
     #[inline]
     #[must_use]
     pub fn new(capacity: usize, fpr: f64) -> Self {
@@ -29,13 +37,12 @@ where
             "false positive rate should be a ratio greater than 0.0"
         );
 
-        // Compute the optimal bitarray size `m` and the optimal number of hash functions `k`
         let m = (-1.0f64 * capacity as f64 * fpr.ln() / (LN_2 * LN_2)).ceil() as usize;
         let k = (-1.0f64 * fpr.ln() / LN_2).ceil() as u64;
 
         Self {
             base: bitvec![0; max(m, 1)],
-            hashers: [RandomState::new(), RandomState::new()],
+            seeds: [0, 1],
             hashes: k,
             _marker: PhantomData,
             t_enc: Duration::from_secs(0),
@@ -48,7 +55,7 @@ where
 
         Self {
             base: bitvec![0; max(m, 1)],
-            hashers: [RandomState::new(), RandomState::new()],
+            seeds: [0, 1],
             hashes: k,
             _marker: PhantomData,
             t_enc: Duration::from_secs(0),
@@ -56,7 +63,20 @@ where
         }
     }
 
-    pub fn from_raw_bits(m: usize, k: u64, bits: &[u8]) -> Self {
+    pub fn from_raw_parts_with_seeds(m: usize, k: u64, seeds: [u64; 2]) -> Self {
+        assert!(m > 0 && k > 0, "m and k should be positive");
+
+        Self {
+            base: bitvec![0; max(m, 1)],
+            seeds,
+            hashes: k,
+            _marker: PhantomData,
+            t_enc: Duration::from_secs(0),
+            t_dec: Duration::from_secs(0),
+        }
+    }
+
+    pub fn from_raw_bits(m: usize, k: u64, bits: &[u8], seeds: [u64; 2]) -> Self {
         let mut base = bitvec![0; m];
         for (byte_idx, &byte) in bits.iter().enumerate() {
             for bit_idx in 0..8 {
@@ -69,19 +89,7 @@ where
         }
         Self {
             base,
-            hashers: [RandomState::new(), RandomState::new()],
-            hashes: k,
-            _marker: PhantomData,
-            t_enc: Duration::from_secs(0),
-            t_dec: Duration::from_secs(0),
-        }
-    }
-
-    pub fn from_raw_parts_with_hashers(m: usize, k: u64, hashers: [RandomState; 2]) -> Self {
-        assert!(m > 0 && k > 0, "m and k should be positive");
-        Self {
-            base: bitvec![0; m],
-            hashers,
+            seeds,
             hashes: k,
             _marker: PhantomData,
             t_enc: Duration::from_secs(0),
@@ -95,8 +103,8 @@ where
     }
 
     #[inline]
-    pub fn hashers(&self) -> [RandomState; 2] {
-        self.hashers.clone()
+    pub fn seeds(&self) -> [u64; 2] {
+        self.seeds
     }
 
     #[inline]
@@ -124,8 +132,8 @@ where
     #[inline]
     pub fn contains(&self, value: &T) -> bool {
         let h = (
-            self.hashers[0].hash_one(value),
-            self.hashers[1].hash_one(value),
+            Self::hash_with_seed(self.seeds[0], value),
+            Self::hash_with_seed(self.seeds[1], value),
         );
 
         (0..self.hashes).all(|i| {
@@ -145,8 +153,8 @@ where
     #[inline]
     pub fn insert(&mut self, value: &T) {
         let h = (
-            self.hashers[0].hash_one(value),
-            self.hashers[1].hash_one(value),
+            Self::hash_with_seed(self.seeds[0], value),
+            Self::hash_with_seed(self.seeds[1], value),
         );
 
         (0..self.hashes).for_each(|i| {
@@ -170,5 +178,28 @@ mod tests {
 
         bloom.insert("1");
         assert!(bloom.contains("1"));
+    }
+
+    #[test]
+    fn test_cross_reconstruction() {
+        let seeds = [42u64, 99u64];
+        let mut sender = BloomFilter::<String>::from_raw_parts_with_seeds(128, 1, seeds);
+        sender.insert(&"hello".to_string());
+        sender.insert(&"world".to_string());
+
+        let bits: Vec<u8> = (0..sender.bitslice().len())
+            .step_by(8)
+            .map(|start| {
+                let end = (start + 8).min(sender.bitslice().len());
+                (start..end).fold(0u8, |b, i| {
+                    if sender.bitslice()[i] { b | (1 << (i - start)) } else { b }
+                })
+            })
+            .collect();
+
+        let receiver = BloomFilter::<String>::from_raw_bits(128, 1, &bits, seeds);
+        assert!(receiver.contains(&"hello".to_string()));
+        assert!(receiver.contains(&"world".to_string()));
+        assert!(!receiver.contains(&"other".to_string()));
     }
 }

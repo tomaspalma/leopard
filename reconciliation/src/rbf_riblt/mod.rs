@@ -63,6 +63,8 @@ impl BloomSendingState {
     }
 }
 
+pub const STABLE_ROUNDS_REQUIRED: usize = 3;
+
 pub struct BloomReceivingState {
     pub session_id: String,
     pub filters: Vec<BloomFilter<String>>,
@@ -70,6 +72,7 @@ pub struct BloomReceivingState {
     pub s_com: Vec<String>,
     pub s_tn: Vec<String>,
     pub last_true_negatives: usize,
+    pub consecutive_stable_rounds: usize,
     pub riblt_started: bool,
 }
 
@@ -82,6 +85,7 @@ impl BloomReceivingState {
             s_com: Vec::new(),
             s_tn: Vec::new(),
             last_true_negatives: 0,
+            consecutive_stable_rounds: 0,
             riblt_started: false,
         }
     }
@@ -97,6 +101,7 @@ pub struct RbfRibltProtocol {
     pub(crate) scom_receiving_states: Arc<RwLock<HashMap<NodeAddress, SComReceivingState>>>,
     pub(crate) pending_value_fetch_sessions: Arc<RwLock<HashMap<NodeAddress, String>>>,
     pub(crate) last_reconciled_fingerprint: Arc<RwLock<HashMap<NodeAddress, u64>>>,
+    pub(crate) reconciliation_initiated_with: Arc<RwLock<HashSet<NodeAddress>>>,
 }
 
 impl RbfRibltProtocol {
@@ -111,6 +116,7 @@ impl RbfRibltProtocol {
             scom_receiving_states: Arc::new(RwLock::new(HashMap::new())),
             pending_value_fetch_sessions: Arc::new(RwLock::new(HashMap::new())),
             last_reconciled_fingerprint: Arc::new(RwLock::new(HashMap::new())),
+            reconciliation_initiated_with: Arc::new(RwLock::new(HashSet::new())),
         }
     }
 }

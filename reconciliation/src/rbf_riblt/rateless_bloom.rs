@@ -1,7 +1,7 @@
 use super::bloom::BloomFilter;
 use std::{
     cmp::max,
-    hash::{Hash, RandomState},
+    hash::Hash,
     mem,
     time::{Duration, Instant},
 };
@@ -44,12 +44,6 @@ where
 
     pub fn extend(&mut self) {
         let mut filter = BloomFilter::from_raw_parts(self.m, 1);
-        self.data.iter().for_each(|d| filter.insert(d));
-        self.bloom_filters.push(filter);
-    }
-
-    pub fn extend_with_hashers(&mut self, hashers: [RandomState; 2]) {
-        let mut filter = BloomFilter::from_raw_parts_with_hashers(self.m, 1, hashers);
         self.data.iter().for_each(|d| filter.insert(d));
         self.bloom_filters.push(filter);
     }

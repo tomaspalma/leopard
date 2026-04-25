@@ -212,7 +212,6 @@ impl CsvRecorder {
         let registry = self.registry.clone();
 
         tokio::spawn(async move {
-            println!("Metrics exporter started for directory: {}", directory);
             let _ = create_dir_all(&directory).await;
             let start_time = std::time::Instant::now();
             let mut rx = export_trigger().subscribe();
@@ -231,7 +230,6 @@ impl CsvRecorder {
                         }
                     }
                     _ = shutdown_notify().notified() => {
-                        // Drain any exports that were queued before shutdown was signalled
                         while let Ok(target) = rx.try_recv() {
                             let iteration = iterations.entry(target.clone()).or_insert(1);
                             let current_iteration = *iteration;
