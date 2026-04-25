@@ -119,9 +119,6 @@ impl DataStateStorage for KeyValueDataStateStorage {
 
         self.memory_storage.insert(key, value);
 
-        info!("Memory storage: {:?}", self.memory_storage);
-        info!("Len memory storage: {}", self.memory_storage.len());
-
         let action = StorageAction::Insert;
         if let Some(action_listeners) = self.listeners.get(&action) {
             for listener in action_listeners.iter() {
@@ -132,11 +129,12 @@ impl DataStateStorage for KeyValueDataStateStorage {
         let persistent_storage_clone = self.persistent_storage.clone();
         let memory_storage_clone = self.memory_storage.clone();
         spawn!({
-            persistent_storage_clone
-                .clone()
+            if let Err(e) = persistent_storage_clone
                 .save(&*memory_storage_clone)
                 .await
-                .unwrap()
+            {
+                tracing::warn!("Failed to persist storage to disk: {}", e);
+            }
         });
     }
 
