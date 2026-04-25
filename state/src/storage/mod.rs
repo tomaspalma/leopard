@@ -68,6 +68,8 @@ pub trait DataStateStorage {
     async fn save(&self, item: Box<dyn DataStateItem + Send + Sync>);
     async fn get(&self, key: &str) -> Option<Box<dyn DataStateItem + Send + Sync>>;
     fn items(&self) -> Vec<Box<dyn DataStateItem + Send + Sync>>;
+    fn keys(&self) -> Vec<String>;
+
     fn add_listener(&self, action: StorageAction, listener: StorageListener);
 }
 
@@ -177,6 +179,13 @@ impl DataStateStorage for KeyValueDataStateStorage {
                     entry.value().clone(),
                 )) as Box<dyn DataStateItem + Send + Sync>
             })
+            .collect()
+    }
+
+    fn keys(&self) -> Vec<String> {
+        self.memory_storage
+            .iter()
+            .map(|entry| entry.key().clone())
             .collect()
     }
 }
