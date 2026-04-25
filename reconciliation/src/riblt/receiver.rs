@@ -80,26 +80,23 @@ impl ReceiveNeighborSymbolsTask {
             .collect()
     }
 
-    fn apply_reconciliation_result(&self, result: Vec<RIBLTSymbol>) {
+    async fn apply_reconciliation_result(&self, result: Vec<RIBLTSymbol>) {
         if result.is_empty() {
             info!("No reconciliation result");
         } else {
             info!("Reconciliation result length: {}", result.len());
         }
 
-        let state_clone = self.state.clone();
-        spawn!({
-            if let Some(storage) = state_clone.get_storage("default".to_string()) {
-                for symbol in result {
-                    storage
-                        .store(Box::new(state::storage::item::DefaultDataStateItem::new(
-                            symbol.key,
-                            symbol.value,
-                        )))
-                        .await;
-                }
+        if let Some(storage) = self.state.get_storage("default".to_string()) {
+            for symbol in result {
+                storage
+                    .store(Box::new(state::storage::item::DefaultDataStateItem::new(
+                        symbol.key,
+                        symbol.value,
+                    )))
+                    .await;
             }
-        });
+        }
     }
 
     async fn handle_received_symbols(
@@ -149,7 +146,6 @@ impl ReceiveNeighborSymbolsTask {
             info!("Peel symbols: {:?}", peel_symbols);
             
             let result = Self::filter_remote_peeled_symbols(peel_symbols);
-            info!("Result: {:?}", result);
 
             histogram!("riblt_decode_duration_seconds", "neighbor" => format!("{:?}", neighbor_clone))
                 .record(decode_start.elapsed().as_secs_f64());
@@ -159,7 +155,7 @@ impl ReceiveNeighborSymbolsTask {
         }).await.unwrap();
 
         let differences_found = !new_symbols.is_empty();
-        self.apply_reconciliation_result(new_symbols);
+        self.apply_reconciliation_result(new_symbols).await;
 
         if is_peeling_successful {
             info!("Peeling successful for neighbor {:?}", neighbor);

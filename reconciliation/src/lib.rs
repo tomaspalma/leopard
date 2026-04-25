@@ -10,6 +10,7 @@ use runtime::time::PeriodTimeUnit;
 use state::node::NodeState;
 
 pub mod algorithms;
+pub mod checker;
 pub mod hybrid;
 pub mod merkle_tree;
 pub mod pbs;

@@ -1,3 +1,4 @@
+use crate::checker::ReconciliationChecker;
 use crate::storage::state::DataState;
 
 use dashmap::DashMap;
@@ -53,6 +54,9 @@ pub trait NodeState {
     type RouteId;
     type ConnectionInfo;
     type StreamType;
+
+    fn set_reconciliation_checker(&self, checker: Arc<dyn ReconciliationChecker>);
+    fn reconciliation_checker(&self) -> Option<Arc<dyn ReconciliationChecker>>;
 
     fn register_storage(&self, key: String, storage: Arc<dyn DataState + Send + Sync>);
 
@@ -162,6 +166,7 @@ pub struct DefaultNodeState {
     >,
     membership: Arc<RwLock<DefaultMembership>>,
     data: DashMap<String, Arc<dyn DataState + Send + Sync>>,
+    reconciliation_checker: std::sync::Mutex<Option<Arc<dyn ReconciliationChecker>>>,
     config: Arc<
         dyn NodeConfig<
                 DefaultMembershipNeighborRepresentation<DefaultMembershipNeighbor>,
@@ -190,6 +195,14 @@ impl NodeState for DefaultNodeState {
     type RouteId = NodeSocketRouteId;
     type ConnectionInfo = NodeAddress;
     type StreamType = Vec<u8>;
+
+    fn set_reconciliation_checker(&self, checker: Arc<dyn ReconciliationChecker>) {
+        *self.reconciliation_checker.lock().unwrap() = Some(checker);
+    }
+
+    fn reconciliation_checker(&self) -> Option<Arc<dyn ReconciliationChecker>> {
+        self.reconciliation_checker.lock().unwrap().clone()
+    }
 
     fn register_storage(&self, key: String, storage: Arc<dyn DataState + Send + Sync>) {
         self.data.insert(key, storage);
@@ -441,6 +454,7 @@ impl DefaultNodeState {
             membership: Arc::new(RwLock::new(DefaultMembership::new())),
             config,
             data: DashMap::new(),
+            reconciliation_checker: std::sync::Mutex::new(None),
             identifier,
             route_handler,
         }

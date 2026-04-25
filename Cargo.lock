@@ -1517,6 +1517,7 @@ dependencies = [
  "config",
  "connection",
  "dashmap 6.1.0",
+ "futures",
  "log",
  "membership-protocols",
  "metrics",
