@@ -75,7 +75,14 @@ impl ReceiveMerkleTreeMessageTask {
                 _parent_hash,
                 remote_key,
             ) => {
-                self.handle_sync_node_response(msg.protocol(), neighbor, node_id, hash, remote_key, session_id);
+                self.handle_sync_node_response(
+                    msg.protocol(),
+                    neighbor,
+                    node_id,
+                    hash,
+                    remote_key,
+                    session_id,
+                );
             }
             MerkleTreeMessageWrapper::DataRequest(key) => {
                 self.handle_data_request(msg.protocol(), neighbor, key, session_id);
@@ -83,7 +90,6 @@ impl ReceiveMerkleTreeMessageTask {
             MerkleTreeMessageWrapper::DataResponse(key, value) => {
                 self.handle_data_response(neighbor, key, value, session_id);
             }
-            _ => info!("Received unknown message type from {:?}", neighbor),
         }
     }
 
@@ -418,15 +424,15 @@ impl RouteTask for ReceiveMerkleTreeMessageTask {
             .downcast_ref::<MerkleTreeMessage>()
         {
             let context = get_context();
-                metrics::counter!(
-                    "protocol_round_trip_count",
-                    "target" => format!("{:?}", neighbor),
-                    "protocol" => "merkle",
-                    "run_id" => context.run_id().to_string(),
-                    "trial" => context.trial().to_string(),
-                    "similarity" => context.similarity().to_string()
-                )
-                .increment(1);
+            metrics::counter!(
+                "protocol_round_trip_count",
+                "target" => format!("{:?}", neighbor),
+                "protocol" => "merkle",
+                "run_id" => context.run_id().to_string(),
+                "trial" => context.trial().to_string(),
+                "similarity" => context.similarity().to_string()
+            )
+            .increment(1);
 
             self.handle_message(msg, neighbor);
         } else {
