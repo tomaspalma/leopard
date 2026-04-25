@@ -1,11 +1,15 @@
 #[cfg(unix)]
-use libc::{getrusage, rusage, RUSAGE_SELF};
+use libc::{RUSAGE_SELF, getrusage, rusage};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 #[derive(Clone, Copy, Debug)]
 pub struct ProcessUsageSnapshot {
-    pub cpu_seconds: f64,
+    pub cpu_delta_seconds: f64,
     pub rss_bytes: u64,
 }
+
+#[cfg(unix)]
+static LAST_CPU_BITS: AtomicU64 = AtomicU64::new(0);
 
 #[cfg(unix)]
 pub fn process_usage_snapshot() -> Option<ProcessUsageSnapshot> {
@@ -41,17 +45,36 @@ pub fn process_usage_snapshot() -> Option<ProcessUsageSnapshot> {
 
     let user_seconds = usage.ru_utime.tv_sec as f64 + usage.ru_utime.tv_usec as f64 / 1_000_000.0;
     let sys_seconds = usage.ru_stime.tv_sec as f64 + usage.ru_stime.tv_usec as f64 / 1_000_000.0;
+    let cpu_total = user_seconds + sys_seconds;
+
+    let prev_bits = LAST_CPU_BITS.swap(cpu_total.to_bits(), Ordering::Relaxed);
+    let cpu_delta = (cpu_total - f64::from_bits(prev_bits)).max(0.0);
+
+    #[cfg(target_os = "linux")]
+    let rss_bytes = read_current_rss_bytes().unwrap_or(0);
 
     #[cfg(target_os = "macos")]
     let rss_bytes = usage.ru_maxrss.max(0) as u64;
 
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
     let rss_bytes = (usage.ru_maxrss.max(0) as u64) * 1024;
 
     Some(ProcessUsageSnapshot {
-        cpu_seconds: user_seconds + sys_seconds,
+        cpu_delta_seconds: cpu_delta,
         rss_bytes,
     })
+}
+
+#[cfg(target_os = "linux")]
+fn read_current_rss_bytes() -> Option<u64> {
+    let content = std::fs::read_to_string("/proc/self/status").ok()?;
+    for line in content.lines() {
+        if line.starts_with("VmRSS:") {
+            let kb: u64 = line.split_whitespace().nth(1)?.parse().ok()?;
+            return Some(kb * 1024);
+        }
+    }
+    None
 }
 
 #[cfg(not(unix))]

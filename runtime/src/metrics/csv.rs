@@ -40,14 +40,14 @@ pub fn finish_iteration(from: String, target: String, protocol: &str) {
     if let Some(usage) = process_usage_snapshot() {
         let context = get_context();
         gauge!(
-            "process_cpu_time_seconds_total",
+            "process_cpu_delta_seconds",
             "target" => target.clone(),
             "protocol" => protocol.to_string(),
             "run_id" => context.run_id().to_string(),
             "trial" => context.trial().to_string(),
             "similarity" => context.similarity().to_string()
         )
-        .set(usage.cpu_seconds);
+        .set(usage.cpu_delta_seconds);
 
         gauge!(
             "process_rss_memory_bytes",
