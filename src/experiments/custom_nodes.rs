@@ -15,6 +15,8 @@ use state::node::{DefaultNodeState, NodeState};
 use config::node::DefaultNodeConfig;
 use node::Node;
 
+use metrics::{counter, gauge};
+use runtime::metrics::experiment::get_context;
 use state::storage::state::{DataState, DefaultDataState};
 use tracing::{Instrument, info};
 
@@ -162,9 +164,33 @@ pub async fn custom_nodes(
         runtime::metrics::csv::set_expected_pairs(node_count * (node_count - 1));
         runtime::metrics::csv::shutdown_complete_notify().notified().await;
 
+        let context = get_context();
+        let ctx_labels = [
+            ("protocol", protocol.clone()),
+            ("run_id", context.run_id().to_string()),
+            ("trial", context.trial().to_string()),
+            ("similarity", context.similarity().to_string()),
+        ];
+
         match checker.check().await {
             ReconciliationCheckResult::Reconciled => {
                 info!("Reconciliation check passed: all nodes are in sync");
+                gauge!(
+                    "reconciliation_correctness",
+                    "protocol" => ctx_labels[0].1.clone(),
+                    "run_id" => ctx_labels[1].1.clone(),
+                    "trial" => ctx_labels[2].1.clone(),
+                    "similarity" => ctx_labels[3].1.clone()
+                )
+                .set(1.0);
+                counter!(
+                    "reconciliation_check_passed",
+                    "protocol" => ctx_labels[0].1.clone(),
+                    "run_id" => ctx_labels[1].1.clone(),
+                    "trial" => ctx_labels[2].1.clone(),
+                    "similarity" => ctx_labels[3].1.clone()
+                )
+                .increment(1);
             }
             ReconciliationCheckResult::NotReconciled(mismatches) => {
                 tracing::warn!(
@@ -180,8 +206,35 @@ pub async fn custom_nodes(
                         .collect();
                     tracing::warn!("  key '{}': {}", m.key, values.join(", "));
                 }
+                gauge!(
+                    "reconciliation_correctness",
+                    "protocol" => ctx_labels[0].1.clone(),
+                    "run_id" => ctx_labels[1].1.clone(),
+                    "trial" => ctx_labels[2].1.clone(),
+                    "similarity" => ctx_labels[3].1.clone()
+                )
+                .set(0.0);
+                gauge!(
+                    "reconciliation_mismatch_keys",
+                    "protocol" => ctx_labels[0].1.clone(),
+                    "run_id" => ctx_labels[1].1.clone(),
+                    "trial" => ctx_labels[2].1.clone(),
+                    "similarity" => ctx_labels[3].1.clone()
+                )
+                .set(mismatches.len() as f64);
+                counter!(
+                    "reconciliation_check_failed",
+                    "protocol" => ctx_labels[0].1.clone(),
+                    "run_id" => ctx_labels[1].1.clone(),
+                    "trial" => ctx_labels[2].1.clone(),
+                    "similarity" => ctx_labels[3].1.clone()
+                )
+                .increment(1);
             }
         }
+
+        let output_dir = format!("./metrics_output/{}", context.run_id());
+        runtime::metrics::csv::flush_untagged_metrics(&output_dir).await;
     } else {
         std::future::pending::<()>().await;
     }

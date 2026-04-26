@@ -12,6 +12,42 @@ use tokio::sync::{Notify, broadcast};
 
 static EXPECTED_PAIRS: AtomicUsize = AtomicUsize::new(0);
 
+fn global_registry() -> &'static OnceLock<Arc<Registry<Key, AtomicStorage>>> {
+    static REGISTRY: OnceLock<Arc<Registry<Key, AtomicStorage>>> = OnceLock::new();
+    &REGISTRY
+}
+
+pub async fn flush_untagged_metrics(directory: &str) {
+    let Some(registry) = global_registry().get() else {
+        return;
+    };
+    let _ = create_dir_all(directory).await;
+
+    let gauges = registry.get_gauge_handles();
+    for (key, gauge) in gauges {
+        if key
+            .labels()
+            .any(|l| l.key() == "neighbor" || l.key() == "target")
+        {
+            continue;
+        }
+        let val = f64::from_bits(gauge.load(Ordering::Relaxed)).to_string();
+        CsvRecorder::write_metric_line(directory, &key, 1, 0, val).await;
+    }
+
+    let counters = registry.get_counter_handles();
+    for (key, counter) in counters {
+        if key
+            .labels()
+            .any(|l| l.key() == "neighbor" || l.key() == "target")
+        {
+            continue;
+        }
+        let val = counter.swap(0, Ordering::Relaxed).to_string();
+        CsvRecorder::write_metric_line(directory, &key, 1, 0, val).await;
+    }
+}
+
 fn completed_pairs() -> &'static Mutex<HashSet<(String, String)>> {
     static PAIRS: OnceLock<Mutex<HashSet<(String, String)>>> = OnceLock::new();
     PAIRS.get_or_init(|| Mutex::new(HashSet::new()))
@@ -79,9 +115,9 @@ pub struct CsvRecorder {
 
 impl CsvRecorder {
     pub fn new() -> Self {
-        Self {
-            registry: Arc::new(Registry::atomic()),
-        }
+        let registry = Arc::new(Registry::atomic());
+        let _ = global_registry().set(Arc::clone(&registry));
+        Self { registry }
     }
 
     fn format_label(value: &str) -> String {
