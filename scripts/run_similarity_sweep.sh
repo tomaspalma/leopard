@@ -9,11 +9,10 @@ SIZES=${SIZES:-"1000"}
 SIMILARITIES=${SIMILARITIES:-"0,0.05,0.10,0.20,0.30,0.40,0.50,0.60,0.70,0.75,0.80,0.85,0.90,0.95,0.97,0.99"}
 TRIALS=${TRIALS:-"10"}
 PROTOCOLS=${PROTOCOLS:-"riblt,merkle,rbf_riblt"}
-SEED=${SEED:-"12345"}
 OUTPUT_ROOT=${OUTPUT_ROOT:-"sweep"}
 
 echo "Generating datasets for sweep..."
-python3 scripts/generate_data.py --default-matrix --sizes "$SIZES" --similarities "$SIMILARITIES" --seed "$SEED"
+python3 scripts/generate_data.py --default-matrix --sizes "$SIZES" --similarities "$SIMILARITIES"
 
 echo "Removing metrics_output folder"
 rm -rf metrics_output

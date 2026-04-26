@@ -96,7 +96,6 @@ def main():
     parser.add_argument(
         "--similarity", type=float, help="Single similarity value in [0,1]"
     )
-    parser.add_argument("--seed", type=int, default=12345, help="Base random seed")
     parser.add_argument(
         "--prefix",
         default="custom",
@@ -129,12 +128,12 @@ def main():
         for size in sizes:
             for sim in similarities:
                 prefix = f"n{size}_sim{int(round(sim * 100)):02d}"
-                seed = args.seed + size * 1000 + int(round(sim * 100))
+                seed = random.randint(0, 10_000_000_000)
                 create_pair(size, sim, seed, prefix, args.output_dir)
 
-        create_pair(10, 0.8, args.seed + 10_080, "small", args.output_dir)
-        create_pair(100, 0.8, args.seed + 100_080, "medium", args.output_dir)
-        create_pair(1000, 0.8, args.seed + 1_000_080, "large", args.output_dir)
+        create_pair(10, 0.8, random.randint(0, 10_000_000_000), "small", args.output_dir)
+        create_pair(100, 0.8, random.randint(0, 10_000_000_000), "medium", args.output_dir)
+        create_pair(1000, 0.8, random.randint(0, 10_000_000_000), "large", args.output_dir)
         print("Done.")
         return
 
