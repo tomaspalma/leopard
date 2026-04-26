@@ -9,25 +9,13 @@ import pandas as pd
 SUPPORTED_PROTOCOLS = ["riblt", "merkle", "rbf_riblt"]
 
 
-def parse_labels(label_str):
-    parsed = {}
-    if not isinstance(label_str, str):
-        return parsed
-    for pair in label_str.split(";"):
-        if "=" not in pair:
-            continue
-        key, value = pair.split("=", 1)
-        parsed[key.strip()] = value.strip()
-    return parsed
-
-
-def load_reconciliation_rows(metrics_root):
+def load_round_duration_rows(metrics_root):
     rows = []
     for run_dir in Path(metrics_root).iterdir():
         if not run_dir.is_dir():
             continue
 
-        metric_file = run_dir / "reconciliation_completed.csv"
+        metric_file = run_dir / "reconciliation_round_duration_seconds.csv"
         if not metric_file.exists():
             continue
 
@@ -36,76 +24,32 @@ def load_reconciliation_rows(metrics_root):
             continue
 
         for _, row in df.iterrows():
-            labels = parse_labels(row.get("labels", ""))
             protocol = row.get("protocol")
             trial = row.get("trial")
             similarity = row.get("similarity")
             run_id = row.get("run_id")
+            value = pd.to_numeric(row.get("value"), errors="coerce")
+
+            if pd.isna(value) or value < 0:
+                continue
 
             rows.append(
                 {
                     "run_dir": run_dir.name,
                     "iteration": pd.to_numeric(row.get("iteration"), errors="coerce"),
-                    "timestamp_ms": pd.to_numeric(
-                        row.get("timestamp"), errors="coerce"
-                    ),
-                    "value": pd.to_numeric(row.get("value"), errors="coerce"),
-                    "protocol": protocol
-                    if isinstance(protocol, str) and protocol
-                    else labels.get("protocol", "unknown"),
-                    "trial": str(trial)
-                    if pd.notna(trial) and str(trial)
-                    else labels.get("trial", "unknown"),
-                    "similarity": str(similarity)
-                    if pd.notna(similarity) and str(similarity)
-                    else labels.get("similarity", "unknown"),
-                    "run_id": run_id
-                    if isinstance(run_id, str) and run_id
-                    else labels.get("run_id", run_dir.name),
+                    "round_duration_seconds": value,
+                    "protocol": protocol if isinstance(protocol, str) and protocol else "unknown",
+                    "trial": str(trial) if pd.notna(trial) else "unknown",
+                    "similarity": str(similarity) if pd.notna(similarity) else "unknown",
+                    "run_id": run_id if isinstance(run_id, str) and run_id else run_dir.name,
                 }
             )
 
     return pd.DataFrame(rows)
 
 
-def build_round_durations(df):
+def make_summary(df):
     if df.empty:
-        return pd.DataFrame()
-
-    filtered = df[
-        (df["value"] > 0) & df["iteration"].notna() & df["timestamp_ms"].notna()
-    ].copy()
-
-    if filtered.empty:
-        return pd.DataFrame()
-
-    rounds = (
-        filtered.groupby(
-            ["run_id", "protocol", "trial", "similarity", "iteration"], as_index=False
-        )["timestamp_ms"]
-        .max()
-        .rename(columns={"timestamp_ms": "round_completed_timestamp_ms"})
-    )
-
-    rounds = rounds[rounds["protocol"].isin(SUPPORTED_PROTOCOLS)].copy()
-    rounds["similarity_numeric"] = pd.to_numeric(rounds["similarity"], errors="coerce")
-
-    # Iteration counters come from per-target export cycles and may not be globally
-    # monotonic for a run. Sort by observed completion timestamp to build durations.
-    rounds = rounds.sort_values(["run_id", "protocol", "round_completed_timestamp_ms"])
-    rounds["round_duration_ms"] = rounds.groupby(["run_id", "protocol"])[
-        "round_completed_timestamp_ms"
-    ].diff()
-    rounds["round_duration_ms"] = rounds["round_duration_ms"].fillna(
-        rounds["round_completed_timestamp_ms"]
-    )
-    rounds["round_duration_ms"] = rounds["round_duration_ms"].clip(lower=0)
-    rounds["round_duration_seconds"] = rounds["round_duration_ms"] / 1000.0
-    return rounds
-
-
-def make_summary(rounds):
-    if rounds.empty:
         return pd.DataFrame(
             columns=[
                 "protocol",
@@ -119,7 +63,10 @@ def make_summary(rounds):
             ]
         )
 
-    summary = rounds.groupby(["protocol", "similarity_numeric"], as_index=False).agg(
+    df = df[df["protocol"].isin(SUPPORTED_PROTOCOLS)].copy()
+    df["similarity_numeric"] = pd.to_numeric(df["similarity"], errors="coerce")
+
+    summary = df.groupby(["protocol", "similarity_numeric"], as_index=False).agg(
         mean_round_duration_seconds=("round_duration_seconds", "mean"),
         std_round_duration_seconds=("round_duration_seconds", "std"),
         median_round_duration_seconds=("round_duration_seconds", "median"),
@@ -127,9 +74,7 @@ def make_summary(rounds):
         max_round_duration_seconds=("round_duration_seconds", "max"),
         min_round_duration_seconds=("round_duration_seconds", "min"),
     )
-    summary["std_round_duration_seconds"] = summary[
-        "std_round_duration_seconds"
-    ].fillna(0)
+    summary["std_round_duration_seconds"] = summary["std_round_duration_seconds"].fillna(0)
     summary = summary.rename(columns={"similarity_numeric": "similarity"})
     return summary.sort_values(["protocol", "similarity"])
 
@@ -166,18 +111,10 @@ def make_protocol_comparison(summary):
     comparison = pd.DataFrame(
         {
             "similarity": pivot.index,
-            "riblt_mean_round_duration_seconds": get_metric(
-                "mean_round_duration_seconds", "riblt"
-            ),
-            "merkle_mean_round_duration_seconds": get_metric(
-                "mean_round_duration_seconds", "merkle"
-            ),
-            "riblt_std_round_duration_seconds": get_metric(
-                "std_round_duration_seconds", "riblt"
-            ),
-            "merkle_std_round_duration_seconds": get_metric(
-                "std_round_duration_seconds", "merkle"
-            ),
+            "riblt_mean_round_duration_seconds": get_metric("mean_round_duration_seconds", "riblt"),
+            "merkle_mean_round_duration_seconds": get_metric("mean_round_duration_seconds", "merkle"),
+            "riblt_std_round_duration_seconds": get_metric("std_round_duration_seconds", "riblt"),
+            "merkle_std_round_duration_seconds": get_metric("std_round_duration_seconds", "merkle"),
             "riblt_rounds": get_metric("rounds", "riblt"),
             "merkle_rounds": get_metric("rounds", "merkle"),
         }
@@ -248,15 +185,11 @@ def main():
     )
     args = parser.parse_args()
 
-    completed_df = load_reconciliation_rows(args.metrics_root)
-    rounds = build_round_durations(completed_df)
+    df = load_round_duration_rows(args.metrics_root)
+    summary = make_summary(df)
 
     os.makedirs(args.output_dir, exist_ok=True)
-    rounds.to_csv(
-        os.path.join(args.output_dir, "round_duration_by_trial.csv"), index=False
-    )
-
-    summary = make_summary(rounds)
+    df.to_csv(os.path.join(args.output_dir, "round_duration_by_trial.csv"), index=False)
     summary.to_csv(
         os.path.join(args.output_dir, "duration_summary_by_similarity.csv"), index=False
     )

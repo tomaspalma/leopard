@@ -37,14 +37,12 @@ pub struct SComSendingState {
     pub state: SComReconciliationState,
     pub local_iblt: RatelessIBLT<RIBLTSymbol, HashSet<RIBLTSymbol>>,
     pub session_id: String,
-    pub start_time: Instant,
 }
 
 pub struct SComReceivingState {
     pub local_iblt: RatelessIBLT<RIBLTSymbol, HashSet<RIBLTSymbol>>,
     pub remote_iblt: UnmanagedRatelessIBLT<RIBLTSymbol>,
     pub session_id: String,
-    pub start_time: Instant,
 }
 
 pub struct BloomSendingState {
@@ -102,6 +100,12 @@ pub struct RbfRibltProtocol {
     pub(crate) pending_value_fetch_sessions: Arc<RwLock<HashMap<NodeAddress, String>>>,
     pub(crate) last_reconciled_fingerprint: Arc<RwLock<HashMap<NodeAddress, u64>>>,
     pub(crate) reconciliation_initiated_with: Arc<RwLock<HashSet<NodeAddress>>>,
+    // Preserved from scom_receiving_states before it is removed, so handle_value_fetch_response
+    // can still compute the round duration after that state is gone.
+    pub(crate) round_start_times: Arc<RwLock<HashMap<NodeAddress, Instant>>>,
+    // s_tn captured at bloom stabilization so handle_value_fetch_request can still access it
+    // even after clear_session_state has wiped bloom_receiving_states.
+    pub(crate) captured_stn: Arc<RwLock<HashMap<NodeAddress, Vec<String>>>>,
 }
 
 impl RbfRibltProtocol {
@@ -117,6 +121,8 @@ impl RbfRibltProtocol {
             pending_value_fetch_sessions: Arc::new(RwLock::new(HashMap::new())),
             last_reconciled_fingerprint: Arc::new(RwLock::new(HashMap::new())),
             reconciliation_initiated_with: Arc::new(RwLock::new(HashSet::new())),
+            round_start_times: Arc::new(RwLock::new(HashMap::new())),
+            captured_stn: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 }

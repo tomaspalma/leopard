@@ -1,7 +1,8 @@
-use metrics::counter;
+use metrics::{counter, gauge};
 use runtime::metrics::experiment::get_context;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
+use std::time::Instant;
 use tracing::{error, info};
 
 use connection::{
@@ -18,7 +19,7 @@ use crate::merkle_tree::messages::{MerkleTreeMessageType, MerkleTreeMessageTypeV
 use super::{
     deserializer::MerkleTreeDeserializer,
     messages::{MerkleTreeMessage, MerkleTreeMessageWrapper},
-    tree::BinaryMerkleTree,
+    tree::{BinaryMerkleTree, MerkleTreeSnapshot},
 };
 
 pub struct ReceiveMerkleTreeMessageTask {
@@ -27,6 +28,16 @@ pub struct ReceiveMerkleTreeMessageTask {
     tree: Arc<BinaryMerkleTree>,
     // Keyed by session_id (UUID). Tracks outstanding requests for each reconciliation session.
     pending: Arc<Mutex<HashMap<String, i64>>>,
+    // Keyed by session_id. Records when each reconciliation session started.
+    start_times: Arc<Mutex<HashMap<String, Instant>>>,
+    // Initiator-side: snapshot of the local tree taken when we first received a SyncRoot for
+    // this session.  Used for all local-hash comparisons so the baseline doesn't change while
+    // we are mid-traversal receiving DataResponses.
+    local_snapshots: Arc<Mutex<HashMap<String, MerkleTreeSnapshot>>>,
+    // Responder-side: snapshot of the local tree taken on the first SyncNodeRequest we receive
+    // for a session.  All subsequent SyncNodeRequests for the same session are answered from
+    // this snapshot so the requester sees a consistent tree throughout the session.
+    remote_snapshots: Arc<Mutex<HashMap<String, MerkleTreeSnapshot>>>,
 }
 
 impl ReceiveMerkleTreeMessageTask {
@@ -40,23 +51,34 @@ impl ReceiveMerkleTreeMessageTask {
             state,
             tree,
             pending: Arc::new(Mutex::new(HashMap::new())),
+            start_times: Arc::new(Mutex::new(HashMap::new())),
+            local_snapshots: Arc::new(Mutex::new(HashMap::new())),
+            remote_snapshots: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
+    // Returns the round duration if the session just completed, None if still in progress.
     fn adjust_pending(
         pending: &Arc<Mutex<HashMap<String, i64>>>,
+        start_times: &Arc<Mutex<HashMap<String, Instant>>>,
         session_id: &str,
         delta: i64,
-    ) -> bool {
+    ) -> Option<f64> {
         let mut guard = pending.lock().unwrap();
         if let Some(count) = guard.get_mut(session_id) {
             *count += delta;
             if *count <= 0 {
                 guard.remove(session_id);
-                return true;
+                return Some(
+                    start_times
+                        .lock()
+                        .unwrap()
+                        .remove(session_id)
+                        .map_or(0.0, |t| t.elapsed().as_secs_f64()),
+                );
             }
         }
-        false
+        None
     }
 
     fn handle_message(&self, msg: &MerkleTreeMessage, neighbor: NodeAddress) {
@@ -102,11 +124,21 @@ impl ReceiveMerkleTreeMessageTask {
     ) {
         counter!("merkle_tree_sync_root_received", "neighbor" => format!("{:?}", neighbor))
             .increment(1);
+        let start = Instant::now();
         let local_root = self.tree.get_root_hash();
         if local_root != *root_hash {
             info!("Root hash mismatch. Requesting children nodes sync.");
 
+            // Freeze a snapshot of our local tree for this session.  All hash comparisons in
+            // handle_sync_node_response will use this snapshot so that DataResponses arriving
+            // mid-session and rebuilding our live tree don't change the comparison baseline.
+            self.local_snapshots
+                .lock()
+                .unwrap()
+                .insert(session_id.clone(), self.tree.snapshot());
+
             self.pending.lock().unwrap().insert(session_id.clone(), 2);
+            self.start_times.lock().unwrap().insert(session_id.clone(), start);
 
             let state_clone = self.state.clone();
             let id_clone = self.identifier.connection_info().clone();
@@ -144,6 +176,15 @@ impl ReceiveMerkleTreeMessageTask {
         } else {
             info!("Root hash match. In sync.");
             let context = get_context();
+            gauge!(
+                "reconciliation_round_duration_seconds",
+                "protocol" => "merkle",
+                "neighbor" => format!("{:?}", neighbor),
+                "run_id" => context.run_id().to_string(),
+                "trial" => context.trial().to_string(),
+                "similarity" => context.similarity().to_string()
+            )
+            .set(start.elapsed().as_secs_f64());
             counter!(
                 "reconciliation_completed",
                 "protocol" => "merkle",
@@ -171,14 +212,29 @@ impl ReceiveMerkleTreeMessageTask {
         counter!("merkle_tree_sync_node_request_received", "neighbor" => format!("{:?}", neighbor))
             .increment(1);
         info!("Received SyncNodeRequest from {:?}", node_id);
-        let root_hash = self.tree.get_root_hash();
 
-        let (node_hash, parent_hash, node_key) =
-            if let Some((node, p_hash)) = self.tree.get_node(node_id) {
-                (node.hash, p_hash, node.key)
-            } else {
-                ([0; 32], None, None)
-            };
+        // On the first request for this session, freeze a snapshot of our tree.
+        // Every subsequent request for the same session is answered from that
+        // snapshot so the requester always sees a consistent tree.
+        {
+            let mut snaps = self.remote_snapshots.lock().unwrap();
+            if !snaps.contains_key(&session_id) {
+                snaps.insert(session_id.clone(), self.tree.snapshot());
+            }
+        }
+
+        let (root_hash, node_hash, parent_hash, node_key) = {
+            let snaps = self.remote_snapshots.lock().unwrap();
+            let snap = &snaps[&session_id];
+            let root_hash = snap.get_root_hash();
+            let (node_hash, parent_hash, node_key) =
+                if let Some((node, p_hash)) = snap.get_node(node_id) {
+                    (node.hash, p_hash, node.key)
+                } else {
+                    ([0; 32], None, None)
+                };
+            (root_hash, node_hash, parent_hash, node_key)
+        };
 
         let state_clone = self.state.clone();
         let id_clone = self.identifier.connection_info().clone();
@@ -215,8 +271,17 @@ impl ReceiveMerkleTreeMessageTask {
         counter!("merkle_tree_sync_node_response_received", "neighbor" => format!("{:?}", neighbor))
             .increment(1);
         info!("Received SyncNodeResponse for {:?}", node_id);
-        let local_node = self.tree.get_node(node_id);
-        let local_hash = local_node.map_or([0; 32], |(n, _)| n.hash);
+        // Use the session snapshot for comparison so that Ka/Kb keys received via
+        // DataResponse mid-session (which rebuild the live tree) don't change the
+        // baseline and create false hash matches.
+        let local_hash = {
+            let snaps = self.local_snapshots.lock().unwrap();
+            if let Some(snap) = snaps.get(&session_id) {
+                snap.get_node(node_id).map_or([0; 32], |(n, _)| n.hash)
+            } else {
+                self.tree.get_node(node_id).map_or([0; 32], |(n, _)| n.hash)
+            }
+        };
 
         // Compute the net counter delta for this response:
         //   -1  consumed this response
@@ -233,7 +298,9 @@ impl ReceiveMerkleTreeMessageTask {
             -1 // hashes match, no new requests
         };
 
-        let should_finish = Self::adjust_pending(&self.pending, &session_id, delta);
+        let round_duration = Self::adjust_pending(&self.pending, &self.start_times, &session_id, delta);
+        let local_snapshots = self.local_snapshots.clone();
+        let session_id_for_cleanup = session_id.clone();
 
         if local_hash != *hash {
             let state_clone = self.state.clone();
@@ -298,8 +365,18 @@ impl ReceiveMerkleTreeMessageTask {
             }
         }
 
-        if should_finish {
+        if let Some(duration) = round_duration {
+            local_snapshots.lock().unwrap().remove(&session_id_for_cleanup);
             let context = get_context();
+            gauge!(
+                "reconciliation_round_duration_seconds",
+                "protocol" => "merkle",
+                "neighbor" => format!("{:?}", neighbor),
+                "run_id" => context.run_id().to_string(),
+                "trial" => context.trial().to_string(),
+                "similarity" => context.similarity().to_string()
+            )
+            .set(duration);
             counter!(
                 "reconciliation_completed",
                 "protocol" => "merkle",
@@ -365,6 +442,8 @@ impl ReceiveMerkleTreeMessageTask {
         let neighbor_clone = neighbor.clone();
         let self_addr = format!("{:?}", self.identifier.connection_info());
         let pending = self.pending.clone();
+        let start_times = self.start_times.clone();
+        let local_snapshots = self.local_snapshots.clone();
 
         spawn!({
             if let Some(storage) = state_clone.get_storage("default".to_string()) {
@@ -391,10 +470,18 @@ impl ReceiveMerkleTreeMessageTask {
                     );
                 }
 
-                let should_finish = Self::adjust_pending(&pending, &session_id, -1);
-
-                if should_finish {
+                if let Some(duration) = Self::adjust_pending(&pending, &start_times, &session_id, -1) {
+                    local_snapshots.lock().unwrap().remove(&session_id);
                     let context = get_context();
+                    gauge!(
+                        "reconciliation_round_duration_seconds",
+                        "protocol" => "merkle",
+                        "neighbor" => format!("{:?}", neighbor_clone),
+                        "run_id" => context.run_id().to_string(),
+                        "trial" => context.trial().to_string(),
+                        "similarity" => context.similarity().to_string()
+                    )
+                    .set(duration);
                     counter!(
                         "reconciliation_completed",
                         "protocol" => "merkle",

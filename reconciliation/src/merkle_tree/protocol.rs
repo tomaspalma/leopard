@@ -171,7 +171,9 @@ where
                             Ok(())
                         })
                     }),
-                    Arc::new(TokioPeriodTimeUnit::new(std::time::Duration::from_secs(5))),
+                    Arc::new(TokioPeriodTimeUnit::new(std::time::Duration::from_secs(
+                        3600,
+                    ))),
                 )),
             )
             .await

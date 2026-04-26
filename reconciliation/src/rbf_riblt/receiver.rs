@@ -97,8 +97,10 @@ impl RbfRibltProtocol {
             .remove(neighbor);
         self.scom_sending_states.write().await.remove(neighbor);
         self.scom_receiving_states.write().await.remove(neighbor);
+        self.round_start_times.write().await.remove(neighbor);
         self.bloom_sending_states.write().await.remove(neighbor);
         self.bloom_receiving_states.write().await.remove(neighbor);
+        self.captured_stn.write().await.remove(neighbor);
         self.reconciliation_initiated_with
             .write()
             .await
@@ -286,16 +288,24 @@ impl ReceiveRbfRibltMessageTask {
         info!("Starting scom phase");
         // Atomically check+set riblt_started to prevent duplicate starts
         // from in-flight bloom slices arriving after stabilization.
-        let s_com = {
+        let (s_com, s_tn) = {
             let mut receiving = self.protocol.bloom_receiving_states.write().await;
             match receiving.get_mut(&neighbor) {
                 Some(state) if !state.riblt_started => {
                     state.riblt_started = true;
-                    state.s_com.clone()
+                    (state.s_com.clone(), state.s_tn.clone())
                 }
                 _ => return,
             }
         };
+
+        // Capture s_tn now so handle_value_fetch_request can use it even after
+        // clear_session_state wipes bloom_receiving_states.
+        self.protocol
+            .captured_stn
+            .write()
+            .await
+            .insert(neighbor.clone(), s_tn);
 
         let storage = match self.protocol.state.get_storage("default".to_string()) {
             Some(s) => s,
@@ -320,7 +330,6 @@ impl ReceiveRbfRibltMessageTask {
                 state: SComReconciliationState::SendingSymbols,
                 local_iblt: RatelessIBLT::new(symbols),
                 session_id,
-                start_time: Instant::now(),
             },
         );
 
@@ -335,13 +344,21 @@ impl ReceiveRbfRibltMessageTask {
 
     async fn start_reverse_stream(&self, neighbor: NodeAddress) {
         info!("Starting reverse stream phase");
-        let s_com = {
+        let (s_com, s_tn) = {
             let receiving = self.protocol.bloom_receiving_states.read().await;
             match receiving.get(&neighbor) {
-                Some(s) => s.s_com.clone(),
+                Some(s) => (s.s_com.clone(), s.s_tn.clone()),
                 None => return,
             }
         };
+
+        // Capture s_tn now so handle_value_fetch_request can use it even after
+        // clear_session_state wipes bloom_receiving_states.
+        self.protocol
+            .captured_stn
+            .write()
+            .await
+            .insert(neighbor.clone(), s_tn);
 
         let m_bits = ((s_com.len().max(1)) as f64 / std::f64::consts::LN_2).ceil() as usize;
         let session_id = uuid::Uuid::new_v4().to_string();
@@ -485,13 +502,18 @@ impl ReceiveRbfRibltMessageTask {
             symbols.insert(RIBLTSymbol { key, value });
         }
 
+        self.protocol
+            .round_start_times
+            .write()
+            .await
+            .insert(neighbor.clone(), Instant::now());
+
         self.protocol.scom_receiving_states.write().await.insert(
             neighbor.clone(),
             SComReceivingState {
                 local_iblt: riblt::RatelessIBLT::new(symbols),
                 remote_iblt: UnmanagedRatelessIBLT::new(),
                 session_id: session_id.to_string(),
-                start_time: Instant::now(),
             },
         );
     }
@@ -727,13 +749,15 @@ impl ReceiveRbfRibltMessageTask {
         // Piggyback our s_tn keys — these are keys we have that the neighbor definitely lacks
         // (they didn't pass the neighbor's bloom filter). The IBLT only reconciles s_com, so
         // these would never be discovered through IBLT decoding alone.
+        // Read from captured_stn (frozen at bloom stabilization) rather than bloom_receiving_states,
+        // which may already have been cleared by a concurrent handle_value_fetch_response.
         let s_tn_keys: HashSet<String> = self
             .protocol
-            .bloom_receiving_states
+            .captured_stn
             .read()
             .await
             .get(&neighbor)
-            .map(|s| s.s_tn.iter().cloned().collect())
+            .map(|s| s.iter().cloned().collect())
             .unwrap_or_default();
 
         let mut entries = Vec::new();
@@ -796,12 +820,33 @@ impl ReceiveRbfRibltMessageTask {
 
         let differences_found = !message.entries().is_empty();
 
+        let round_duration = self
+            .protocol
+            .round_start_times
+            .read()
+            .await
+            .get(&neighbor)
+            .map(|t| t.elapsed().as_secs_f64());
+
         self.protocol
             .update_last_reconciled_fingerprint(&neighbor)
             .await;
         self.protocol.clear_session_state(&neighbor).await;
 
         let context = get_context();
+
+        if let Some(duration) = round_duration {
+            gauge!(
+                "reconciliation_round_duration_seconds",
+                "protocol" => "rbf_riblt",
+                "neighbor" => format!("{:?}", neighbor),
+                "run_id" => context.run_id().to_string(),
+                "trial" => context.trial().to_string(),
+                "similarity" => context.similarity().to_string()
+            )
+            .set(duration);
+        }
+
         counter!(
             "reconciliation_completed",
             "protocol" => "rbf_riblt",
@@ -811,15 +856,7 @@ impl ReceiveRbfRibltMessageTask {
             "similarity" => context.similarity().to_string()
         )
         .increment(1);
-        gauge!(
-            "reconciliation_had_differences",
-            "target" => format!("{:?}", neighbor),
-            "protocol" => "rbf_riblt",
-            "run_id" => context.run_id().to_string(),
-            "trial" => context.trial().to_string(),
-            "similarity" => context.similarity().to_string()
-        )
-        .set(if differences_found { 1.0 } else { 0.0 });
+
         runtime::metrics::csv::finish_iteration(
             format!(
                 "{:?}",

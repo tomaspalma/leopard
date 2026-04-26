@@ -1,6 +1,6 @@
 use metrics::{counter, gauge, histogram};
-use runtime::spawn;
 use runtime::metrics::experiment::get_context;
+use runtime::spawn;
 
 use riblt::{symbol::PeelableResult, UnmanagedRatelessIBLT};
 
@@ -143,8 +143,6 @@ impl ReceiveNeighborSymbolsTask {
             let mut collapsed = local_iblt.collapse(&remote_iblt);
             let peel_symbols = collapsed.peel_all_symbols();
 
-            info!("Peel symbols: {:?}", peel_symbols);
-            
             let result = Self::filter_remote_peeled_symbols(peel_symbols);
 
             histogram!("riblt_decode_duration_seconds", "neighbor" => format!("{:?}", neighbor_clone))
@@ -160,6 +158,26 @@ impl ReceiveNeighborSymbolsTask {
         if is_peeling_successful {
             info!("Peeling successful for neighbor {:?}", neighbor);
             let context = get_context();
+
+            let round_duration = self
+                .receiving_states
+                .read()
+                .await
+                .get(&neighbor)
+                .map(|s| s.start_time.elapsed().as_secs_f64());
+
+            if let Some(duration) = round_duration {
+                gauge!(
+                    "reconciliation_round_duration_seconds",
+                    "protocol" => "riblt",
+                    "neighbor" => format!("{:?}", neighbor),
+                    "run_id" => context.run_id().to_string(),
+                    "trial" => context.trial().to_string(),
+                    "similarity" => context.similarity().to_string()
+                )
+                .set(duration);
+            }
+
             counter!(
                 "reconciliation_completed",
                 "protocol" => "riblt",
@@ -174,12 +192,6 @@ impl ReceiveNeighborSymbolsTask {
                 format!("{:?}", neighbor),
                 "riblt",
             );
-            gauge!("reconciliation_had_differences", "target" => format!("{:?}", neighbor))
-                .set(if differences_found { 1.0 } else { 0.0 });
-
-            {
-                self.receiving_states.write().await.remove(&neighbor);
-            }
 
             let state_clone = self.state.clone();
             let id_clone = self.identifier.connection_info().clone();
@@ -304,7 +316,6 @@ impl RouteTask for ReceiveNeighborSymbolsTask {
                 match msg_enum {
                     RIBLTMessageTypeValues::SendSymbol => {
                         info!("Received SendSymbol from {:?}", neighbor);
-            
 
                         if let Some(msg) = deserialized_message
                             .as_any()

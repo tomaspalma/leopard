@@ -1,7 +1,4 @@
-use std::{
-    collections::HashMap,
-    sync::Arc,
-};
+use std::{collections::HashMap, sync::Arc};
 
 use async_trait::async_trait;
 use connection::{
@@ -48,6 +45,8 @@ impl RbfRibltProtocol {
             pending_value_fetch_sessions: self.pending_value_fetch_sessions.clone(),
             last_reconciled_fingerprint: self.last_reconciled_fingerprint.clone(),
             reconciliation_initiated_with: self.reconciliation_initiated_with.clone(),
+            round_start_times: self.round_start_times.clone(),
+            captured_stn: self.captured_stn.clone(),
         })
     }
 
@@ -322,7 +321,9 @@ where
                             Ok(())
                         })
                     }),
-                    Arc::new(TokioPeriodTimeUnit::new(std::time::Duration::from_secs(5))),
+                    Arc::new(TokioPeriodTimeUnit::new(std::time::Duration::from_secs(
+                        3600,
+                    ))),
                 )),
             )
             .await

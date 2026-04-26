@@ -17,15 +17,11 @@ use connection::{
 use membership::{Membership, MembershipNeighbor, MembershipNeighbors};
 use message::Message;
 use protocol::{deserializer::ProtocolDeserializer, Protocol};
-use runtime::{
-    time::{PeriodTimeUnit, TokioPeriodTimeUnit},
-};
+use runtime::time::{PeriodTimeUnit, TokioPeriodTimeUnit};
 use state::node::NodeState;
 
 use crate::{
-    riblt::{
-        receiver::ReceiveNeighborSymbolsTask, RIBLTDeserializer, RIBLT,
-    },
+    riblt::{receiver::ReceiveNeighborSymbolsTask, RIBLTDeserializer, RIBLT},
     ReconciliationProtocol,
 };
 
@@ -107,7 +103,9 @@ where
                                 .await
                         })
                     }),
-                    Arc::new(TokioPeriodTimeUnit::new(std::time::Duration::from_secs(5))),
+                    Arc::new(TokioPeriodTimeUnit::new(std::time::Duration::from_secs(
+                        3600,
+                    ))),
                 )),
             )
             .await

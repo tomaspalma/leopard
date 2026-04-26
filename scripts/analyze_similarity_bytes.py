@@ -186,7 +186,7 @@ def plot_summary(summary, output_dir):
         )
 
     plt.xlabel("Similarity (Jaccard)")
-    plt.ylabel("Mean Data Transmitted (MB)")
+    plt.ylabel("Mean Data Transmitted (Bytes)")
     plt.title("Reconciliation Transmitted Data vs Similarity")
     plt.yscale("log")
     ax = plt.gca()

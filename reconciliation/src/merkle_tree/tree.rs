@@ -1,6 +1,6 @@
 use blake3::Hasher;
 use std::collections::BTreeMap;
-use std::sync::RwLock;
+use std::sync::{Mutex, RwLock};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct MerkleNode {
@@ -10,9 +10,51 @@ pub struct MerkleNode {
     pub key: Option<String>,
 }
 
+/// A frozen, immutable view of the tree taken at one point in time.
+/// Used by the reconciliation protocol so that a session sees a consistent
+/// tree throughout its lifetime, even while the live tree is being updated.
+pub struct MerkleTreeSnapshot {
+    root: Option<Box<MerkleNode>>,
+}
+
+impl MerkleTreeSnapshot {
+    pub fn get_root_hash(&self) -> [u8; 32] {
+        self.root.as_ref().map(|n| n.hash).unwrap_or([0; 32])
+    }
+
+    pub fn get_node(&self, path: &str) -> Option<(MerkleNode, Option<[u8; 32]>)> {
+        let root = self.root.as_deref()?;
+        let mut current = root;
+        let mut parent_hash = None;
+
+        if path == "root" {
+            return Some(((*current).clone(), parent_hash));
+        }
+
+        let parts: Vec<&str> = path.split('-').collect();
+        for part in parts {
+            if part == "root" {
+                continue;
+            }
+            parent_hash = Some(current.hash);
+            if part == "0" || part == "left" {
+                current = current.left.as_deref()?;
+            } else if part == "1" || part == "right" {
+                current = current.right.as_deref()?;
+            } else {
+                return None;
+            }
+        }
+        Some(((*current).clone(), parent_hash))
+    }
+}
+
 pub struct BinaryMerkleTree {
     pub data: RwLock<BTreeMap<String, String>>,
     pub root: RwLock<Option<Box<MerkleNode>>>,
+    // Serialises insert+rebuild so concurrent insertions never let a slower
+    // rebuild overwrite a faster one that already incorporated more keys.
+    insert_rebuild_lock: Mutex<()>,
 }
 
 impl BinaryMerkleTree {
@@ -20,6 +62,15 @@ impl BinaryMerkleTree {
         Self {
             data: RwLock::new(BTreeMap::new()),
             root: RwLock::new(None),
+            insert_rebuild_lock: Mutex::new(()),
+        }
+    }
+
+    /// Return an immutable snapshot of the current root for use during a
+    /// single reconciliation session.
+    pub fn snapshot(&self) -> MerkleTreeSnapshot {
+        MerkleTreeSnapshot {
+            root: self.root.read().unwrap().clone(),
         }
     }
 
@@ -59,6 +110,7 @@ impl BinaryMerkleTree {
     }
 
     pub fn insert(&self, key: String, value: String) {
+        let _guard = self.insert_rebuild_lock.lock().unwrap();
         {
             let mut data = self.data.write().unwrap();
             data.insert(key, value);
@@ -67,6 +119,7 @@ impl BinaryMerkleTree {
     }
 
     pub fn remove(&self, key: &str) {
+        let _guard = self.insert_rebuild_lock.lock().unwrap();
         {
             let mut data = self.data.write().unwrap();
             data.remove(key);
@@ -75,10 +128,11 @@ impl BinaryMerkleTree {
     }
 
     fn rebuild_tree(&self) {
-        let data = self.data.read().unwrap();
-        let entries: Vec<(String, String)> =
-            data.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
-
+        // insert_rebuild_lock must already be held by the caller.
+        let entries: Vec<(String, String)> = {
+            let data = self.data.read().unwrap();
+            data.iter().map(|(k, v)| (k.clone(), v.clone())).collect()
+        };
         let new_root = Self::build_recursive(&entries);
         let mut root = self.root.write().unwrap();
         *root = new_root;
