@@ -7,9 +7,10 @@ cd "$ROOT_DIR"
 
 SIZES=${SIZES:-"100"}
 SIMILARITIES=${SIMILARITIES:-"0,0.05,0.10,0.20,0.30,0.40,0.50,0.60,0.70,0.75,0.80,0.85,0.90,0.95,0.97,0.99"}
-TRIALS=${TRIALS:-"10"}
+TRIALS=${TRIALS:-"5"}
 PROTOCOLS=${PROTOCOLS:-"riblt,merkle,rbf_riblt"}
 OUTPUT_ROOT=${OUTPUT_ROOT:-"sweep"}
+PER_TRIAL_DATASETS=${PER_TRIAL_DATASETS:-true}
 
 echo "Generating datasets for sweep..."
 python3 scripts/generate_data.py --default-matrix --sizes "$SIZES" --similarities "$SIMILARITIES"
@@ -31,7 +32,20 @@ for size in "${size_values[@]}"; do
       for trial in $(seq 1 "$TRIALS"); do
         run_id="${OUTPUT_ROOT}_${protocol}_n${size}_sim${sim_clean}_t${trial}"
         echo "Running $run_id"
-        ./scripts/run_experiment.sh "$protocol" "$dataset_prefix" "$run_id" "$trial" "$sim"
+
+        if [ "$PER_TRIAL_DATASETS" = "true" ]; then
+          trial_prefix="${dataset_prefix}_t${trial}"
+          seed=$((trial * 999983 + size * 97 + 10#$sim_clean))
+          python3 scripts/generate_data.py \
+            --size "$size" --similarity "$sim" \
+            --seed "$seed" \
+            --prefix "$trial_prefix" \
+            --output-dir data/
+          ./scripts/run_experiment.sh "$protocol" "$trial_prefix" "$run_id" "$trial" "$sim"
+          rm -f "data/${trial_prefix}_node1.json" "data/${trial_prefix}_node2.json" "data/${trial_prefix}_node3.json"
+        else
+          ./scripts/run_experiment.sh "$protocol" "$dataset_prefix" "$run_id" "$trial" "$sim"
+        fi
       done
     done
   done

@@ -97,6 +97,9 @@ def main():
         "--similarity", type=float, help="Single similarity value in [0,1]"
     )
     parser.add_argument(
+        "--seed", type=int, default=None, help="Random seed (single-mode); random if omitted"
+    )
+    parser.add_argument(
         "--prefix",
         default="custom",
         help="Prefix for generated files in single-mode",
@@ -139,6 +142,9 @@ def main():
 
     if args.size is None or args.similarity is None:
         parser.error("single-mode requires --size and --similarity")
+
+    seed = args.seed if args.seed is not None else random.randint(0, 10_000_000_000)
+    create_pair(args.size, args.similarity, seed, args.prefix, args.output_dir)
 
 if __name__ == "__main__":
     main()
