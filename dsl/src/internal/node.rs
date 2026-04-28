@@ -9,9 +9,20 @@ use runtime::Task;
 use state::node::{DefaultNodeState, NodeState};
 use tracing::info;
 
+use super::service::{ServiceConfig, ServiceEntry, ServiceReceiver};
+
+pub enum ProtocolChoice {
+    Merkle,
+    Riblt,
+    RbfRiblt,
+}
+
 struct InternalNode {
     host: String,
     port: Option<u16>,
+    dataset: Option<String>,
+    protocol: Option<ProtocolChoice>,
+    services: Vec<ServiceConfig>,
 }
 
 impl InternalNode {
@@ -19,12 +30,23 @@ impl InternalNode {
         Self {
             host: "127.0.0.1".to_string(),
             port: None,
+            dataset: None,
+            protocol: None,
+            services: vec![],
         }
     }
 }
 
 pub struct NodeBuilder {
     nodes: Vec<InternalNode>,
+}
+
+impl ServiceReceiver for NodeBuilder {
+    fn push_service(&mut self, config: ServiceConfig) {
+        if let Some(node) = self.nodes.last_mut() {
+            node.services.push(config);
+        }
+    }
 }
 
 impl NodeBuilder {
@@ -90,6 +112,34 @@ impl NodeBuilder {
         }
 
         self
+    }
+
+    pub fn dataset(mut self, path: impl Into<String>) -> Self {
+        if self.nodes.is_empty() {
+            self.nodes.push(InternalNode::new());
+        }
+
+        if let Some(node) = self.nodes.last_mut() {
+            node.dataset = Some(path.into());
+        }
+
+        self
+    }
+
+    pub fn protocol(mut self, protocol: ProtocolChoice) -> Self {
+        if self.nodes.is_empty() {
+            self.nodes.push(InternalNode::new());
+        }
+
+        if let Some(node) = self.nodes.last_mut() {
+            node.protocol = Some(protocol);
+        }
+
+        self
+    }
+
+    pub fn service(self) -> ServiceEntry<NodeBuilder> {
+        ServiceEntry { parent: self }
     }
 
     pub fn build(self) -> Result<Vec<Box<Task>>, String> {
