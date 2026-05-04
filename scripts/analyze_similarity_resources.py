@@ -302,7 +302,7 @@ def main():
         "std_cpu_round_seconds",
         "Mean CPU Time Per Round (seconds)",
         "CPU Time Per Round vs Similarity",
-        os.path.join(args.output_dir, "cpu_vs_similarity.png"),
+        os.path.join(args.output_dir, "cpu_vs_similarity.pdf"),
     )
 
     plot_metric(
@@ -311,7 +311,7 @@ def main():
         "std_rss_memory_mb",
         "Mean RSS Memory (MB)",
         "RSS Memory vs Similarity",
-        os.path.join(args.output_dir, "memory_vs_similarity.png"),
+        os.path.join(args.output_dir, "memory_vs_similarity.pdf"),
     )
 
     print(f"Wrote resource analysis to {args.output_dir}")

@@ -197,7 +197,7 @@ def plot_round_trip_summary(summary, output_dir):
     plt.legend()
     plt.tight_layout()
     plt.savefig(
-        os.path.join(output_dir, "reconciliation_round_trips_vs_similarity.png")
+        os.path.join(output_dir, "reconciliation_round_trips_vs_similarity.pdf")
     )
     plt.close()
 

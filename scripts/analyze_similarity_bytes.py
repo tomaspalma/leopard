@@ -186,7 +186,7 @@ def plot_summary(summary, output_dir):
         )
 
     plt.xlabel("Similarity (Jaccard)")
-    plt.ylabel("Mean Data Transmitted (Bytes)")
+    plt.ylabel("Mean Data Transmitted (MB)")
     plt.title("Reconciliation Transmitted Data vs Similarity")
     plt.yscale("log")
     ax = plt.gca()
@@ -197,7 +197,7 @@ def plot_summary(summary, output_dir):
     plt.grid(True)
     plt.legend()
     plt.tight_layout()
-    plt.savefig(os.path.join(output_dir, "bytes_vs_similarity.png"))
+    plt.savefig(os.path.join(output_dir, "bytes_vs_similarity.pdf"))
     plt.close()
 
 

@@ -164,7 +164,7 @@ def plot_summary(summary, output_dir):
     plt.grid(True)
     plt.legend()
     plt.tight_layout()
-    plt.savefig(os.path.join(output_dir, "reconciliation_duration_vs_similarity.png"))
+    plt.savefig(os.path.join(output_dir, "reconciliation_duration_vs_similarity.pdf"))
     plt.close()
 
 
