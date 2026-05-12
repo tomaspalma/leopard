@@ -193,6 +193,7 @@ def plot_round_trip_summary(summary, output_dir):
     ax = plt.gca()
     ax.yaxis.set_major_locator(mticker.LogLocator(base=10, subs=(1.0, 2.0, 5.0)))
     ax.yaxis.set_major_formatter(mticker.FuncFormatter(lambda value, _pos: f"{value:g}"))
+    ax.xaxis.set_major_locator(mticker.MultipleLocator(0.05))
     plt.grid(True)
     plt.legend()
     plt.tight_layout()

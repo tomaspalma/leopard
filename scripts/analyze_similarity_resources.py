@@ -88,18 +88,11 @@ def build_cpu_round_deltas(cpu_df):
     if cpu_df.empty:
         return pd.DataFrame()
 
-    cpu_df = cpu_df.copy().rename(columns={"value": "cpu_time_seconds_total"})
-    rounds = round_values(cpu_df, "cpu_time_seconds_total")
+    cpu_df = cpu_df.copy().rename(columns={"value": "cpu_round_seconds"})
+    rounds = round_values(cpu_df, "cpu_round_seconds")
     if rounds.empty:
         return rounds
 
-    rounds = rounds.sort_values(["run_id", "protocol", "cpu_time_seconds_total"])
-    rounds["cpu_round_seconds"] = rounds.groupby(["run_id", "protocol"])[
-        "cpu_time_seconds_total"
-    ].diff()
-    rounds["cpu_round_seconds"] = rounds["cpu_round_seconds"].fillna(
-        rounds["cpu_time_seconds_total"]
-    )
     rounds["cpu_round_seconds"] = rounds["cpu_round_seconds"].clip(lower=0)
     rounds["cpu_round_ms"] = rounds["cpu_round_seconds"] * 1000.0
     return rounds
@@ -205,6 +198,7 @@ def apply_log_plain_ticks():
     ax.yaxis.set_major_formatter(
         mticker.FuncFormatter(lambda value, _pos: f"{value:g}")
     )
+    ax.xaxis.set_major_locator(mticker.MultipleLocator(0.05))
 
 
 def plot_metric(summary, value_col, std_col, ylabel, title, output_path):
@@ -256,7 +250,7 @@ def main():
     )
     args = parser.parse_args()
 
-    cpu_df = load_metric_rows(args.metrics_root, "process_cpu_time_seconds_total")
+    cpu_df = load_metric_rows(args.metrics_root, "process_cpu_delta_seconds")
     mem_df = load_metric_rows(args.metrics_root, "process_rss_memory_bytes")
 
     cpu_rounds = build_cpu_round_deltas(cpu_df)

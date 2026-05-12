@@ -161,6 +161,7 @@ def plot_summary(summary, output_dir):
     ax.yaxis.set_major_formatter(
         mticker.FuncFormatter(lambda value, _pos: f"{value:g}")
     )
+    ax.xaxis.set_major_locator(mticker.MultipleLocator(0.05))
     plt.grid(True)
     plt.legend()
     plt.tight_layout()
