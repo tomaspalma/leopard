@@ -35,6 +35,7 @@ membership-protocols = { path = "./membership/src/protocols" }
 config = { path = "./config" }
 reconciliation = { path = "./reconciliation" }
 services = { path = "./services" }
+dsl = { path = "./dsl" }
 metrics = "0.24.3"
 clap = { version = "4.6.0", features = ["derive"] }
 futures = "0.3"

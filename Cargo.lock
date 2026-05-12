@@ -501,7 +501,12 @@ version = "0.1.0"
 dependencies = [
  "config",
  "connection",
+ "futures",
+ "membership-protocols",
+ "node",
+ "reconciliation",
  "runtime",
+ "services",
  "state",
  "tracing",
 ]
@@ -1517,6 +1522,7 @@ dependencies = [
  "config",
  "connection",
  "dashmap 6.1.0",
+ "dsl",
  "futures",
  "log",
  "membership-protocols",

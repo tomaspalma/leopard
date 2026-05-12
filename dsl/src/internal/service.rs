@@ -2,6 +2,7 @@ pub trait ServiceReceiver {
     fn push_service(&mut self, config: ServiceConfig);
 }
 
+#[derive(Clone)]
 pub enum ServiceConfig {
     Http { port: u16 },
     Ws { port: u16 },

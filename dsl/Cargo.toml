@@ -8,5 +8,10 @@ connection = { path = "../connection" }
 runtime = { path = "../runtime" }
 state = { path = "../state" }
 config = { path = "../config" }
+node = { path = "../node" }
+reconciliation = { path = "../reconciliation" }
+membership-protocols = { path = "../membership/src/protocols" }
+services = { path = "../services" }
 
 tracing = "0.1"
+futures = "0.3"
