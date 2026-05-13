@@ -27,11 +27,8 @@ pub const BLOOM_HASHES: u64 = 1;
 pub const BLOOM_C_ELEM: usize = 32;
 pub const RIBLT_BATCH_SIZE: usize = 5;
 
-#[derive(Debug, Clone, PartialEq)]
-pub enum SComReconciliationState {
-    SendingSymbols,
-    AwaitingConfirmation,
-}
+/// Re-use the identical enum from the base RIBLT protocol.
+pub type SComReconciliationState = crate::riblt::ReconciliationState;
 
 pub struct SComSendingState {
     pub state: SComReconciliationState,

@@ -7,11 +7,16 @@ use std::{
 use connection::{node::port::NodeAddress, route::RouteTask};
 use metrics::{counter, gauge, histogram};
 use protocol::deserializer::ProtocolDeserializer;
-use riblt::{symbol::PeelableResult, RatelessIBLT, UnmanagedRatelessIBLT};
+use riblt::{RatelessIBLT, UnmanagedRatelessIBLT};
 use runtime::metrics::experiment::get_context;
 use runtime::spawn;
 use state::node::NodeState;
 use tracing::{error, info};
+
+use crate::riblt::{
+    messages::RIBLTSymbol,
+    session::{absorb_coded_symbols, collapse_and_peel, store_symbols},
+};
 
 use crate::rbf_riblt::{
     bloom::BloomFilter,
@@ -25,7 +30,6 @@ use crate::rbf_riblt::{
     BloomReceivingState, BloomSendingState, SComReceivingState, SComReconciliationState,
     SComSendingState, RBF_RIBLT_PROTOCOL_ID,
 };
-use crate::riblt::messages::RIBLTSymbol;
 
 use super::RbfRibltProtocol;
 
@@ -436,21 +440,6 @@ impl ReceiveRbfRibltMessageTask {
         }
     }
 
-    fn partition_peeled_symbols(
-        peeled_symbols: Vec<PeelableResult<RIBLTSymbol>>,
-    ) -> (Vec<RIBLTSymbol>, Vec<RIBLTSymbol>) {
-        let mut remote = Vec::new();
-        let mut local = Vec::new();
-        for symbol in peeled_symbols {
-            match symbol {
-                PeelableResult::Remote(s) => remote.push(s),
-                PeelableResult::Local(s) => local.push(s),
-                _ => {}
-            }
-        }
-        (remote, local)
-    }
-
     async fn init_scom_receiving_state_if_needed(&self, neighbor: &NodeAddress, session_id: &str) {
         let should_reset = self
             .protocol
@@ -533,52 +522,25 @@ impl ReceiveRbfRibltMessageTask {
             .await
             .get_mut(&neighbor)
         {
-            Some(status) => {
-                for symbol in message.symbols() {
-                    let mut cs = riblt::CodedSymbol::new();
-                    cs.sum = symbol.sum.clone();
-                    cs.hash = symbol.hash;
-                    cs.count = symbol.count;
-                    status.remote_iblt.add_coded_symbol(&cs);
-                }
-
-                let coded_symbols_len = status.remote_iblt.coded_symbols.len();
-                status.local_iblt.extend_coded_symbols(coded_symbols_len);
-
-                (
-                    status.local_iblt.coded_symbols.clone(),
-                    status.remote_iblt.coded_symbols.clone(),
-                )
-            }
+            Some(status) => absorb_coded_symbols(
+                &mut status.remote_iblt,
+                &mut status.local_iblt,
+                message.symbols(),
+            ),
             None => return,
         };
 
-        let neighbor_clone = neighbor.clone();
-        let (is_peeling_successful, remote_symbols, local_symbols) =
-            tokio::task::spawn_blocking(move || {
-                let local_iblt = UnmanagedRatelessIBLT {
-                    coded_symbols: local_coded_symbols,
-                };
-                let remote_iblt = UnmanagedRatelessIBLT {
-                    coded_symbols: remote_coded_symbols,
-                };
+        let decode_start = std::time::Instant::now();
+        let peel_result = collapse_and_peel(local_coded_symbols, remote_coded_symbols).await;
+        histogram!(
+            "rbf_riblt_decode_duration_seconds",
+            "neighbor" => format!("{:?}", neighbor)
+        )
+        .record(decode_start.elapsed().as_secs_f64());
 
-                let decode_start = std::time::Instant::now();
-                let mut collapsed = local_iblt.collapse(&remote_iblt);
-                let peel_symbols = collapsed.peel_all_symbols();
-                let (remote, local) = Self::partition_peeled_symbols(peel_symbols);
-
-                histogram!(
-                    "rbf_riblt_decode_duration_seconds",
-                    "neighbor" => format!("{:?}", neighbor_clone)
-                )
-                .record(decode_start.elapsed().as_secs_f64());
-
-                let successful = collapsed.is_empty();
-                (successful, remote, local)
-            })
-            .await
-            .unwrap();
+        let is_peeling_successful = peel_result.successful;
+        let remote_symbols = peel_result.remote_symbols;
+        let local_symbols = peel_result.local_symbols;
 
         if is_peeling_successful {
             // Keys the neighbor is missing: IBLT-local elements (we have, they don't) plus our
@@ -807,18 +769,15 @@ impl ReceiveRbfRibltMessageTask {
             return;
         }
 
-        if let Some(storage) = self.protocol.state.get_storage("default".to_string()) {
-            for entry in message.entries() {
-                storage
-                    .store(Box::new(state::storage::item::DefaultDataStateItem::new(
-                        entry.key().to_string(),
-                        entry.value().to_string(),
-                    )))
-                    .await;
-            }
-        }
-
-        let differences_found = !message.entries().is_empty();
+        let symbols: Vec<RIBLTSymbol> = message
+            .entries()
+            .iter()
+            .map(|e| RIBLTSymbol {
+                key: e.key().to_string(),
+                value: e.value().to_string(),
+            })
+            .collect();
+        store_symbols(&self.protocol.state, symbols).await;
 
         let round_duration = self
             .protocol

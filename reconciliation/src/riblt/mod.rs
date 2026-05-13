@@ -2,10 +2,11 @@ pub mod deserializer;
 pub mod messages;
 pub mod protocols;
 pub mod receiver;
+pub mod session;
+
+pub use deserializer::RIBLTDeserializer;
 
 use runtime::spawn;
-
-use deserializer::RIBLTDeserializer;
 
 use std::collections::{HashMap, HashSet};
 use tokio::sync::RwLock;
@@ -15,14 +16,13 @@ use tracing::info;
 
 use state::{
     node::{DefaultNodeState, NodeState},
-    storage::item::DataStateItem,
 };
 
 use connection::node::port::NodeAddress;
 use membership::Membership;
 
 use crate::riblt::messages::{
-    RIBLTCodedSymbol, RIBLTMessageType, RIBLTMessageTypeValues, RIBLTSendSymbolMessage, RIBLTSymbol,
+    RIBLTMessageType, RIBLTMessageTypeValues, RIBLTSendSymbolMessage, RIBLTSymbol,
 };
 use riblt::{RatelessIBLT, UnmanagedRatelessIBLT};
 
@@ -106,10 +106,6 @@ impl RIBLT {
         }
     }
 
-    pub fn peeling_successful(riblt: &mut UnmanagedRatelessIBLT<RIBLTSymbol>) -> bool {
-        riblt.is_empty()
-    }
-
     async fn get_neighbor_sending_state_status(
         neighbor: &NodeAddress,
         sending_states: &Arc<RwLock<HashMap<NodeAddress, SendingState>>>,
@@ -119,18 +115,6 @@ impl RIBLT {
             Some(status.state.clone())
         } else {
             None
-        }
-    }
-
-    fn update_symbols(
-        symbols: &mut HashSet<RIBLTSymbol>,
-        items: Vec<Box<dyn DataStateItem + Send + Sync>>,
-    ) {
-        for item in items {
-            symbols.insert(RIBLTSymbol {
-                key: item.key().to_string(),
-                value: item.value().to_string(),
-            });
         }
     }
 
@@ -199,7 +183,7 @@ impl RIBLT {
                 for _ in 0..BATCH_SIZE {
                     let coded_symbol = status_guard.local_iblt.get_coded_symbol(current_index);
 
-                    let symbol_message = RIBLTCodedSymbol {
+                    let symbol_message = crate::riblt::messages::RIBLTCodedSymbol {
                         sum: coded_symbol.sum,
                         hash: coded_symbol.hash,
                         count: coded_symbol.count,
@@ -298,16 +282,7 @@ impl RIBLT {
         sending_states: Arc<RwLock<HashMap<NodeAddress, SendingState>>>,
         neighbor: NodeAddress,
     ) {
-        let mut symbols = HashSet::new();
-        if let Some(storage) = state.get_storage("default".to_string()) {
-            for item in storage.items() {
-                symbols.insert(RIBLTSymbol {
-                    key: item.key().to_string(),
-                    value: item.value().to_string(),
-                });
-            }
-        }
-
+        let symbols = session::load_iblt_symbols(&state);
         sending_states.write().await.insert(
             neighbor,
             SendingState::new(
@@ -325,16 +300,7 @@ impl RIBLT {
         neighbor: NodeAddress,
         session_id: String,
     ) {
-        let mut symbols = HashSet::new();
-        if let Some(storage) = state.get_storage("default".to_string()) {
-            for item in storage.items() {
-                symbols.insert(RIBLTSymbol {
-                    key: item.key().to_string(),
-                    value: item.value().to_string(),
-                });
-            }
-        }
-
+        let symbols = session::load_iblt_symbols(&state);
         receiving_states.write().await.insert(
             neighbor,
             ReceivingState::new(

@@ -137,12 +137,8 @@ impl RbfRibltBloomFilterSliceMessage {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Archive, PartialEq, Eq, Hash)]
-pub struct RbfRibltCodedSymbol {
-    pub sum: Vec<u8>,
-    pub hash: u64,
-    pub count: i64,
-}
+/// Re-use the identical coded-symbol type from the base RIBLT protocol.
+pub type RbfRibltCodedSymbol = crate::riblt::messages::RIBLTCodedSymbol;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Archive)]
 pub struct RbfRibltSComSendSymbolMessage {

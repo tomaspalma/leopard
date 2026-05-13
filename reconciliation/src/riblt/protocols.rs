@@ -1,4 +1,4 @@
-use std::{collections::HashSet, sync::Arc};
+use std::sync::Arc;
 
 use tokio::sync::Mutex;
 use tracing::info;
@@ -60,15 +60,6 @@ where
         let protocol_id = self.id;
         let sending_states = self.sending_states.clone();
         let receiving_states = self.receiving_states.clone();
-
-        if let Some(storage) = self.state.get_storage("default".to_string()) {
-            let items = storage.items();
-            let mut symbols = HashSet::new();
-
-            Self::update_symbols(&mut symbols, items);
-        } else {
-            info!("No default storage found");
-        }
 
         let state_clone = self.state.clone();
         self.state
