@@ -50,6 +50,17 @@ impl MetricRegistry {
                 )
                 .increment(bytes_sent);
             }
+            4 => {
+                metrics::counter!(
+                    "rf_riblt_bytes_sent",
+                    "target" => target_str.to_string(),
+                    "protocol" => protocol_label.to_string(),
+                    "run_id" => run_id,
+                    "trial" => trial,
+                    "similarity" => similarity
+                )
+                .increment(bytes_sent);
+            }
             _ => {}
         }
     }

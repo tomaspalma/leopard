@@ -19,6 +19,7 @@ pub async fn custom_nodes(
         "merkle" => ProtocolChoice::Merkle,
         "riblt" => ProtocolChoice::Riblt,
         "rbf_riblt" => ProtocolChoice::RbfRiblt,
+        "rf_riblt" => ProtocolChoice::RfRiblt,
         _ => panic!("Unknown protocol: {}", protocol),
     };
 

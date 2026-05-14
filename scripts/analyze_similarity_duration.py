@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 import pandas as pd
 
-SUPPORTED_PROTOCOLS = ["riblt", "merkle", "rbf_riblt"]
+SUPPORTED_PROTOCOLS = ["riblt", "merkle", "rbf_riblt", "rf_riblt"]
 
 
 def load_round_duration_rows(metrics_root):

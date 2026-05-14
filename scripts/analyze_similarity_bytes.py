@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 import pandas as pd
 
-SUPPORTED_PROTOCOLS = ["riblt", "merkle", "rbf_riblt"]
+SUPPORTED_PROTOCOLS = ["riblt", "merkle", "rbf_riblt", "rf_riblt"]
 
 
 def parse_labels(label_str):
@@ -199,6 +199,65 @@ def plot_summary(summary, output_dir):
     plt.legend()
     plt.tight_layout()
     plt.savefig(os.path.join(output_dir, "bytes_vs_similarity.pdf"))
+    plt.close()
+
+    _plot_ratio(summary, output_dir)
+    _plot_overhead(summary, output_dir)
+
+
+def _plot_ratio(summary, output_dir):
+    """Ratio of each protocol's bytes to riblt baseline, per similarity."""
+    pivot = summary.pivot_table(
+        index="similarity", columns="protocol", values="mean_transmitted_bytes"
+    )
+    if "riblt" not in pivot.columns:
+        return
+
+    plt.figure(figsize=(10, 6))
+    for proto in pivot.columns:
+        if proto == "riblt":
+            continue
+        ratio = pivot[proto] / pivot["riblt"]
+        plt.plot(pivot.index, ratio, marker="o", label=proto)
+
+    plt.axhline(1.0, color="black", linewidth=0.8, linestyle="--", label="riblt (baseline)")
+    plt.xlabel("Similarity (Jaccard)")
+    plt.ylabel("Bytes / RIBLT bytes  (lower is better)")
+    plt.title("Relative Transmitted Bytes vs RIBLT Baseline")
+    plt.gca().xaxis.set_major_locator(mticker.MultipleLocator(0.05))
+    plt.grid(True)
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig(os.path.join(output_dir, "bytes_ratio_vs_similarity.pdf"))
+    plt.close()
+
+
+def _plot_overhead(summary, output_dir):
+    """Absolute bytes saved vs riblt, showing where filter overhead lies."""
+    pivot = summary.pivot_table(
+        index="similarity", columns="protocol", values="mean_transmitted_bytes"
+    )
+    if "riblt" not in pivot.columns:
+        return
+
+    target_protos = [p for p in ["rbf_riblt", "rf_riblt"] if p in pivot.columns]
+    if not target_protos:
+        return
+
+    plt.figure(figsize=(10, 6))
+    for proto in target_protos:
+        overhead = pivot[proto] - pivot["riblt"]
+        plt.plot(pivot.index, overhead, marker="o", label=f"{proto} overhead vs riblt")
+
+    plt.axhline(0, color="black", linewidth=0.8, linestyle="--")
+    plt.xlabel("Similarity (Jaccard)")
+    plt.ylabel("Extra bytes vs plain RIBLT")
+    plt.title("Protocol Filter Overhead (bytes above RIBLT baseline)")
+    plt.gca().xaxis.set_major_locator(mticker.MultipleLocator(0.05))
+    plt.grid(True)
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig(os.path.join(output_dir, "bytes_overhead_vs_similarity.pdf"))
     plt.close()
 
 

@@ -9,6 +9,7 @@ use membership_protocols::DefaultMembershipProtocol;
 use node::Node;
 use reconciliation::merkle_tree::protocol::MerkleTreeReconciliationProtocol;
 use reconciliation::rbf_riblt::RbfRibltProtocol;
+use reconciliation::rf_riblt::RfRibltProtocol;
 use reconciliation::riblt::RIBLT;
 use runtime::Task;
 use services::http::NodeHTTPService;
@@ -25,6 +26,7 @@ pub enum ProtocolChoice {
     Merkle,
     Riblt,
     RbfRiblt,
+    RfRiblt,
 }
 
 pub struct BuildResult {
@@ -195,6 +197,9 @@ impl NodeBuilder {
                             ))),
                             ProtocolChoice::RbfRiblt => node.add_protocol(Box::new(
                                 RbfRibltProtocol::new(node_state.clone(), address.clone()),
+                            )),
+                            ProtocolChoice::RfRiblt => node.add_protocol(Box::new(
+                                RfRibltProtocol::new(node_state.clone(), address.clone()),
                             )),
                         }
 

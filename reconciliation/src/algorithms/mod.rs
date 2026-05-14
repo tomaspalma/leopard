@@ -1,3 +1,5 @@
+pub mod ribbon;
+
 pub trait SimilarityLevelDegree<D> {
     fn degree(&self) -> D;
 }
