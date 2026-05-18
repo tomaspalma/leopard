@@ -1,339 +1,283 @@
-use crate::mapping;
-use crate::symbol;
+use std::collections::BinaryHeap;
 
-/// Constant for block size.
-/// As it can be computationally expensive to iterate over the set, it makes sense to generate
-/// a 'block' of coded symbols at a time.
-///
-/// Massive values reduce iterations over the set, but increase memory usage and are more likely to
-/// be generating CodedSymbols that are not used
-///
-/// It might make sense to set a BLOCK_SIZE that is inversly proportional to size of the Symbol
-pub const BLOCK_SIZE: usize = 1024;
+use crate::mapping::RandomMapping;
+use crate::symbol::{CodedSymbol, HashedSymbol, Symbol};
 
-/// There is a managed and unmanaged version of the RatelessIBLT
-/// It is expected that the managed version will be used when we have access to the set
-/// The managed version will generate coded symbols as needed (for efficiencey, it will generate a 'block' of coded symbols at a time)
-/// The unmanaged version will be used whereever we don't have access to the set
-pub struct RatelessIBLT<T, I>
-where
-    T: symbol::Symbol,
-    I: IntoIterator<Item = T> + Clone,
-{
-    pub coded_symbols: Vec<symbol::CodedSymbol<T>>,
-    set_iterator: I,
+// ─── Heap entry ───────────────────────────────────────────────────────────────
+
+#[derive(Eq, PartialEq)]
+struct SymbolMapping {
+    coded_idx: usize,
+    source_idx: usize,
 }
 
-// It might be nice to 'peel' the symbols out as an iterator
-// impl<T, I> Iterator for RatelessIBLT<T, I>
-// where
-//     T: symbol::Symbol,
-//     I: IntoIterator<Item = T> + Clone,
-// {
-//     type Item = T;
-//
-//     fn next(&mut self) -> Option<Self::Item> {
-//         todo!();
-//     }
-// }
+// Reverse the natural ordering so BinaryHeap becomes a min-heap keyed by coded_idx.
+impl Ord for SymbolMapping {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        other.coded_idx.cmp(&self.coded_idx)
+            .then(other.source_idx.cmp(&self.source_idx))
+    }
+}
 
-impl<T, I> RatelessIBLT<T, I>
-where
-    T: symbol::Symbol,
-    I: IntoIterator<Item = T> + Clone,
-{
-    /// CodedSymbols are created as required, this method extends the codedSymbols to at least the provided index
-    pub fn extend_coded_symbols(&mut self, index: usize) {
-        // extend the coded symbols so that we can access the coded symbol at the provided index
-        // if the index is within the current length of the coded_symbols, we do nothing
-        let current_len = self.coded_symbols.len();
-        if index < current_len {
-            return;
-        }
+impl PartialOrd for SymbolMapping {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
 
-        // we should generate at minimum the BLOCK_SIZE number of coded symbols
-        let extend_until = usize::max(index + 1, current_len + BLOCK_SIZE);
+// ─── CodingWindow ─────────────────────────────────────────────────────────────
 
-        for _ in current_len..extend_until {
-            self.coded_symbols.push(symbol::CodedSymbol::new());
-        }
+// Shared core for both Encoder and Decoder.
+// Tracks a set of symbols and efficiently maps them onto coded symbol indices
+// using a min-heap ordered by each symbol's next pending coded-symbol index.
+struct CodingWindow<T: Symbol> {
+    symbols: Vec<HashedSymbol<T>>,
+    mappings: Vec<RandomMapping>,
+    queue: BinaryHeap<SymbolMapping>,
+    next_idx: usize,
+}
 
-        let cloned_set_iterator = self.set_iterator.clone();
-
-        for item in cloned_set_iterator.into_iter() {
-            let item_mapping = mapping::RandomMapping::new(&item);
-
-            for i in item_mapping
-                .take_while(|&x| x < extend_until)
-                .filter(|&x| x >= current_len)
-            {
-                self.coded_symbols[i].apply(&item, symbol::Direction::Add);
-            }
+impl<T: Symbol> CodingWindow<T> {
+    fn new() -> Self {
+        Self {
+            symbols: Vec::new(),
+            mappings: Vec::new(),
+            queue: BinaryHeap::new(),
+            next_idx: 0,
         }
     }
 
-    /// Returns the coded symbol at the provided index.
-    ///
-    /// It is expected that this will be called in a loop to stream the coded symbols to a remote server.
-    ///
-    /// If the index is greater than the current length of the coded symbols, we extend the coded symbols.
-    pub fn get_coded_symbol(&mut self, index: usize) -> symbol::CodedSymbol<T> {
-        if index >= self.coded_symbols.len() {
-            self.extend_coded_symbols(index);
+    fn add_symbol(&mut self, s: T) {
+        let hash = s.hash_();
+        self.add_hashed_symbol(HashedSymbol { symbol: s, hash });
+    }
+
+    fn add_hashed_symbol(&mut self, hs: HashedSymbol<T>) {
+        // Consume the first mapping index (always 0) to advance the iterator
+        // past it, leaving the mapping ready to yield the second index on the
+        // next call.  The heap entry carries the initial coded_idx of 0.
+        let mut mapping = RandomMapping::from_hash(hs.hash);
+        let first_idx = mapping.next().unwrap();
+        self.add_hashed_symbol_at(hs, first_idx, mapping);
+    }
+
+    // Insert a symbol whose mapping has already been fast-forwarded: first_idx
+    // is the next coded-symbol index it needs to be applied to, and mapping is
+    // positioned one step beyond that.  Used by Decoder when adding a freshly
+    // peeled symbol to the remote/local sub-windows.
+    fn add_hashed_symbol_at(
+        &mut self,
+        hs: HashedSymbol<T>,
+        first_idx: usize,
+        mapping: RandomMapping,
+    ) {
+        let source_idx = self.symbols.len();
+        self.symbols.push(hs);
+        self.mappings.push(mapping);
+        self.queue.push(SymbolMapping { coded_idx: first_idx, source_idx });
+    }
+
+    // Apply every symbol that maps to `next_idx` to `cs`, then advance next_idx.
+    // `direction` is +1 (add) or -1 (remove).
+    fn apply_window(&mut self, mut cs: CodedSymbol<T>, direction: i64) -> CodedSymbol<T> {
+        while let Some(top) = self.queue.peek() {
+            if top.coded_idx != self.next_idx {
+                break;
+            }
+            let sm = self.queue.pop().unwrap();
+            cs.apply_hashed(&self.symbols[sm.source_idx], direction);
+            let next_coded_idx = self.mappings[sm.source_idx].next().unwrap();
+            self.queue.push(SymbolMapping { coded_idx: next_coded_idx, source_idx: sm.source_idx });
+        }
+        self.next_idx += 1;
+        cs
+    }
+
+    fn reset(&mut self) {
+        self.symbols.clear();
+        self.mappings.clear();
+        self.queue.clear();
+        self.next_idx = 0;
+    }
+}
+
+// ─── Encoder ──────────────────────────────────────────────────────────────────
+
+/// Incrementally generates the infinite coded-symbol sequence for a fixed set.
+/// Symbols must be added before the first call to `get_coded_symbol`.
+pub struct Encoder<T: Symbol> {
+    window: CodingWindow<T>,
+    coded_symbols: Vec<CodedSymbol<T>>,
+}
+
+impl<T: Symbol> Encoder<T> {
+    pub fn new(items: impl IntoIterator<Item = T>) -> Self {
+        let mut enc = Self { window: CodingWindow::new(), coded_symbols: Vec::new() };
+        for item in items {
+            enc.window.add_symbol(item);
+        }
+        enc
+    }
+
+    pub fn add_symbol(&mut self, s: T) {
+        assert!(
+            self.coded_symbols.is_empty(),
+            "add_symbol called after encoding started"
+        );
+        self.window.add_symbol(s);
+    }
+
+    /// Return the coded symbol at `index`, generating and caching all preceding
+    /// symbols if necessary.
+    pub fn get_coded_symbol(&mut self, index: usize) -> CodedSymbol<T> {
+        while self.coded_symbols.len() <= index {
+            let cs = self.window.apply_window(CodedSymbol::new(), 1);
+            self.coded_symbols.push(cs);
         }
         self.coded_symbols[index].clone()
     }
 
-    /// Constructing a new RatelessIBLT requires a set of symbols that can be iterated over.
-    /// The RatelessIBLT will generate coded symbols as needed. So this set may be iterated over multiple times.
-    ///
-    /// It is the responsibility of the calling code to create a new RatelessIBLT if the set changes.
-    pub fn new(set_iterator: I) -> Self {
-        let mut riblt = RatelessIBLT {
-            coded_symbols: Vec::new(),
-            set_iterator,
-        };
-        riblt.extend_coded_symbols(0);
-        riblt
-    }
-
-    /// Join two vectors of codedSymbols together produced from two distinct sets.
-    /// The results are only valid if there were no duplicates between the original sets.
-    pub fn combine(&mut self, other: &RatelessIBLT<T, I>) -> UnmanagedRatelessIBLT<T> {
-        // if the passed in RatelessIBLT has more coded symbols than self, we extend Self
-        self.extend_coded_symbols(other.coded_symbols.len());
-        combine(&self.coded_symbols, &other.coded_symbols)
-    }
-
-    /// Subtract a remote sequence of codedSymbols from a local sequence.
-    pub fn collapse(&mut self, other: &UnmanagedRatelessIBLT<T>) -> UnmanagedRatelessIBLT<T> {
-        // if the passed in RatelessIBLT has more coded symbols than self, we extend Self
-        self.extend_coded_symbols(other.coded_symbols.len());
-        collapse(&self.coded_symbols, &other.coded_symbols)
-    }
-
-    /// If possible, peel a single symbol from the RatelessIBLT
-    pub fn peel_one_symbol(&mut self) -> symbol::PeelableResult<T> {
-        peel_one_symbol(&mut self.coded_symbols)
-    }
-
-    /// Peel all symbols from the RatelessIBLT that we possibly can
-    ///
-    /// It is not expected that this would be called on a RatelessIBLT as we still have access to
-    /// the set that we used to construct it.
-    ///
-    /// We expect to call this on an UnmanagedRatelessIBLT that was produced from collapsing a
-    /// remote against our local
-    pub fn peel_all_symbols(&mut self) -> Vec<symbol::PeelableResult<T>> {
-        let mut peeled_symbols = Vec::new();
-        loop {
-            let peeled_symbol = self.peel_one_symbol();
-            match peeled_symbol {
-                symbol::PeelableResult::NotPeelable => {
-                    break;
-                }
-                _ => {
-                    peeled_symbols.push(peeled_symbol);
-                }
-            }
-        }
-        peeled_symbols
-    }
-
-    /// returns true if there are no symbols
-    /// If we can't peel any symbols, but it is not empty it means that we have symbols that
-    /// can't be recovered
-    /// We can't know if the RatelessIBLT is empty until we have iterated over the set
-    pub fn is_empty(&mut self) -> bool {
-        self.extend_coded_symbols(0); // This does nothing if we already have some coded symbols
-        is_empty(&self.coded_symbols)
+    pub fn reset(&mut self) {
+        self.window.reset();
+        self.coded_symbols.clear();
     }
 }
 
-/// The unmanaged version of the RatelessIBLT is used when we don't have access to the set.
-/// It is also used when we want to combine or collapse two RatelessIBLTs.
+// ─── Decoder ──────────────────────────────────────────────────────────────────
+
+/// Decodes the symmetric difference between a local set and a remote set.
 ///
-/// In expected use, we will have a RatelessIBLT constructed from a locally available set of symbols.
-/// We will use an UnmanagedRatelessIBLT to hold the coded symbols streamed from a remote server.
-///
-/// Collapsing the two will give us the symbols that were in the remote set but not in the local set.
-/// We can use these to correct our local set.
-///
-/// It will also give us the symbols that were in the local set but not in the remote set.
-/// We could send these to the remote server to correct their set.
-pub struct UnmanagedRatelessIBLT<T>
-where
-    T: symbol::Symbol,
-{
-    pub coded_symbols: Vec<symbol::CodedSymbol<T>>,
+/// Call `add_symbol` for every element of the local set, then feed remote coded
+/// symbols one at a time with `add_coded_symbol`.  After each batch, call
+/// `try_decode` to peel as many symbols as possible.  `decoded()` returns true
+/// when every received coded symbol has been resolved.
+pub struct Decoder<T: Symbol> {
+    cs: Vec<CodedSymbol<T>>,     // collapsed coded symbols received so far
+    window: CodingWindow<T>,     // local set (subtracted from incoming symbols)
+    remote: CodingWindow<T>,     // symbols decoded as remote-only
+    local: CodingWindow<T>,      // symbols decoded as local-only
+    decodable: Vec<usize>,       // indices into cs that are ready to peel
+    decoded: usize,
 }
 
-// It might be nice to 'peel' the symbols out as an iterator
-// impl<T> Iterator for UnmanagedRatelessIBLT<T>
-// where
-//     T: symbol::Symbol,
-// {
-//     type Item = T;
-//
-//     fn next(&mut self) -> Option<Self::Item> {
-//         //TODO
-//         None
-//     }
-// }
-impl<T> UnmanagedRatelessIBLT<T>
-where
-    T: symbol::Symbol,
-{
+impl<T: Symbol> Decoder<T> {
     pub fn new() -> Self {
-        return UnmanagedRatelessIBLT {
-            coded_symbols: Vec::new(),
-        };
+        Self {
+            cs: Vec::new(),
+            window: CodingWindow::new(),
+            remote: CodingWindow::new(),
+            local: CodingWindow::new(),
+            decodable: Vec::new(),
+            decoded: 0,
+        }
     }
 
-    /// Join two vectors of codedSymbols together produced from two distinct sets.
-    /// The results are only valid if there were no duplicates between the original sets.
-    pub fn combine(&self, other: &UnmanagedRatelessIBLT<T>) -> UnmanagedRatelessIBLT<T> {
-        combine(&self.coded_symbols, &other.coded_symbols)
+    pub fn add_symbol(&mut self, s: T) {
+        assert!(self.cs.is_empty(), "add_symbol called after decoding started");
+        self.window.add_symbol(s);
     }
-    /// Subtract a remote sequence of codedSymbols from a local sequence.
-    pub fn collapse(&self, other: &UnmanagedRatelessIBLT<T>) -> UnmanagedRatelessIBLT<T> {
-        collapse(&self.coded_symbols, &other.coded_symbols)
+
+    /// Feed the next remote coded symbol.  The symbol is collapsed with the
+    /// local window on-the-fly; the result is stored internally.
+    pub fn add_coded_symbol(&mut self, mut c: CodedSymbol<T>) {
+        c = self.window.apply_window(c, -1);
+        c = self.remote.apply_window(c, -1);
+        c = self.local.apply_window(c, 1);
+        if c.is_peelable() || (c.count == 0 && c.hash == 0) {
+            self.decodable.push(self.cs.len());
+        }
+        self.cs.push(c);
     }
-    /// If possible, peel a single symbol from the RatelessIBLT
-    pub fn peel_one_symbol(&mut self) -> symbol::PeelableResult<T> {
-        peel_one_symbol(&mut self.coded_symbols)
-    }
-    /// Peel all symbols from the RatelessIBLT that we possibly can
-    /// Call the is_empty method to check if there are any symbols left
-    pub fn peel_all_symbols(&mut self) -> Vec<symbol::PeelableResult<T>> {
-        let mut peeled_symbols = Vec::new();
-        loop {
-            let peeled_symbol = self.peel_one_symbol();
-            match peeled_symbol {
-                symbol::PeelableResult::NotPeelable => {
-                    break;
+
+    /// Attempt to peel all currently decodable symbols, propagating each peel
+    /// to all stored coded symbols and checking whether that makes more symbols
+    /// decodable.
+    pub fn try_decode(&mut self) {
+        let mut i = 0;
+        while i < self.decodable.len() {
+            let cidx = self.decodable[i];
+            let c = self.cs[cidx].clone();
+            match c.count {
+                1 => {
+                    let symbol = T::decode_from_bytes(&c.sum);
+                    let hs = HashedSymbol { hash: c.hash, symbol };
+                    let (next_idx, mapping) = self.apply_new_symbol(&hs, -1);
+                    self.remote.add_hashed_symbol_at(hs, next_idx, mapping);
+                    self.decoded += 1;
                 }
-                _ => {
-                    peeled_symbols.push(peeled_symbol);
+                -1 => {
+                    let symbol = T::decode_from_bytes(&c.sum);
+                    let hs = HashedSymbol { hash: c.hash, symbol };
+                    let (next_idx, mapping) = self.apply_new_symbol(&hs, 1);
+                    self.local.add_hashed_symbol_at(hs, next_idx, mapping);
+                    self.decoded += 1;
                 }
+                0 => {
+                    self.decoded += 1;
+                }
+                _ => panic!("invalid degree for decodable coded symbol: {}", c.count),
             }
+            i += 1;
         }
-        peeled_symbols
-    }
-    /// Add a coded symbol
-    /// The expected use is that a remote server is streaming us codedSymbols and we are adding them to our local copy.
-    pub fn add_coded_symbol(&mut self, other: &symbol::CodedSymbol<T>) {
-        self.coded_symbols.push(other.clone());
+        self.decodable.clear();
     }
 
-    /// returns true if there are no symbols
-    /// If we can't peel any symbols, but it is not empty it means that we have symbols that
-    /// can't be recovered
-    /// If there are no CodedSymbols, this will return true
-    pub fn is_empty(&self) -> bool {
-        //It might be good to panic if there are no coded symbols
-        is_empty(&self.coded_symbols)
+    /// True when every coded symbol received so far has been decoded.
+    pub fn decoded(&self) -> bool {
+        self.decoded == self.cs.len()
     }
-}
 
-// a function that takes a set that can be iterted over and an offset and returns a block of coded symbols
-
-pub fn peel_one_symbol<T: symbol::Symbol>(
-    block: &mut Vec<symbol::CodedSymbol<T>>,
-) -> symbol::PeelableResult<T> {
-    if block.is_empty() {
-        return symbol::PeelableResult::NotPeelable;
+    /// Symbols present in the remote set but not the local set.
+    pub fn remote_symbols(&self) -> &[HashedSymbol<T>] {
+        &self.remote.symbols
     }
-    let mut peelable_result = symbol::PeelableResult::NotPeelable;
 
-    // we check if each codedSymbol can be peeled,
-    // if it can, we exit the loop, remove it from the block and return the result
-    for symbol in block.iter() {
-        peelable_result = symbol.peel_peek();
+    /// Symbols present in the local set but not the remote set.
+    pub fn local_symbols(&self) -> &[HashedSymbol<T>] {
+        &self.local.symbols
+    }
 
-        match peelable_result {
-            symbol::PeelableResult::NotPeelable => continue,
-            _ => {
-                remove_symbol_from_block(block, peelable_result.clone());
-                break;
+    pub fn reset(&mut self) {
+        self.cs.clear();
+        self.window.reset();
+        self.remote.reset();
+        self.local.reset();
+        self.decodable.clear();
+        self.decoded = 0;
+    }
+
+    // Apply a newly peeled symbol to every already-received coded symbol,
+    // checking whether any become newly decodable.  Returns (first_pending_idx,
+    // mapping) where first_pending_idx is the first coded-symbol index >= len(cs)
+    // that this symbol maps to, and mapping is positioned one step past it.
+    fn apply_new_symbol(&mut self, hs: &HashedSymbol<T>, direction: i64) -> (usize, RandomMapping) {
+        let mut mapping = RandomMapping::from_hash(hs.hash);
+        let mut idx = mapping.next().unwrap();
+        while idx < self.cs.len() {
+            self.cs[idx].apply_hashed(hs, direction);
+            if self.cs[idx].is_peelable() {
+                self.decodable.push(idx);
             }
+            idx = mapping.next().unwrap();
         }
-    }
-
-    peelable_result
-}
-
-pub fn remove_symbol_from_block<T: symbol::Symbol>(
-    block: &mut Vec<symbol::CodedSymbol<T>>,
-    symbol_result: symbol::PeelableResult<T>,
-) {
-    let direction;
-    let symbol: T = match symbol_result {
-        symbol::PeelableResult::Local(symbol) => {
-            direction = symbol::Direction::Remove;
-            symbol
-        }
-        symbol::PeelableResult::Remote(symbol) => {
-            direction = symbol::Direction::Add;
-            symbol
-        }
-        symbol::PeelableResult::NotPeelable => {
-            panic!("Can't remove nothing from a block");
-        }
-    };
-
-    let item_mapping = mapping::RandomMapping::new(&symbol);
-
-    let block_len = block.len();
-
-    for i in item_mapping.take_while(|&x| (x as usize) < block_len) {
-        block[i as usize].apply(&symbol, direction.clone());
+        (idx, mapping)
     }
 }
 
-// used to combine two blocks of coded symbols generated from two distinct sets
-pub fn combine<T: symbol::Symbol>(
-    block_a: &Vec<symbol::CodedSymbol<T>>,
-    block_b: &Vec<symbol::CodedSymbol<T>>,
-) -> UnmanagedRatelessIBLT<T> {
-    let mut combined_block = Vec::new();
+// ─── Backward-compatibility aliases ───────────────────────────────────────────
 
-    for (a, b) in block_a.iter().zip(block_b.iter()) {
-        combined_block.push(a.combine(b));
-    }
-    UnmanagedRatelessIBLT {
-        coded_symbols: combined_block,
-    }
-}
+pub type RatelessIBLT<T> = Encoder<T>;
 
-// A collapsed block should effectively contain the difference between two blocks
-pub fn collapse<T: symbol::Symbol>(
-    block_local: &Vec<symbol::CodedSymbol<T>>,
-    block_remote: &Vec<symbol::CodedSymbol<T>>,
-) -> UnmanagedRatelessIBLT<T> {
-    let mut combined_block = Vec::new();
-
-    for (coded_symbol_local, coded_symbol_remote) in block_local.iter().zip(block_remote.iter()) {
-        combined_block.push(coded_symbol_local.collapse(coded_symbol_remote));
-    }
-    UnmanagedRatelessIBLT {
-        coded_symbols: combined_block,
-    }
-}
-
-pub fn is_empty<T: symbol::Symbol>(block: &Vec<symbol::CodedSymbol<T>>) -> bool {
-    block.iter().all(|x| x.is_empty())
-}
+// ─── Tests ────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::test_helpers::SimpleSymbol;
+    use std::collections::HashSet;
 
     #[test]
     fn test_collapsing() {
-        use std::collections::HashSet;
-
         let items_local: HashSet<SimpleSymbol> = HashSet::from([
             SimpleSymbol { value: 7 },
             SimpleSymbol { value: 15 },
@@ -348,103 +292,67 @@ mod tests {
             SimpleSymbol { value: 1 },
         ]);
 
-        let mut iblt_local = RatelessIBLT::new(items_local.clone());
-        iblt_local.extend_coded_symbols(0);
-        let mut iblt_remote = RatelessIBLT::new(items_remote.clone());
-        iblt_remote.extend_coded_symbols(0);
-
         let local_only: HashSet<SimpleSymbol> =
             items_local.difference(&items_remote).cloned().collect();
         let remote_only: HashSet<SimpleSymbol> =
             items_remote.difference(&items_local).cloned().collect();
 
-        let iblt_remote_unmanaged: UnmanagedRatelessIBLT<SimpleSymbol> = UnmanagedRatelessIBLT {
-            coded_symbols: iblt_remote.coded_symbols.clone(),
-        };
+        let mut encoder = Encoder::new(items_remote.clone());
+        let mut decoder = Decoder::new();
+        for item in &items_local {
+            decoder.add_symbol(item.clone());
+        }
 
-        let mut collapsed_local = iblt_local.collapse(&iblt_remote_unmanaged);
-
-        let mut peeled_set_local = HashSet::new();
-        let mut peeled_set_remote = HashSet::new();
-
-        for s in collapsed_local.peel_all_symbols() {
-            match s {
-                symbol::PeelableResult::Local(symbol) => {
-                    peeled_set_local.insert(symbol.clone());
-                }
-                symbol::PeelableResult::Remote(symbol) => {
-                    peeled_set_remote.insert(symbol.clone());
-                }
-                symbol::PeelableResult::NotPeelable => panic!("Not expecting this case"),
+        let mut decoded = false;
+        for i in 0..200 {
+            let cs = encoder.get_coded_symbol(i);
+            decoder.add_coded_symbol(cs);
+            decoder.try_decode();
+            if decoder.decoded() {
+                decoded = true;
+                break;
             }
         }
-        assert_eq!(local_only, peeled_set_local);
-        assert_eq!(remote_only, peeled_set_remote);
+
+        assert!(decoded, "failed to decode within 200 coded symbols");
+
+        let peeled_remote: HashSet<SimpleSymbol> =
+            decoder.remote_symbols().iter().map(|hs| hs.symbol.clone()).collect();
+        let peeled_local: HashSet<SimpleSymbol> =
+            decoder.local_symbols().iter().map(|hs| hs.symbol.clone()).collect();
+
+        assert_eq!(remote_only, peeled_remote);
+        assert_eq!(local_only, peeled_local);
     }
 
     #[test]
     fn test_peeling() {
-        use std::collections::HashSet;
-
         let items: HashSet<SimpleSymbol> = HashSet::from([
             SimpleSymbol { value: 7 },
             SimpleSymbol { value: 15 },
             SimpleSymbol { value: 16 },
         ]);
 
-        // let items2: HashSet<SimpleSymbol> = HashSet::from([
-        //     SimpleSymbol { value: 7 },
-        //     SimpleSymbol { value: 15 },
-        //     SimpleSymbol { value: 16 },
-        //     SimpleSymbol { value: 1 },
-        // ]);
+        // Encoder has the items; decoder has an empty local set (all items are remote-only).
+        let mut encoder = Encoder::new(items.clone());
+        let mut decoder = Decoder::<SimpleSymbol>::new();
 
-        let mut iblt = RatelessIBLT::new(items.clone());
-        iblt.extend_coded_symbols(0);
-
-        let mut peeled_set = HashSet::new();
-
-        for s in iblt.peel_all_symbols() {
-            match s {
-                symbol::PeelableResult::Local(symbol) => {
-                    peeled_set.insert(symbol.clone());
-                }
-                symbol::PeelableResult::Remote(_) => panic!("Not expecting remote symbol"),
-                symbol::PeelableResult::NotPeelable => panic!("Not expecting this case"),
+        let mut decoded = false;
+        for i in 0..200 {
+            let cs = encoder.get_coded_symbol(i);
+            decoder.add_coded_symbol(cs);
+            decoder.try_decode();
+            if decoder.decoded() {
+                decoded = true;
+                break;
             }
         }
 
-        assert!(iblt.is_empty());
-        assert_eq!(items, peeled_set);
-    }
+        assert!(decoded, "failed to decode within 200 coded symbols");
 
-    #[test]
-    fn test_union() {
-        use std::collections::HashSet;
-        let common_items: HashSet<u64> = HashSet::from([1, 2, 3]);
-        let a_only_items: HashSet<u64> = HashSet::from([4]);
-        let b_only_items: HashSet<u64> = HashSet::from([5, 6]);
-
-        let a: HashSet<u64> = common_items.union(&a_only_items).cloned().collect();
-        let b: HashSet<u64> = common_items.union(&b_only_items).cloned().collect();
-
-        let expected_difference_set: HashSet<u64> =
-            a_only_items.union(&b_only_items).cloned().collect();
-        let computed_difference_set: HashSet<u64> = a.symmetric_difference(&b).cloned().collect();
-
-        assert_eq!(expected_difference_set, computed_difference_set);
-
-        let mut items_missing_from_a: HashSet<u64> = HashSet::new();
-
-        for item in &computed_difference_set {
-            if !a.contains(item) {
-                items_missing_from_a.insert(*item);
-            }
-        }
-        assert_eq!(items_missing_from_a, b_only_items);
-
-        // let elements: Vec<u64> = vec![1, 2, 3, 4, 5];
-        // let result = elements.iter().copied().fold(0, |acc, x| acc ^ x);
-        // println!("The XOR of all elements is: {}", result);
+        let peeled_remote: HashSet<SimpleSymbol> =
+            decoder.remote_symbols().iter().map(|hs| hs.symbol.clone()).collect();
+        assert!(decoder.local_symbols().is_empty());
+        assert_eq!(items, peeled_remote);
     }
 }

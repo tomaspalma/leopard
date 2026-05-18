@@ -2,17 +2,15 @@ mod encoder;
 mod mapping;
 pub mod symbol;
 
-pub use encoder::{RatelessIBLT, UnmanagedRatelessIBLT};
+pub use encoder::{Decoder, Encoder, RatelessIBLT};
 pub use mapping::RandomMapping;
-pub use symbol::{CodedSymbol, Symbol};
+pub use symbol::{CodedSymbol, HashedSymbol, Symbol};
 
 #[cfg(test)]
 pub mod test_helpers {
     use super::*;
     use std::hash::Hash;
 
-    // Example implementation of a struct that implements the 'Symbol' trait
-    // This is used in tests in other modules
     #[derive(Clone, Debug, PartialEq, Eq, Hash)]
     pub struct SimpleSymbol {
         pub value: u64,

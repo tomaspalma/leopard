@@ -3,6 +3,12 @@ use std::fmt::Debug;
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::marker::PhantomData;
 
+#[derive(Clone, Debug)]
+pub struct HashedSymbol<T: Symbol> {
+    pub symbol: T,
+    pub hash: u64,
+}
+
 /// A symbol is an item in the set
 pub trait Symbol: Clone + Debug {
     const BYTE_ARRAY_LENGTH: usize;
@@ -59,6 +65,10 @@ pub enum Direction {
 }
 
 impl<T: Symbol> CodedSymbol<T> {
+    pub fn from_parts(sum: Vec<u8>, hash: u64, count: i64) -> Self {
+        CodedSymbol { _marker: PhantomData, sum, hash, count }
+    }
+
     pub fn new() -> Self {
         let sum = vec![0u8; T::BYTE_ARRAY_LENGTH];
         let hash = 0;
@@ -69,6 +79,17 @@ impl<T: Symbol> CodedSymbol<T> {
             hash,
             count,
         }
+    }
+
+    /// apply_hashed() is the hot-path version used internally by CodingWindow.
+    /// It uses a pre-computed hash and XORs the sum in-place (no allocation).
+    pub fn apply_hashed(&mut self, hs: &HashedSymbol<T>, direction: i64) {
+        let encoded = hs.symbol.encode_to_bytes();
+        for (d, s) in self.sum.iter_mut().zip(encoded.iter()) {
+            *d ^= s;
+        }
+        self.hash ^= hs.hash;
+        self.count += direction;
     }
 
     /// apply() adds or removes a symbol from the CodedSymbol

@@ -2,9 +2,11 @@ use metrics::{counter, gauge, histogram};
 use runtime::metrics::experiment::get_context;
 use runtime::spawn;
 
+use riblt::Decoder;
+
 use crate::riblt::{
     messages::{RIBLTMessageType, RIBLTMessageTypeValues},
-    session::{absorb_coded_symbols, collapse_and_peel, store_symbols},
+    session::{add_coded_symbols, store_symbols, try_decode_blocking},
     {ReceivingState, SendingState},
 };
 
@@ -71,21 +73,28 @@ impl ReceiveNeighborSymbolsTask {
         message: RIBLTSendSymbolMessage,
         neighbor: NodeAddress,
     ) {
-        let (local_coded_symbols, remote_coded_symbols) =
-            match self.receiving_states.write().await.get_mut(&neighbor) {
-                Some(status) => absorb_coded_symbols(
-                    &mut status.remote_iblt,
-                    &mut status.local_iblt,
-                    message.symbols(),
-                ),
-                None => {
-                    error!("Failed to get IBLT for neighbor {:?}", neighbor);
-                    return;
-                }
-            };
+        // Add incoming coded symbols and move the decoder out for blocking work.
+        let decoder = match self.receiving_states.write().await.get_mut(&neighbor) {
+            Some(status) => {
+                add_coded_symbols(&mut status.decoder, message.symbols());
+                std::mem::replace(&mut status.decoder, Decoder::new())
+            }
+            None => {
+                error!("Failed to get decoder for neighbor {:?}", neighbor);
+                return;
+            }
+        };
 
         let decode_start = std::time::Instant::now();
-        let peel_result = collapse_and_peel(local_coded_symbols, remote_coded_symbols).await;
+        let (decoder, peel_result) = try_decode_blocking(decoder).await;
+
+        // Put the decoder back, unless the session was reset while we were working.
+        let session_id = message.session_id().clone();
+        if let Some(status) = self.receiving_states.write().await.get_mut(&neighbor) {
+            if status.session_id == session_id {
+                status.decoder = decoder;
+            }
+        }
         histogram!("riblt_decode_duration_seconds", "neighbor" => format!("{:?}", neighbor))
             .record(decode_start.elapsed().as_secs_f64());
 

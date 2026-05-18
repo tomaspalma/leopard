@@ -8,7 +8,7 @@ pub use deserializer::RIBLTDeserializer;
 
 use runtime::spawn;
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use tokio::sync::RwLock;
 
 use std::sync::Arc;
@@ -24,7 +24,7 @@ use membership::Membership;
 use crate::riblt::messages::{
     RIBLTMessageType, RIBLTMessageTypeValues, RIBLTSendSymbolMessage, RIBLTSymbol,
 };
-use riblt::{RatelessIBLT, UnmanagedRatelessIBLT};
+use riblt::{Decoder, RatelessIBLT};
 
 use tokio::time::{sleep, Duration};
 
@@ -38,7 +38,7 @@ use std::time::Instant;
 
 pub struct SendingState {
     pub state: ReconciliationState,
-    pub local_iblt: RatelessIBLT<RIBLTSymbol, HashSet<RIBLTSymbol>>,
+    pub local_iblt: RatelessIBLT<RIBLTSymbol>,
     pub start_time: Instant,
     pub session_id: String,
 }
@@ -46,39 +46,23 @@ pub struct SendingState {
 impl SendingState {
     pub fn new(
         state: ReconciliationState,
-        local_iblt: RatelessIBLT<RIBLTSymbol, HashSet<RIBLTSymbol>>,
+        local_iblt: RatelessIBLT<RIBLTSymbol>,
         start_time: Instant,
         session_id: String,
     ) -> Self {
-        Self {
-            state,
-            local_iblt,
-            start_time,
-            session_id,
-        }
+        Self { state, local_iblt, start_time, session_id }
     }
 }
 
 pub struct ReceivingState {
-    pub local_iblt: RatelessIBLT<RIBLTSymbol, HashSet<RIBLTSymbol>>,
-    pub remote_iblt: UnmanagedRatelessIBLT<RIBLTSymbol>,
+    pub decoder: Decoder<RIBLTSymbol>,
     pub start_time: Instant,
     pub session_id: String,
 }
 
 impl ReceivingState {
-    pub fn new(
-        local_iblt: RatelessIBLT<RIBLTSymbol, HashSet<RIBLTSymbol>>,
-        remote_iblt: UnmanagedRatelessIBLT<RIBLTSymbol>,
-        start_time: Instant,
-        session_id: String,
-    ) -> Self {
-        Self {
-            local_iblt,
-            remote_iblt,
-            start_time,
-            session_id,
-        }
+    pub fn new(decoder: Decoder<RIBLTSymbol>, start_time: Instant, session_id: String) -> Self {
+        Self { decoder, start_time, session_id }
     }
 }
 
@@ -301,14 +285,13 @@ impl RIBLT {
         session_id: String,
     ) {
         let symbols = session::load_iblt_symbols(&state);
+        let mut decoder = Decoder::new();
+        for symbol in symbols {
+            decoder.add_symbol(symbol);
+        }
         receiving_states.write().await.insert(
             neighbor,
-            ReceivingState::new(
-                RatelessIBLT::new(symbols),
-                UnmanagedRatelessIBLT::new(),
-                Instant::now(),
-                session_id,
-            ),
+            ReceivingState::new(decoder, Instant::now(), session_id),
         );
     }
 }

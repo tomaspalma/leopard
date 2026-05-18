@@ -33,9 +33,12 @@ impl Iterator for RandomMapping {
 }
 
 impl RandomMapping {
+    pub fn from_hash(hash: u64) -> Self {
+        RandomMapping { prng: hash, last_idx: 0 }
+    }
+
     pub fn new<T: Symbol>(given_symbol: &T) -> Self {
-        let prng = given_symbol.hash_();
-        RandomMapping { prng, last_idx: 0 }
+        Self::from_hash(given_symbol.hash_())
     }
 }
 

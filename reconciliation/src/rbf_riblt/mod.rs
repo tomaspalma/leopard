@@ -14,7 +14,7 @@ use std::{
 };
 
 use connection::node::port::NodeAddress;
-use riblt::{RatelessIBLT, UnmanagedRatelessIBLT};
+use riblt::{Decoder, RatelessIBLT};
 use state::node::DefaultNodeState;
 use tokio::sync::RwLock;
 
@@ -32,13 +32,12 @@ pub type SComReconciliationState = crate::riblt::ReconciliationState;
 
 pub struct SComSendingState {
     pub state: SComReconciliationState,
-    pub local_iblt: RatelessIBLT<RIBLTSymbol, HashSet<RIBLTSymbol>>,
+    pub local_iblt: RatelessIBLT<RIBLTSymbol>,
     pub session_id: String,
 }
 
 pub struct SComReceivingState {
-    pub local_iblt: RatelessIBLT<RIBLTSymbol, HashSet<RIBLTSymbol>>,
-    pub remote_iblt: UnmanagedRatelessIBLT<RIBLTSymbol>,
+    pub decoder: Decoder<RIBLTSymbol>,
     pub session_id: String,
 }
 
