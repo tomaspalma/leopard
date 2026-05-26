@@ -66,6 +66,7 @@ impl PersistentDataStorage {
 #[async_trait]
 pub trait DataStateStorage {
     async fn save(&self, item: Box<dyn DataStateItem + Send + Sync>);
+    async fn save_silent(&self, item: Box<dyn DataStateItem + Send + Sync>);
     async fn get(&self, key: &str) -> Option<Box<dyn DataStateItem + Send + Sync>>;
     fn items(&self) -> Vec<Box<dyn DataStateItem + Send + Sync>>;
     fn keys(&self) -> Vec<String>;
@@ -125,6 +126,26 @@ impl DataStateStorage for KeyValueDataStateStorage {
                 listener(item.as_ref());
             }
         }
+
+        let persistent_storage_clone = self.persistent_storage.clone();
+        let memory_storage_clone = self.memory_storage.clone();
+        spawn!({
+            if let Err(e) = persistent_storage_clone
+                .save(&*memory_storage_clone)
+                .await
+            {
+                tracing::warn!("Failed to persist storage to disk: {}", e);
+            }
+        });
+    }
+
+    async fn save_silent(&self, item: Box<dyn DataStateItem + Send + Sync>) {
+        info!("Saving item (silent) {}:{}", item.key(), item.value());
+
+        let key = item.key().to_string();
+        let value = item.value().to_string();
+
+        self.memory_storage.insert(key, value);
 
         let persistent_storage_clone = self.persistent_storage.clone();
         let memory_storage_clone = self.memory_storage.clone();

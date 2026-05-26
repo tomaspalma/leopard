@@ -7,6 +7,7 @@ use crate::storage::{
 #[async_trait]
 pub trait DataState {
     async fn store(&self, item: Box<dyn DataStateItem + Send + Sync>);
+    async fn store_silent(&self, item: Box<dyn DataStateItem + Send + Sync>);
     async fn get(&self, key: &str) -> Option<Box<dyn DataStateItem + Send + Sync>>;
 
     fn items(&self) -> Vec<Box<dyn DataStateItem + Send + Sync>>;
@@ -31,6 +32,10 @@ impl DefaultDataState {
 impl DataState for DefaultDataState {
     async fn store(&self, _item: Box<dyn DataStateItem + Send + Sync>) {
         self.storage.save(_item).await;
+    }
+
+    async fn store_silent(&self, _item: Box<dyn DataStateItem + Send + Sync>) {
+        self.storage.save_silent(_item).await;
     }
 
     async fn get(&self, _key: &str) -> Option<Box<dyn DataStateItem + Send + Sync>> {
