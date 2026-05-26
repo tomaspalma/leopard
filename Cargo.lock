@@ -1508,6 +1508,7 @@ dependencies = [
  "membership",
  "message",
  "protocol",
+ "rkyv 0.8.15",
  "runtime",
  "state",
  "tokio",
