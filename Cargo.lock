@@ -505,6 +505,7 @@ dependencies = [
  "membership-protocols",
  "node",
  "reconciliation",
+ "replication",
  "runtime",
  "services",
  "state",

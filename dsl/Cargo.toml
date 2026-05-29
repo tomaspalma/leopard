@@ -10,6 +10,7 @@ state = { path = "../state" }
 config = { path = "../config" }
 node = { path = "../node" }
 reconciliation = { path = "../reconciliation" }
+replication = { path = "../replication" }
 membership-protocols = { path = "../membership/src/protocols" }
 services = { path = "../services" }
 

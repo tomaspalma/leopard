@@ -11,6 +11,7 @@ use reconciliation::merkle_tree::protocol::MerkleTreeReconciliationProtocol;
 use reconciliation::rbf_riblt::RbfRibltProtocol;
 use reconciliation::rf_riblt::RfRibltProtocol;
 use reconciliation::riblt::RIBLT;
+use replication::protocol::HintedHandoffReplicationProtocol;
 use runtime::Task;
 use services::http::NodeHTTPService;
 use state::checker::ReconciliationChecker;
@@ -27,6 +28,7 @@ pub enum ProtocolChoice {
     Riblt,
     RbfRiblt,
     RfRiblt,
+    Replication,
 }
 
 pub struct BuildResult {
@@ -38,7 +40,7 @@ struct InternalNode {
     host: String,
     port: Option<u16>,
     dataset: Option<String>,
-    protocol: Option<ProtocolChoice>,
+    protocols: Vec<ProtocolChoice>,
     services: Vec<ServiceConfig>,
 }
 
@@ -48,7 +50,7 @@ impl InternalNode {
             host: "127.0.0.1".to_string(),
             port: None,
             dataset: None,
-            protocol: None,
+            protocols: vec![],
             services: vec![],
         }
     }
@@ -121,7 +123,7 @@ impl NodeBuilder {
             self.nodes.push(InternalNode::new());
         }
         if let Some(node) = self.nodes.last_mut() {
-            node.protocol = Some(protocol);
+            node.protocols.push(protocol);
         }
         self
     }
@@ -137,14 +139,14 @@ impl NodeBuilder {
     fn create_node_task(
         host: String,
         port: u16,
-        protocol: ProtocolChoice,
+        protocols: Vec<ProtocolChoice>,
         storage: Arc<dyn DataState + Send + Sync>,
         checker: Arc<dyn ReconciliationChecker>,
         services: Vec<ServiceConfig>,
     ) -> Box<Task> {
         Box::new(move || {
             let host = host.clone();
-            let protocol = protocol.clone();
+            let protocols = protocols.clone();
             let storage = storage.clone();
             let checker = checker.clone();
             let services = services.clone();
@@ -184,23 +186,31 @@ impl NodeBuilder {
 
                         node.add_protocol(Box::new(DefaultMembershipProtocol::new()));
 
-                        match protocol {
-                            ProtocolChoice::Merkle => node.add_protocol(Box::new(
-                                MerkleTreeReconciliationProtocol::new(
+                        for protocol in protocols {
+                            match protocol {
+                                ProtocolChoice::Merkle => node.add_protocol(Box::new(
+                                    MerkleTreeReconciliationProtocol::new(
+                                        node_state.clone(),
+                                        address.clone(),
+                                    ),
+                                )),
+                                ProtocolChoice::Riblt => node.add_protocol(Box::new(RIBLT::new(
                                     node_state.clone(),
                                     address.clone(),
-                                ),
-                            )),
-                            ProtocolChoice::Riblt => node.add_protocol(Box::new(RIBLT::new(
-                                node_state.clone(),
-                                address.clone(),
-                            ))),
-                            ProtocolChoice::RbfRiblt => node.add_protocol(Box::new(
-                                RbfRibltProtocol::new(node_state.clone(), address.clone()),
-                            )),
-                            ProtocolChoice::RfRiblt => node.add_protocol(Box::new(
-                                RfRibltProtocol::new(node_state.clone(), address.clone()),
-                            )),
+                                ))),
+                                ProtocolChoice::RbfRiblt => node.add_protocol(Box::new(
+                                    RbfRibltProtocol::new(node_state.clone(), address.clone()),
+                                )),
+                                ProtocolChoice::RfRiblt => node.add_protocol(Box::new(
+                                    RfRibltProtocol::new(node_state.clone(), address.clone()),
+                                )),
+                                ProtocolChoice::Replication => node.add_protocol(Box::new(
+                                    HintedHandoffReplicationProtocol::new(
+                                        node_state.clone(),
+                                        address.clone(),
+                                    ),
+                                )),
+                            }
                         }
 
                         for service in services {
@@ -252,12 +262,14 @@ impl NodeBuilder {
 
         for (node, storage) in self.nodes.into_iter().zip(storages) {
             let port = node.port.ok_or("missing port on node")?;
-            let protocol = node.protocol.ok_or("missing protocol on node")?;
+            if node.protocols.is_empty() {
+                return Err("missing protocol on node".to_string());
+            }
 
             tasks.push(Self::create_node_task(
                 node.host,
                 port,
-                protocol,
+                node.protocols,
                 storage,
                 checker.clone(),
                 node.services,

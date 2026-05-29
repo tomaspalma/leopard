@@ -6,7 +6,10 @@ use membership::{
 use message::Message;
 use protocol::{Protocol, deserializer::ProtocolDeserializer};
 use runtime::{spawn, time::TokioPeriodTimeUnit};
-use state::{node::{DefaultNodeState, NodeState}, storage::StorageAction};
+use state::{
+    node::{DefaultNodeState, NodeState},
+    storage::StorageAction,
+};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tracing::info;
@@ -70,15 +73,18 @@ impl HintedHandoffReplicationProtocol<DefaultNodeState, DefaultNodeSocketTask> {
                     for target in targets {
                         let msg = ReplicationMessage::new(
                             Some(REPLICATION_PROTOCOL_ID),
-                            ReplicationMessageType::new(ReplicationMessageTypeValues::InsertNotification),
-                            ReplicationMessageWrapper::InsertNotification(key.clone(), value.clone()),
+                            ReplicationMessageType::new(
+                                ReplicationMessageTypeValues::InsertNotification,
+                            ),
+                            ReplicationMessageWrapper::InsertNotification(
+                                key.clone(),
+                                value.clone(),
+                            ),
                         );
                         let _ = state
                             .send_through_socket(port.clone(), Box::new(target), Box::new(msg))
                             .await;
                     }
-
-                    let _ = self_id; // suppress unused warning
                 });
             });
 

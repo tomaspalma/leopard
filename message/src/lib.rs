@@ -12,6 +12,7 @@ impl ProtocolIDTranslator {
             1 => "riblt",
             2 => "merkle",
             3 => "rbf_riblt",
+            5 => "replication",
             _ => "other",
         }
     }
