@@ -203,16 +203,18 @@ impl RibltStreamEngine {
     }
 
     /// The peer finished decoding our stream: tear down the sending session and
-    /// wake the sender so it observes the removal and stops.
-    pub async fn on_finished(&self, neighbor: &NodeAddress, session_id: &str) {
+    /// wake the sender so it observes the removal and stops. Returns true if a
+    /// matching session was actually stopped.
+    pub async fn on_finished(&self, neighbor: &NodeAddress, session_id: &str) -> bool {
         let mut guard = self.sending_states.write().await;
         match guard.get(neighbor) {
             Some(status) if status.session_id == session_id => {
                 let notify = status.resend_notify.clone();
                 guard.remove(neighbor);
                 notify.notify_one();
+                true
             }
-            _ => {}
+            _ => false,
         }
     }
 

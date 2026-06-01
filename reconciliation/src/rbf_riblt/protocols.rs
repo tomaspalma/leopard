@@ -25,11 +25,8 @@ use crate::{rbf_riblt::receiver::ReceiveRbfRibltMessageTask, ReconciliationProto
 
 use super::{
     bloom::BloomFilter,
-    messages::{
-        RbfRibltBloomFilterSliceMessage, RbfRibltCodedSymbol, RbfRibltSComSendSymbolMessage,
-    },
-    BloomSendingState, RbfRibltProtocol, SComReconciliationState, SComSendingState, BLOOM_HASHES,
-    RBF_RIBLT_PROTOCOL_ID, RIBLT_BATCH_SIZE,
+    messages::RbfRibltBloomFilterSliceMessage,
+    BloomSendingState, RbfRibltProtocol, BLOOM_HASHES, RBF_RIBLT_PROTOCOL_ID,
 };
 
 impl RbfRibltProtocol {
@@ -40,8 +37,7 @@ impl RbfRibltProtocol {
             deserializer: self.deserializer.clone(),
             bloom_sending_states: self.bloom_sending_states.clone(),
             bloom_receiving_states: self.bloom_receiving_states.clone(),
-            scom_sending_states: self.scom_sending_states.clone(),
-            scom_receiving_states: self.scom_receiving_states.clone(),
+            scom_engine: self.scom_engine.clone(),
             pending_value_fetch_sessions: self.pending_value_fetch_sessions.clone(),
             last_reconciled_fingerprint: self.last_reconciled_fingerprint.clone(),
             reconciliation_initiated_with: self.reconciliation_initiated_with.clone(),
@@ -149,64 +145,6 @@ impl RbfRibltProtocol {
         }
     }
 
-    pub async fn stream_scom_symbols_to_neighbor(
-        state: Arc<DefaultNodeState>,
-        scom_sending_states: Arc<RwLock<HashMap<NodeAddress, SComSendingState>>>,
-        neighbor: NodeAddress,
-    ) {
-        let mut current_index = 0;
-
-        loop {
-            let sending_state = {
-                let states = scom_sending_states.read().await;
-                match states.get(&neighbor) {
-                    Some(s) => s.state.clone(),
-                    None => break,
-                }
-            };
-
-            if sending_state == SComReconciliationState::AwaitingConfirmation {
-                tokio::task::yield_now().await;
-                continue;
-            }
-
-            let (symbols, session_id) = {
-                let mut states = scom_sending_states.write().await;
-                let s = match states.get_mut(&neighbor) {
-                    Some(s) => s,
-                    None => break,
-                };
-
-                let mut symbols = Vec::new();
-                for _ in 0..RIBLT_BATCH_SIZE {
-                    let cs = s.local_iblt.get_coded_symbol(current_index);
-                    symbols.push(RbfRibltCodedSymbol {
-                        sum: cs.sum,
-                        hash: cs.hash,
-                        count: cs.count,
-                    });
-                    current_index += 1;
-                }
-
-                s.state = SComReconciliationState::AwaitingConfirmation;
-                (symbols, s.session_id.clone())
-            };
-
-            let _ = state
-                .send_through_socket(
-                    state.node_identifier().connection_info().clone(),
-                    Box::new(neighbor.clone()),
-                    Box::new(RbfRibltSComSendSymbolMessage::new(
-                        Some(RBF_RIBLT_PROTOCOL_ID),
-                        symbols,
-                        session_id,
-                    )),
-                )
-                .await;
-
-            tokio::task::yield_now().await;
-        }
-    }
 
     async fn start_sending_slices(&self) -> Result<(), String> {
         info!("Starting the process of sending RBF-RIBLT slices to neighbors");

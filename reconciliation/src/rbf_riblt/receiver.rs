@@ -1,22 +1,17 @@
 use std::{
     collections::{hash_map::DefaultHasher, HashSet},
     sync::Arc,
-    time::Instant,
 };
 
 use connection::{node::port::NodeAddress, route::RouteTask};
-use metrics::{counter, gauge, histogram};
+use metrics::{counter, gauge};
 use protocol::deserializer::ProtocolDeserializer;
-use riblt::{Decoder, RatelessIBLT};
 use runtime::metrics::experiment::get_context;
 use runtime::spawn;
 use state::node::NodeState;
 use tracing::{error, info};
 
-use crate::riblt::{
-    messages::RIBLTSymbol,
-    session::{add_coded_symbols, store_symbols, try_decode_blocking},
-};
+use crate::riblt::{messages::RIBLTSymbol, session::store_symbols};
 
 use crate::rbf_riblt::{
     bloom::BloomFilter,
@@ -27,8 +22,7 @@ use crate::rbf_riblt::{
         RbfRibltSComRequestMoreSymbolsMessage, RbfRibltSComSendSymbolMessage,
         RbfRibltValueFetchRequestMessage, RbfRibltValueFetchResponseMessage,
     },
-    BloomReceivingState, BloomSendingState, SComReceivingState, SComReconciliationState,
-    SComSendingState, RBF_RIBLT_PROTOCOL_ID,
+    BloomReceivingState, BloomSendingState, RBF_RIBLT_PROTOCOL_ID,
 };
 
 use super::RbfRibltProtocol;
@@ -57,9 +51,10 @@ impl RbfRibltProtocol {
                 .read()
                 .await
                 .contains_key(neighbor)
-            || self.scom_sending_states.read().await.contains_key(neighbor)
+            || self.scom_engine.sending_states.read().await.contains_key(neighbor)
             || self
-                .scom_receiving_states
+                .scom_engine
+                .receiving_states
                 .read()
                 .await
                 .contains_key(neighbor)
@@ -74,9 +69,10 @@ impl RbfRibltProtocol {
     /// or if bloom has already transitioned to scom. Used by handshake handling
     /// to allow bloom-phase resets while blocking scom/fetch-phase interference.
     pub async fn is_session_busy(&self, neighbor: &NodeAddress) -> bool {
-        self.scom_sending_states.read().await.contains_key(neighbor)
+        self.scom_engine.sending_states.read().await.contains_key(neighbor)
             || self
-                .scom_receiving_states
+                .scom_engine
+                .receiving_states
                 .read()
                 .await
                 .contains_key(neighbor)
@@ -99,8 +95,8 @@ impl RbfRibltProtocol {
             .write()
             .await
             .remove(neighbor);
-        self.scom_sending_states.write().await.remove(neighbor);
-        self.scom_receiving_states.write().await.remove(neighbor);
+        self.scom_engine.sending_states.write().await.remove(neighbor);
+        self.scom_engine.receiving_states.write().await.remove(neighbor);
         self.round_start_times.write().await.remove(neighbor);
         self.bloom_sending_states.write().await.remove(neighbor);
         self.bloom_receiving_states.write().await.remove(neighbor);
@@ -328,22 +324,12 @@ impl ReceiveRbfRibltMessageTask {
 
         let session_id = uuid::Uuid::new_v4().to_string();
 
-        self.protocol.scom_sending_states.write().await.insert(
-            neighbor.clone(),
-            SComSendingState {
-                state: SComReconciliationState::SendingSymbols,
-                local_iblt: RatelessIBLT::new(symbols),
-                session_id,
-            },
-        );
-
-        let state = self.protocol.state.clone();
-        let scom_sending_states = self.protocol.scom_sending_states.clone();
-
-        spawn!({
-            RbfRibltProtocol::stream_scom_symbols_to_neighbor(state, scom_sending_states, neighbor)
-                .await;
-        });
+        // Stream the s_com subset through the shared engine. The decoder on the
+        // other side is seeded from its own s_com via the sink's seed_symbols.
+        self.protocol
+            .scom_engine
+            .start_send(neighbor, symbols, session_id)
+            .await;
     }
 
     async fn start_reverse_stream(&self, neighbor: NodeAddress) {
@@ -440,207 +426,22 @@ impl ReceiveRbfRibltMessageTask {
         }
     }
 
-    async fn init_scom_receiving_state_if_needed(&self, neighbor: &NodeAddress, session_id: &str) {
-        let should_reset = self
-            .protocol
-            .scom_receiving_states
-            .read()
-            .await
-            .get(neighbor)
-            .map(|s| s.session_id != session_id)
-            .unwrap_or(false);
-
-        if should_reset {
-            self.protocol
-                .scom_receiving_states
-                .write()
-                .await
-                .remove(neighbor);
-        }
-
-        if self
-            .protocol
-            .scom_receiving_states
-            .read()
-            .await
-            .contains_key(neighbor)
-        {
-            return;
-        }
-
-        let s_com: Vec<String> = self
-            .protocol
-            .bloom_receiving_states
-            .read()
-            .await
-            .get(neighbor)
-            .map(|state| state.s_com.clone())
-            .unwrap_or_default();
-
-        let storage = self.protocol.state.get_storage("default".to_string());
-        let mut symbols = HashSet::new();
-        for key in s_com {
-            let value = if let Some(ref s) = storage {
-                s.get(&key)
-                    .await
-                    .map(|item| item.value().to_string())
-                    .unwrap_or_default()
-            } else {
-                String::new()
-            };
-            symbols.insert(RIBLTSymbol { key, value });
-        }
-
-        self.protocol
-            .round_start_times
-            .write()
-            .await
-            .insert(neighbor.clone(), Instant::now());
-
-        let mut decoder = Decoder::new();
-        for symbol in symbols {
-            decoder.add_symbol(symbol);
-        }
-        self.protocol.scom_receiving_states.write().await.insert(
-            neighbor.clone(),
-            SComReceivingState {
-                decoder,
-                session_id: session_id.to_string(),
-            },
-        );
-    }
-
     async fn handle_scom_send_symbols(
         &self,
         message: RbfRibltSComSendSymbolMessage,
         neighbor: NodeAddress,
     ) {
-        self.init_scom_receiving_state_if_needed(&neighbor, message.session_id())
+        // The engine seeds the decoder (from s_com, via the sink), reassembles in
+        // order, decodes, and on success drives the value-fetch via on_complete.
+        self.protocol
+            .scom_engine
+            .on_symbols(
+                neighbor,
+                message.session_id().clone(),
+                message.start_index(),
+                message.symbols().clone(),
+            )
             .await;
-
-        let decoder = match self
-            .protocol
-            .scom_receiving_states
-            .write()
-            .await
-            .get_mut(&neighbor)
-        {
-            Some(status) => {
-                add_coded_symbols(&mut status.decoder, message.symbols());
-                std::mem::replace(&mut status.decoder, Decoder::new())
-            }
-            None => return,
-        };
-
-        let decode_start = std::time::Instant::now();
-        let (decoder, peel_result) = try_decode_blocking(decoder, 0).await;
-
-        let session_id = message.session_id().to_string();
-        if let Some(status) = self
-            .protocol
-            .scom_receiving_states
-            .write()
-            .await
-            .get_mut(&neighbor)
-        {
-            if status.session_id == session_id {
-                status.decoder = decoder;
-            }
-        }
-        histogram!(
-            "rbf_riblt_decode_duration_seconds",
-            "neighbor" => format!("{:?}", neighbor)
-        )
-        .record(decode_start.elapsed().as_secs_f64());
-
-        let is_peeling_successful = peel_result.successful;
-        let remote_symbols = peel_result.remote_symbols;
-        let local_symbols = peel_result.local_symbols;
-
-        if is_peeling_successful {
-            // Keys the neighbor is missing: IBLT-local elements (we have, they don't) plus our
-            // s_tn for this neighbor (keys definitely absent from their bloom filter).
-            let mut keys_for_sender: Vec<String> =
-                local_symbols.into_iter().map(|s| s.key).collect();
-            let s_tn: Vec<String> = self
-                .protocol
-                .bloom_receiving_states
-                .read()
-                .await
-                .get(&neighbor)
-                .map(|s| s.s_tn.clone())
-                .unwrap_or_default();
-            keys_for_sender.extend(s_tn);
-
-            let missing_keys: Vec<String> = remote_symbols.into_iter().map(|s| s.key).collect();
-
-            self.protocol
-                .scom_receiving_states
-                .write()
-                .await
-                .remove(&neighbor);
-
-            self.protocol
-                .pending_value_fetch_sessions
-                .write()
-                .await
-                .insert(neighbor.clone(), message.session_id().clone());
-
-            let _ = self
-                .protocol
-                .state
-                .send_through_socket(
-                    self.protocol
-                        .state
-                        .node_identifier()
-                        .connection_info()
-                        .clone(),
-                    Box::new(neighbor.clone()),
-                    Box::new(RbfRibltSComDecodedAllMessage::new(
-                        Some(RBF_RIBLT_PROTOCOL_ID),
-                        message.session_id().clone(),
-                        keys_for_sender,
-                    )),
-                )
-                .await;
-
-            // Always send a fetch request so the responder piggybacks their s_tn values,
-            // even when missing_keys is empty.
-            let _ = self
-                .protocol
-                .state
-                .send_through_socket(
-                    self.protocol
-                        .state
-                        .node_identifier()
-                        .connection_info()
-                        .clone(),
-                    Box::new(neighbor),
-                    Box::new(RbfRibltValueFetchRequestMessage::new(
-                        Some(RBF_RIBLT_PROTOCOL_ID),
-                        message.session_id().clone(),
-                        missing_keys,
-                    )),
-                )
-                .await;
-        } else {
-            let _ = self
-                .protocol
-                .state
-                .send_through_socket(
-                    self.protocol
-                        .state
-                        .node_identifier()
-                        .connection_info()
-                        .clone(),
-                    Box::new(neighbor),
-                    Box::new(RbfRibltSComRequestMoreSymbolsMessage::new(
-                        Some(RBF_RIBLT_PROTOCOL_ID),
-                        message.session_id().clone(),
-                    )),
-                )
-                .await;
-        }
     }
 
     async fn handle_scom_decoded_all(
@@ -648,21 +449,15 @@ impl ReceiveRbfRibltMessageTask {
         message: RbfRibltSComDecodedAllMessage,
         neighbor: NodeAddress,
     ) {
-        let should_remove = self
+        // Stop our sender for this session; only proceed if we were actually
+        // streaming to this neighbor under this session.
+        let was_sending = self
             .protocol
-            .scom_sending_states
-            .read()
-            .await
-            .get(&neighbor)
-            .map(|state| state.session_id == *message.session_id())
-            .unwrap_or(false);
+            .scom_engine
+            .on_finished(&neighbor, message.session_id())
+            .await;
 
-        if should_remove {
-            self.protocol
-                .scom_sending_states
-                .write()
-                .await
-                .remove(&neighbor);
+        if was_sending {
             self.protocol
                 .pending_value_fetch_sessions
                 .write()
@@ -698,17 +493,10 @@ impl ReceiveRbfRibltMessageTask {
         message: RbfRibltSComRequestMoreSymbolsMessage,
         neighbor: NodeAddress,
     ) {
-        if let Some(status) = self
-            .protocol
-            .scom_sending_states
-            .write()
-            .await
-            .get_mut(&neighbor)
-        {
-            if status.session_id == *message.session_id() {
-                status.state = SComReconciliationState::SendingSymbols;
-            }
-        }
+        self.protocol
+            .scom_engine
+            .on_request_more(&neighbor, message.session_id(), message.received_count())
+            .await;
     }
 
     async fn handle_value_fetch_request(
