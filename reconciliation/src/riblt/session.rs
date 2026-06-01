@@ -8,7 +8,14 @@ use crate::riblt::messages::{RIBLTCodedSymbol, RIBLTSymbol};
 
 pub struct IbltPeelResult {
     pub successful: bool,
+    // Only the remote symbols decoded since `remote_cursor`, not the whole
+    // accumulated set, so each batch stores O(new) instead of O(total).
     pub remote_symbols: Vec<RIBLTSymbol>,
+    // Total number of remote symbols decoded so far; the caller saves this back
+    // as the next cursor.
+    pub remote_total: usize,
+    // Full local-only set, collected only once peeling succeeds (consumers only
+    // read it on success). Empty until then.
     pub local_symbols: Vec<RIBLTSymbol>,
 }
 
@@ -50,6 +57,7 @@ pub fn add_coded_symbols(decoder: &mut Decoder<RIBLTSymbol>, symbols: &[RIBLTCod
 /// back into the receiving state after the await.
 pub async fn try_decode_blocking(
     decoder: Decoder<RIBLTSymbol>,
+    remote_cursor: usize,
 ) -> (Decoder<RIBLTSymbol>, IbltPeelResult)
 where
 {
@@ -57,9 +65,21 @@ where
         let mut decoder = decoder;
         decoder.try_decode();
         let successful = decoder.decoded();
-        let remote_symbols = decoder.remote_symbols().iter().map(|hs| hs.symbol.clone()).collect();
-        let local_symbols = decoder.local_symbols().iter().map(|hs| hs.symbol.clone()).collect();
-        (decoder, IbltPeelResult { successful, remote_symbols, local_symbols })
+        let all_remote = decoder.remote_symbols();
+        let remote_total = all_remote.len();
+        let remote_symbols = all_remote[remote_cursor.min(remote_total)..]
+            .iter()
+            .map(|hs| hs.symbol.clone())
+            .collect();
+        let local_symbols = if successful {
+            decoder.local_symbols().iter().map(|hs| hs.symbol.clone()).collect()
+        } else {
+            Vec::new()
+        };
+        (
+            decoder,
+            IbltPeelResult { successful, remote_symbols, remote_total, local_symbols },
+        )
     })
     .await
     .unwrap()

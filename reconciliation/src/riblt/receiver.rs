@@ -74,10 +74,13 @@ impl ReceiveNeighborSymbolsTask {
         neighbor: NodeAddress,
     ) {
         // Add incoming coded symbols and move the decoder out for blocking work.
-        let decoder = match self.receiving_states.write().await.get_mut(&neighbor) {
+        let (decoder, remote_cursor) = match self.receiving_states.write().await.get_mut(&neighbor) {
             Some(status) => {
                 add_coded_symbols(&mut status.decoder, message.symbols());
-                std::mem::replace(&mut status.decoder, Decoder::new())
+                (
+                    std::mem::replace(&mut status.decoder, Decoder::new()),
+                    status.stored_remote,
+                )
             }
             None => {
                 error!("Failed to get decoder for neighbor {:?}", neighbor);
@@ -86,13 +89,14 @@ impl ReceiveNeighborSymbolsTask {
         };
 
         let decode_start = std::time::Instant::now();
-        let (decoder, peel_result) = try_decode_blocking(decoder).await;
+        let (decoder, peel_result) = try_decode_blocking(decoder, remote_cursor).await;
 
         // Put the decoder back, unless the session was reset while we were working.
         let session_id = message.session_id().clone();
         if let Some(status) = self.receiving_states.write().await.get_mut(&neighbor) {
             if status.session_id == session_id {
                 status.decoder = decoder;
+                status.stored_remote = peel_result.remote_total;
             }
         }
         histogram!("riblt_decode_duration_seconds", "neighbor" => format!("{:?}", neighbor))

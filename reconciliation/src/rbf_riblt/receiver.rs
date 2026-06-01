@@ -533,7 +533,7 @@ impl ReceiveRbfRibltMessageTask {
         };
 
         let decode_start = std::time::Instant::now();
-        let (decoder, peel_result) = try_decode_blocking(decoder).await;
+        let (decoder, peel_result) = try_decode_blocking(decoder, 0).await;
 
         let session_id = message.session_id().to_string();
         if let Some(status) = self

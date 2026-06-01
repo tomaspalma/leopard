@@ -66,11 +66,12 @@ pub struct ReceivingState {
     pub decoder: Decoder<RIBLTSymbol>,
     pub start_time: Instant,
     pub session_id: String,
+    pub stored_remote: usize,
 }
 
 impl ReceivingState {
     pub fn new(decoder: Decoder<RIBLTSymbol>, start_time: Instant, session_id: String) -> Self {
-        Self { decoder, start_time, session_id }
+        Self { decoder, start_time, session_id, stored_remote: 0 }
     }
 }
 

@@ -490,7 +490,7 @@ impl ReceiveRfRibltMessageTask {
         };
 
         let decode_start = std::time::Instant::now();
-        let (decoder, peel_result) = try_decode_blocking(decoder).await;
+        let (decoder, peel_result) = try_decode_blocking(decoder, 0).await;
 
         if let Some(status) = self
             .protocol
