@@ -56,21 +56,13 @@ where
 
     async fn init(&mut self) {
         let state_handle = self.state.clone();
-        let port_for_closure = self.port.clone();
         let protocol_id = self.id;
-        let sending_states = self.sending_states.clone();
-        let receiving_states = self.receiving_states.clone();
+        let engine = self.engine.clone();
 
-        let state_clone = self.state.clone();
         self.state
             .add_socket_task_and_create(
                 NodeSocketRouteId::new(self.port.clone(), protocol_id),
-                Arc::new(ReceiveNeighborSymbolsTask::new(
-                    state_clone.node_identifier(),
-                    state_clone,
-                    self.sending_states.clone(),
-                    self.receiving_states.clone(),
-                )),
+                Arc::new(ReceiveNeighborSymbolsTask::new(self.engine.clone())),
                 Box::new(move |port: NodeAddress| {
                     Arc::new(Mutex::new(DefaultNodeSocket::new(port)))
                 }),
@@ -84,14 +76,10 @@ where
                     Arc::new(DefaultNodeSocketTaskMetadata::new(String::new())),
                     Arc::new(move || {
                         let state = state_handle.clone();
-                        let port = port_for_closure.clone();
-                        let protocol_id = protocol_id;
-                        let sending_states = sending_states.clone();
-                        let _receiving_states = receiving_states.clone();
+                        let engine = engine.clone();
 
                         Box::pin(async move {
-                            Self::reconciliation_mechanism(state, port, protocol_id, sending_states)
-                                .await
+                            Self::reconciliation_mechanism(state, engine).await
                         })
                     }),
                     Arc::new(TokioPeriodTimeUnit::new(std::time::Duration::from_secs(
@@ -123,7 +111,7 @@ where
 {
     fn state(&self) {
         info!("Reconciliation States:");
-        let states = self.sending_states.clone();
+        let states = self.engine.sending_states.clone();
         tokio::spawn(async move {
             let guard = states.read().await;
             for (k, v) in guard.iter() {
