@@ -127,7 +127,7 @@ where
         tokio::spawn(async move {
             let guard = states.read().await;
             for (k, v) in guard.iter() {
-                info!("  {:?}: {:?}", k, v.state);
+                info!("  {:?}: acked {}, session {}", k, v.acked, v.session_id);
             }
         });
     }

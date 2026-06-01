@@ -2,11 +2,9 @@ use metrics::{counter, gauge, histogram};
 use runtime::metrics::experiment::get_context;
 use runtime::spawn;
 
-use riblt::Decoder;
-
 use crate::riblt::{
-    messages::{RIBLTMessageType, RIBLTMessageTypeValues},
-    session::{add_coded_symbols, store_symbols, try_decode_blocking},
+    messages::{RIBLTCodedSymbol, RIBLTMessageType, RIBLTMessageTypeValues},
+    session::{build_decoder_blocking, load_iblt_symbols, process_batch_blocking, store_symbols},
     {ReceivingState, SendingState},
 };
 
@@ -16,14 +14,15 @@ use connection::{
 };
 use protocol::deserializer::ProtocolDeserializer;
 use state::node::{DefaultNodeState, NodeState};
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
-use tokio::sync::RwLock;
+use std::time::Instant;
+use tokio::sync::{mpsc, RwLock};
 use tracing::{error, info};
 
 use crate::riblt::{
     messages::{RIBLTDecodedAllMessage, RIBLTRequestMoreSymbolsMessage, RIBLTSendSymbolMessage},
-    RIBLTDeserializer, ReconciliationState, RIBLT, RIBLT_PROTOCOL_ID,
+    RIBLTDeserializer, RIBLT_PROTOCOL_ID,
 };
 
 pub struct ReceiveNeighborSymbolsTask {
@@ -31,6 +30,117 @@ pub struct ReceiveNeighborSymbolsTask {
     state: Arc<DefaultNodeState>,
     sending_states: Arc<RwLock<HashMap<NodeAddress, SendingState>>>,
     receiving_states: Arc<RwLock<HashMap<NodeAddress, ReceivingState>>>,
+}
+
+/// Per-session decode task. Owns the Decoder for one reconciliation session and
+/// is the single consumer of its coded symbols, so decoding is serialised even
+/// though inbound messages are handled in independent tasks. It pulls batches
+/// off `rx`, peels them, stores newly decoded remote symbols, and replies with
+/// either a credit/acknowledgement (RequestMoreSymbols carrying the running
+/// received count) or, once decoding completes, a FinishedDecoding.
+async fn run_receiver_session(
+    state: Arc<DefaultNodeState>,
+    own_id: NodeAddress,
+    neighbor: NodeAddress,
+    session_id: String,
+    start_time: Instant,
+    mut rx: mpsc::UnboundedReceiver<(u64, Vec<RIBLTCodedSymbol>)>,
+) {
+    let local = load_iblt_symbols(&state);
+    let mut decoder = build_decoder_blocking(local).await;
+    let mut stored_remote: usize = 0;
+
+    // The decoder is positional: the k-th coded symbol fed to it must be encoder
+    // index k. Batches arrive on independent connections and may be reordered,
+    // so buffer them by start index and only feed the decoder the contiguous
+    // run starting at `next_index`.
+    let mut reorder: BTreeMap<u64, Vec<RIBLTCodedSymbol>> = BTreeMap::new();
+    let mut next_index: u64 = 0;
+
+    while let Some((start, symbols)) = rx.recv().await {
+        reorder.insert(start, symbols);
+        // Drain any other queued batches too before deciding what's contiguous.
+        while let Ok((s, v)) = rx.try_recv() {
+            reorder.insert(s, v);
+        }
+
+        // Pull off the contiguous prefix [next_index, ..) to feed in order.
+        let mut batch = Vec::new();
+        while let Some(chunk) = reorder.remove(&next_index) {
+            next_index += chunk.len() as u64;
+            batch.extend(chunk);
+        }
+        if batch.is_empty() {
+            // Still waiting on the symbol at `next_index`; nothing to decode yet.
+            continue;
+        }
+        let received_count = next_index as usize;
+
+        let decode_start = Instant::now();
+        let (next_decoder, peel) = process_batch_blocking(decoder, batch, stored_remote).await;
+        decoder = next_decoder;
+        stored_remote = peel.remote_total;
+        histogram!("riblt_decode_duration_seconds", "neighbor" => format!("{:?}", neighbor))
+            .record(decode_start.elapsed().as_secs_f64());
+
+        store_symbols(&state, peel.remote_symbols).await;
+
+        if peel.successful {
+            info!("Peeling successful for neighbor {:?}", neighbor);
+            let context = get_context();
+            gauge!(
+                "reconciliation_round_duration_seconds",
+                "protocol" => "riblt",
+                "neighbor" => format!("{:?}", neighbor),
+                "run_id" => context.run_id().to_string(),
+                "trial" => context.trial().to_string(),
+                "similarity" => context.similarity().to_string()
+            )
+            .set(start_time.elapsed().as_secs_f64());
+            counter!(
+                "reconciliation_completed",
+                "protocol" => "riblt",
+                "neighbor" => format!("{:?}", neighbor),
+                "run_id" => context.run_id().to_string(),
+                "trial" => context.trial().to_string(),
+                "similarity" => context.similarity().to_string()
+            )
+            .increment(1);
+            runtime::metrics::csv::finish_iteration(
+                format!("{:?}", own_id),
+                format!("{:?}", neighbor),
+                "riblt",
+            );
+
+            let _ = state
+                .send_through_socket(
+                    own_id.clone(),
+                    Box::new(neighbor.clone()),
+                    Box::new(RIBLTDecodedAllMessage::new(
+                        RIBLTMessageType::new(RIBLTMessageTypeValues::FinishedDecoding),
+                        Some(RIBLT_PROTOCOL_ID),
+                        session_id.clone(),
+                    )),
+                )
+                .await;
+            break;
+        }
+
+        // Not done yet: acknowledge progress, which also grants the sender more
+        // credit to keep streaming.
+        let _ = state
+            .send_through_socket(
+                own_id.clone(),
+                Box::new(neighbor.clone()),
+                Box::new(RIBLTRequestMoreSymbolsMessage::new(
+                    RIBLTMessageType::new(RIBLTMessageTypeValues::RequestMoreSymbols),
+                    Some(RIBLT_PROTOCOL_ID),
+                    session_id.clone(),
+                    received_count as u64,
+                )),
+            )
+            .await;
+    }
 }
 
 impl ReceiveNeighborSymbolsTask {
@@ -48,186 +158,82 @@ impl ReceiveNeighborSymbolsTask {
         }
     }
 
+    /// FinishedDecoding from the peer: the peer reconciled everything we were
+    /// streaming, so tear down the sending session and wake the send loop so it
+    /// observes the removal and stops.
     async fn receive_symbols_neighbor_decoded(&self, neighbor: NodeAddress, session_id: String) {
         info!("Neighbor successfully decoded symbols");
 
-        let should_remove = self
-            .sending_states
-            .read()
-            .await
-            .get(&neighbor)
-            .map_or(false, |state| state.session_id == session_id);
-
-        if should_remove {
-            self.sending_states.write().await.remove(&neighbor);
-        } else if self.sending_states.read().await.contains_key(&neighbor) {
-            info!(
-                "Session ID mismatch, ignoring FinishedDecoding for neighbor {:?}",
-                neighbor
-            );
+        let mut guard = self.sending_states.write().await;
+        match guard.get(&neighbor) {
+            Some(status) if status.session_id == session_id => {
+                let notify = status.resend_notify.clone();
+                guard.remove(&neighbor);
+                notify.notify_one();
+            }
+            Some(_) => {
+                info!(
+                    "Session ID mismatch, ignoring FinishedDecoding for neighbor {:?}",
+                    neighbor
+                );
+            }
+            None => {}
         }
     }
 
-    async fn handle_received_symbols(
-        &self,
-        message: RIBLTSendSymbolMessage,
-        neighbor: NodeAddress,
-    ) {
-        // Add incoming coded symbols and move the decoder out for blocking work.
-        let (decoder, remote_cursor) = match self.receiving_states.write().await.get_mut(&neighbor) {
-            Some(status) => {
-                add_coded_symbols(&mut status.decoder, message.symbols());
-                (
-                    std::mem::replace(&mut status.decoder, Decoder::new()),
-                    status.stored_remote,
-                )
-            }
-            None => {
-                error!("Failed to get decoder for neighbor {:?}", neighbor);
-                return;
-            }
-        };
-
-        let decode_start = std::time::Instant::now();
-        let (decoder, peel_result) = try_decode_blocking(decoder, remote_cursor).await;
-
-        // Put the decoder back, unless the session was reset while we were working.
-        let session_id = message.session_id().clone();
-        if let Some(status) = self.receiving_states.write().await.get_mut(&neighbor) {
-            if status.session_id == session_id {
-                status.decoder = decoder;
-                status.stored_remote = peel_result.remote_total;
-            }
-        }
-        histogram!("riblt_decode_duration_seconds", "neighbor" => format!("{:?}", neighbor))
-            .record(decode_start.elapsed().as_secs_f64());
-
-        store_symbols(&self.state, peel_result.remote_symbols).await;
-
-        if peel_result.successful {
-            info!("Peeling successful for neighbor {:?}", neighbor);
-            let context = get_context();
-
-            let round_duration = self
-                .receiving_states
-                .read()
-                .await
-                .get(&neighbor)
-                .map(|s| s.start_time.elapsed().as_secs_f64());
-
-            if let Some(duration) = round_duration {
-                gauge!(
-                    "reconciliation_round_duration_seconds",
-                    "protocol" => "riblt",
-                    "neighbor" => format!("{:?}", neighbor),
-                    "run_id" => context.run_id().to_string(),
-                    "trial" => context.trial().to_string(),
-                    "similarity" => context.similarity().to_string()
-                )
-                .set(duration);
-            }
-
-            counter!(
-                "reconciliation_completed",
-                "protocol" => "riblt",
-                "neighbor" => format!("{:?}", neighbor),
-                "run_id" => context.run_id().to_string(),
-                "trial" => context.trial().to_string(),
-                "similarity" => context.similarity().to_string()
-            )
-            .increment(1);
-            runtime::metrics::csv::finish_iteration(
-                format!("{:?}", self.identifier.connection_info()),
-                format!("{:?}", neighbor),
-                "riblt",
-            );
-
-            let state_clone = self.state.clone();
-            let id_clone = self.identifier.connection_info().clone();
-            let neighbor_clone = neighbor.clone();
-            let session_id = message.session_id().clone();
-            spawn!({
-                let _ = state_clone
-                    .send_through_socket(
-                        id_clone,
-                        Box::new(neighbor_clone),
-                        Box::new(RIBLTDecodedAllMessage::new(
-                            RIBLTMessageType::new(RIBLTMessageTypeValues::FinishedDecoding),
-                            Some(RIBLT_PROTOCOL_ID),
-                            session_id,
-                        )),
-                    )
-                    .await;
-            });
-        } else {
-            info!(
-                "Peeling unsuccessful for neighbor {:?}, requesting more symbols",
-                neighbor
-            );
-
-            let state_clone = self.state.clone();
-            let id_clone = self.identifier.connection_info().clone();
-            let neighbor_clone = neighbor.clone();
-            let session_id = message.session_id().clone();
-            spawn!({
-                let _ = state_clone
-                    .send_through_socket(
-                        id_clone,
-                        Box::new(neighbor_clone),
-                        Box::new(RIBLTRequestMoreSymbolsMessage::new(
-                            RIBLTMessageType::new(RIBLTMessageTypeValues::RequestMoreSymbols),
-                            Some(RIBLT_PROTOCOL_ID),
-                            session_id,
-                        )),
-                    )
-                    .await;
-            });
-        }
-    }
-
+    /// SendSymbol from the peer: route the coded symbols to the per-session
+    /// decode task, creating that task (and its session state) on first sight of
+    /// a session.
     async fn receive_incoming_symbols(
         &self,
         message: RIBLTSendSymbolMessage,
         neighbor: NodeAddress,
     ) {
-        info!("Received RIBLT message");
-
         let msg_session_id = message.session_id().clone();
 
-        let should_remove = self.receiving_states.read().await.get(&neighbor).map_or(false, |status| {
-            if msg_session_id != status.session_id {
-                info!("Session ID mismatch. Expected: {}, Got: {}. Dropping old state and creating new one.", status.session_id, msg_session_id);
-                true
-            } else {
-                false
+        // Atomically find-or-create the session and obtain the channel to feed.
+        let tx = {
+            let mut guard = self.receiving_states.write().await;
+            match guard.get(&neighbor) {
+                Some(status) if status.session_id == msg_session_id => status.symbol_tx.clone(),
+                _ => {
+                    // New session (or a session change): replacing the entry drops
+                    // any previous sender, which ends the stale decode task.
+                    info!("Starting receive session for neighbor {:?}", neighbor);
+                    let (tx, rx) = mpsc::unbounded_channel();
+                    let start_time = Instant::now();
+                    guard.insert(
+                        neighbor.clone(),
+                        ReceivingState::new(msg_session_id.clone(), start_time, tx.clone()),
+                    );
+
+                    let state = self.state.clone();
+                    let own_id = self.identifier.connection_info().clone();
+                    let neighbor_clone = neighbor.clone();
+                    let session_clone = msg_session_id.clone();
+                    spawn!({
+                        run_receiver_session(
+                            state,
+                            own_id,
+                            neighbor_clone,
+                            session_clone,
+                            start_time,
+                            rx,
+                        )
+                        .await;
+                    });
+                    tx
+                }
             }
-        });
+        };
 
-        if should_remove {
-            self.receiving_states.write().await.remove(&neighbor);
+        if tx
+            .send((message.start_index(), message.symbols().clone()))
+            .is_err()
+        {
+            // Decode task already finished for this session; nothing to do.
+            info!("Receive session for {:?} already closed, dropping symbols", neighbor);
         }
-
-        info!("Checking if neighbor {:?} is already reconciling", neighbor);
-        if !self.receiving_states.read().await.contains_key(&neighbor) {
-            info!(
-                "Initializing neighbor reconciliation for neighbor {:?}",
-                neighbor
-            );
-            RIBLT::init_receiving_state(
-                self.state.clone(),
-                self.receiving_states.clone(),
-                neighbor.clone(),
-                msg_session_id.clone(),
-            )
-            .await;
-
-            info!(
-                "Finished initializing neighbor reconciliation for neighbor {:?}",
-                neighbor
-            );
-        }
-
-        self.handle_received_symbols(message, neighbor).await;
     }
 }
 
@@ -296,8 +302,13 @@ impl RouteTask for ReceiveNeighborSymbolsTask {
                                 this.sending_states.write().await.get_mut(&neighbor)
                             {
                                 if status.session_id == *msg.session_id() {
-                                    info!("Status found for {:?} with matching session_id, setting state to SendingSymbols", neighbor);
-                                    status.state = ReconciliationState::SendingSymbols;
+                                    // Advance the acknowledged count (monotonically,
+                                    // since acks may arrive out of order) and wake
+                                    // the send loop to use the freed-up credit.
+                                    let ack = msg.received_count() as usize;
+                                    if ack > status.acked {
+                                        status.acked = ack;
+                                    }
                                     status.resend_notify.notify_one();
                                 } else {
                                     info!(

@@ -163,6 +163,11 @@ pub struct RIBLTSendSymbolMessage {
     protocol_id: Option<u64>,
     symbol: Vec<RIBLTCodedSymbol>,
     session_id: String,
+    // Encoder index of the first symbol in this batch. The decoder is positional
+    // (the k-th coded symbol added must be encoder index k), but batches travel
+    // on independent connections and can arrive out of order, so the receiver
+    // uses this to reassemble the stream in order before decoding.
+    start_index: u64,
 }
 
 impl RIBLTSendSymbolMessage {
@@ -171,12 +176,14 @@ impl RIBLTSendSymbolMessage {
         protocol_id: Option<u64>,
         symbol: Vec<RIBLTCodedSymbol>,
         session_id: String,
+        start_index: u64,
     ) -> Self {
         Self {
             _type,
             protocol_id,
             symbol,
             session_id,
+            start_index,
         }
     }
 
@@ -186,6 +193,10 @@ impl RIBLTSendSymbolMessage {
 
     pub fn session_id(&self) -> &String {
         &self.session_id
+    }
+
+    pub fn start_index(&self) -> u64 {
+        self.start_index
     }
 }
 
@@ -199,19 +210,33 @@ pub struct RIBLTRequestMoreSymbolsMessage {
     _type: RIBLTMessageType,
     protocol_id: Option<u64>,
     session_id: String,
+    // Total number of coded symbols the receiver has consumed so far. Doubles as
+    // a flow-control credit: the sender may keep up to WINDOW symbols in flight
+    // beyond this acknowledged count.
+    received_count: u64,
 }
 
 impl RIBLTRequestMoreSymbolsMessage {
-    pub fn new(_type: RIBLTMessageType, protocol_id: Option<u64>, session_id: String) -> Self {
+    pub fn new(
+        _type: RIBLTMessageType,
+        protocol_id: Option<u64>,
+        session_id: String,
+        received_count: u64,
+    ) -> Self {
         Self {
             _type,
             protocol_id,
             session_id,
+            received_count,
         }
     }
 
     pub fn session_id(&self) -> &String {
         &self.session_id
+    }
+
+    pub fn received_count(&self) -> u64 {
+        self.received_count
     }
 }
 

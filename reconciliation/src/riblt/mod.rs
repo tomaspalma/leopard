@@ -22,13 +22,18 @@ use connection::node::port::NodeAddress;
 use membership::Membership;
 
 use crate::riblt::messages::{
-    RIBLTMessageType, RIBLTMessageTypeValues, RIBLTSendSymbolMessage, RIBLTSymbol,
+    RIBLTCodedSymbol, RIBLTMessageType, RIBLTMessageTypeValues, RIBLTSendSymbolMessage, RIBLTSymbol,
 };
-use riblt::{Decoder, RatelessIBLT};
+use riblt::RatelessIBLT;
 
+use tokio::sync::mpsc;
 use tokio::sync::Notify;
 use tokio::time::{timeout, Duration};
 
+/// Reconciliation phase for the bloom/filter-based protocols that reuse this
+/// enum (rf_riblt, rbf_riblt). The plain RIBLT protocol no longer uses it: it
+/// streams symbols continuously under a credit window rather than stopping to
+/// wait for a per-batch confirmation.
 #[derive(Debug, Clone, PartialEq)]
 pub enum ReconciliationState {
     SendingSymbols,
@@ -38,45 +43,58 @@ pub enum ReconciliationState {
 use std::time::Instant;
 
 pub struct SendingState {
-    pub state: ReconciliationState,
     pub local_iblt: RatelessIBLT<RIBLTSymbol>,
     pub start_time: Instant,
     pub session_id: String,
+    // Woken whenever an acknowledgement advances `acked`, so the streaming send
+    // loop can resume sending the moment new credit is available.
     pub resend_notify: Arc<Notify>,
+    // Highest number of coded symbols the receiver has confirmed consuming.
+    // Monotonic; the send loop keeps at most WINDOW symbols in flight beyond it.
+    pub acked: usize,
 }
 
 impl SendingState {
     pub fn new(
-        state: ReconciliationState,
         local_iblt: RatelessIBLT<RIBLTSymbol>,
         start_time: Instant,
         session_id: String,
     ) -> Self {
         Self {
-            state,
             local_iblt,
             start_time,
             session_id,
             resend_notify: Arc::new(Notify::new()),
+            acked: 0,
         }
     }
 }
 
 pub struct ReceivingState {
-    pub decoder: Decoder<RIBLTSymbol>,
-    pub start_time: Instant,
     pub session_id: String,
-    pub stored_remote: usize,
+    pub start_time: Instant,
+    // Feeds incoming coded-symbol batches (start index, symbols) to the
+    // per-session decode task that owns the Decoder. Dropping it closes the
+    // channel and ends that task.
+    pub symbol_tx: mpsc::UnboundedSender<(u64, Vec<RIBLTCodedSymbol>)>,
 }
 
 impl ReceivingState {
-    pub fn new(decoder: Decoder<RIBLTSymbol>, start_time: Instant, session_id: String) -> Self {
-        Self { decoder, start_time, session_id, stored_remote: 0 }
+    pub fn new(
+        session_id: String,
+        start_time: Instant,
+        symbol_tx: mpsc::UnboundedSender<(u64, Vec<RIBLTCodedSymbol>)>,
+    ) -> Self {
+        Self { session_id, start_time, symbol_tx }
     }
 }
 
 pub const RIBLT_PROTOCOL_ID: u64 = 1;
-const BATCH_SIZE: usize = 30;
+// Coded symbols carried in a single SendSymbol message.
+const CHUNK_SIZE: usize = 256;
+// Maximum coded symbols the sender keeps in flight (sent but unacknowledged).
+// Bounds how far past the ~1.35*d decode point the sender can overshoot.
+const SEND_WINDOW: usize = 4096;
 
 pub struct RIBLT {
     id: u64,
@@ -107,78 +125,57 @@ impl RIBLT {
         sending_states: Arc<RwLock<HashMap<NodeAddress, SendingState>>>,
     ) {
         info!(
-            "Running sending symbols sequence from {:?} to {:?}",
+            "Streaming symbols from {:?} to {:?}",
             own_address, neighbor_address
         );
 
-        let mut current_index = 0;
+        // Index of the next coded symbol to generate/send. The receiver
+        // acknowledges progress via `acked`; we keep at most SEND_WINDOW symbols
+        // in flight (sent - acked) and stop once the session is removed, which
+        // happens when a FinishedDecoding arrives.
+        let mut sent: usize = 0;
 
-        if !sending_states.read().await.contains_key(&neighbor_address) {
-            info!(
-                "Neighbor {:?} not found in neighbor states, aborting sending symbols sequence",
-                neighbor_address
-            );
-            return;
-        }
-
-        while sending_states
-            .clone()
-            .read()
-            .await
-            .contains_key(&neighbor_address)
-        {
-            let (current_state, resend_notify) = {
+        loop {
+            let (acked, resend_notify, session_id) = {
                 let guard = sending_states.read().await;
                 match guard.get(&neighbor_address) {
-                    Some(status) => (status.state.clone(), status.resend_notify.clone()),
+                    Some(status) => (
+                        status.acked,
+                        status.resend_notify.clone(),
+                        status.session_id.clone(),
+                    ),
+                    // Session gone (peer finished decoding) -> stop streaming.
                     None => break,
                 }
             };
 
-            if current_state == ReconciliationState::AwaitingConfirmation {
-                // Block until the RequestMoreSymbols handler wakes us, instead of
-                // polling on a timer. The timeout is a safety net: if the wake-up
-                // is lost we revert to SendingSymbols and resend the next batch.
-                if timeout(Duration::from_millis(5000), resend_notify.notified())
-                    .await
-                    .is_err()
-                {
-                    info!("Timeout waiting for confirmation from {:?}, reverting to SendingSymbols to send next batch", neighbor_address);
-                    if let Some(status) = sending_states.write().await.get_mut(&neighbor_address) {
-                        status.state = ReconciliationState::SendingSymbols;
-                    }
-                }
-
+            let in_flight = sent.saturating_sub(acked);
+            if in_flight >= SEND_WINDOW {
+                // Window full: wait for an acknowledgement to free up credit.
+                // The timeout is a safety net against a lost wake-up.
+                let _ = timeout(Duration::from_millis(5000), resend_notify.notified()).await;
                 continue;
             }
 
-            let mut symbols = Vec::new();
-            let session_id;
-
+            let budget = (SEND_WINDOW - in_flight).min(CHUNK_SIZE);
+            let start_index = sent;
+            let mut symbols = Vec::with_capacity(budget);
             {
                 let mut states_guard = sending_states.write().await;
                 let status_guard = match states_guard.get_mut(&neighbor_address) {
                     Some(guard) => guard,
                     None => break,
                 };
-
-                session_id = status_guard.session_id.clone();
-
-                for _ in 0..BATCH_SIZE {
-                    let coded_symbol = status_guard.local_iblt.get_coded_symbol(current_index);
-
-                    let symbol_message = crate::riblt::messages::RIBLTCodedSymbol {
+                for i in 0..budget {
+                    let coded_symbol = status_guard.local_iblt.get_coded_symbol(start_index + i);
+                    symbols.push(RIBLTCodedSymbol {
                         sum: coded_symbol.sum,
                         hash: coded_symbol.hash,
                         count: coded_symbol.count,
-                    };
-                    symbols.push(symbol_message);
-
-                    current_index += 1;
+                    });
                 }
-
-                status_guard.state = ReconciliationState::AwaitingConfirmation;
             }
+            sent += budget;
 
             state
                 .send_through_socket(
@@ -189,16 +186,14 @@ impl RIBLT {
                         Some(protocol_id),
                         symbols,
                         session_id,
+                        start_index as u64,
                     )),
                 )
                 .await
                 .unwrap();
-
-            info!(
-                "Sent batch of {} symbols up to index {}",
-                BATCH_SIZE, current_index
-            );
         }
+
+        info!("Stopped streaming to {:?} after {} symbols", neighbor_address, sent);
     }
 
     async fn reconciliation_mechanism(
@@ -270,28 +265,10 @@ impl RIBLT {
         sending_states.write().await.insert(
             neighbor,
             SendingState::new(
-                ReconciliationState::SendingSymbols,
                 RatelessIBLT::new(symbols),
                 Instant::now(),
                 uuid::Uuid::new_v4().to_string(),
             ),
-        );
-    }
-
-    pub async fn init_receiving_state(
-        state: Arc<DefaultNodeState>,
-        receiving_states: Arc<RwLock<HashMap<NodeAddress, ReceivingState>>>,
-        neighbor: NodeAddress,
-        session_id: String,
-    ) {
-        let symbols = session::load_iblt_symbols(&state);
-        let mut decoder = Decoder::new();
-        for symbol in symbols {
-            decoder.add_symbol(symbol);
-        }
-        receiving_states.write().await.insert(
-            neighbor,
-            ReceivingState::new(decoder, Instant::now(), session_id),
         );
     }
 }

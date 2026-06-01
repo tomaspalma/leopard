@@ -52,6 +52,23 @@ pub fn add_coded_symbols(decoder: &mut Decoder<RIBLTSymbol>, symbols: &[RIBLTCod
     }
 }
 
+/// Collect the peel result from a decoder after `try_decode` has run.
+fn peel_result(decoder: &Decoder<RIBLTSymbol>, remote_cursor: usize) -> IbltPeelResult {
+    let successful = decoder.decoded();
+    let all_remote = decoder.remote_symbols();
+    let remote_total = all_remote.len();
+    let remote_symbols = all_remote[remote_cursor.min(remote_total)..]
+        .iter()
+        .map(|hs| hs.symbol.clone())
+        .collect();
+    let local_symbols = if successful {
+        decoder.local_symbols().iter().map(|hs| hs.symbol.clone()).collect()
+    } else {
+        Vec::new()
+    };
+    IbltPeelResult { successful, remote_symbols, remote_total, local_symbols }
+}
+
 /// Run `try_decode` on a blocking thread and return the decoder alongside the
 /// peel results.  The decoder is moved in and out so the caller can store it
 /// back into the receiving state after the await.
@@ -64,22 +81,39 @@ where
     tokio::task::spawn_blocking(move || {
         let mut decoder = decoder;
         decoder.try_decode();
-        let successful = decoder.decoded();
-        let all_remote = decoder.remote_symbols();
-        let remote_total = all_remote.len();
-        let remote_symbols = all_remote[remote_cursor.min(remote_total)..]
-            .iter()
-            .map(|hs| hs.symbol.clone())
-            .collect();
-        let local_symbols = if successful {
-            decoder.local_symbols().iter().map(|hs| hs.symbol.clone()).collect()
-        } else {
-            Vec::new()
-        };
-        (
-            decoder,
-            IbltPeelResult { successful, remote_symbols, remote_total, local_symbols },
-        )
+        let result = peel_result(&decoder, remote_cursor);
+        (decoder, result)
+    })
+    .await
+    .unwrap()
+}
+
+/// Add a batch of coded symbols and peel, all on a blocking thread so the
+/// CPU-heavy window application and decoding never block the async runtime.
+pub async fn process_batch_blocking(
+    decoder: Decoder<RIBLTSymbol>,
+    symbols: Vec<RIBLTCodedSymbol>,
+    remote_cursor: usize,
+) -> (Decoder<RIBLTSymbol>, IbltPeelResult) {
+    tokio::task::spawn_blocking(move || {
+        let mut decoder = decoder;
+        add_coded_symbols(&mut decoder, &symbols);
+        decoder.try_decode();
+        let result = peel_result(&decoder, remote_cursor);
+        (decoder, result)
+    })
+    .await
+    .unwrap()
+}
+
+/// Build a decoder seeded with the local symbol set on a blocking thread.
+pub async fn build_decoder_blocking(symbols: HashSet<RIBLTSymbol>) -> Decoder<RIBLTSymbol> {
+    tokio::task::spawn_blocking(move || {
+        let mut decoder = Decoder::new();
+        for symbol in symbols {
+            decoder.add_symbol(symbol);
+        }
+        decoder
     })
     .await
     .unwrap()
