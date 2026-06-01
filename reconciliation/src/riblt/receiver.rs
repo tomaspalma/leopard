@@ -294,6 +294,7 @@ impl RouteTask for ReceiveNeighborSymbolsTask {
                                 if status.session_id == *msg.session_id() {
                                     info!("Status found for {:?} with matching session_id, setting state to SendingSymbols", neighbor);
                                     status.state = ReconciliationState::SendingSymbols;
+                                    status.resend_notify.notify_one();
                                 } else {
                                     info!(
                                         "Status found for {:?}, but session_id mismatched",

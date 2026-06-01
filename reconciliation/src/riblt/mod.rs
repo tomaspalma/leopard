@@ -26,7 +26,8 @@ use crate::riblt::messages::{
 };
 use riblt::{Decoder, RatelessIBLT};
 
-use tokio::time::{sleep, Duration};
+use tokio::sync::Notify;
+use tokio::time::{timeout, Duration};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ReconciliationState {
@@ -41,6 +42,7 @@ pub struct SendingState {
     pub local_iblt: RatelessIBLT<RIBLTSymbol>,
     pub start_time: Instant,
     pub session_id: String,
+    pub resend_notify: Arc<Notify>,
 }
 
 impl SendingState {
@@ -50,7 +52,13 @@ impl SendingState {
         start_time: Instant,
         session_id: String,
     ) -> Self {
-        Self { state, local_iblt, start_time, session_id }
+        Self {
+            state,
+            local_iblt,
+            start_time,
+            session_id,
+            resend_notify: Arc::new(Notify::new()),
+        }
     }
 }
 
@@ -90,18 +98,6 @@ impl RIBLT {
         }
     }
 
-    async fn get_neighbor_sending_state_status(
-        neighbor: &NodeAddress,
-        sending_states: &Arc<RwLock<HashMap<NodeAddress, SendingState>>>,
-    ) -> Option<ReconciliationState> {
-        let lock = sending_states.read().await;
-        if let Some(status) = lock.get(&neighbor) {
-            Some(status.state.clone())
-        } else {
-            None
-        }
-    }
-
     async fn sending_symbols_sequence(
         state: Arc<DefaultNodeState>,
         own_address: NodeAddress,
@@ -115,7 +111,6 @@ impl RIBLT {
         );
 
         let mut current_index = 0;
-        let mut wait_time_ms = 0;
 
         if !sending_states.read().await.contains_key(&neighbor_address) {
             info!(
@@ -131,26 +126,30 @@ impl RIBLT {
             .await
             .contains_key(&neighbor_address)
         {
-            if Self::get_neighbor_sending_state_status(&neighbor_address, &sending_states)
-                .await
-                .unwrap()
-                == ReconciliationState::AwaitingConfirmation
-            {
-                sleep(Duration::from_millis(100)).await;
-                wait_time_ms += 100;
+            let (current_state, resend_notify) = {
+                let guard = sending_states.read().await;
+                match guard.get(&neighbor_address) {
+                    Some(status) => (status.state.clone(), status.resend_notify.clone()),
+                    None => break,
+                }
+            };
 
-                if wait_time_ms >= 5000 {
+            if current_state == ReconciliationState::AwaitingConfirmation {
+                // Block until the RequestMoreSymbols handler wakes us, instead of
+                // polling on a timer. The timeout is a safety net: if the wake-up
+                // is lost we revert to SendingSymbols and resend the next batch.
+                if timeout(Duration::from_millis(5000), resend_notify.notified())
+                    .await
+                    .is_err()
+                {
                     info!("Timeout waiting for confirmation from {:?}, reverting to SendingSymbols to send next batch", neighbor_address);
                     if let Some(status) = sending_states.write().await.get_mut(&neighbor_address) {
                         status.state = ReconciliationState::SendingSymbols;
                     }
-                    wait_time_ms = 0;
                 }
 
                 continue;
             }
-
-            wait_time_ms = 0;
 
             let mut symbols = Vec::new();
             let session_id;
