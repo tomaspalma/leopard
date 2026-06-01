@@ -5,12 +5,20 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT_DIR"
 
-SIZES=${SIZES:-"1000"}
+SIZES=${SIZES:-"100000"}
 SIMILARITIES=${SIMILARITIES:-"0,0.05,0.10,0.20,0.30,0.40,0.50,0.60,0.70,0.75,0.80,0.85,0.90,0.95,0.97,0.99"}
-TRIALS=${TRIALS:-"5"}
-PROTOCOLS=${PROTOCOLS:-"riblt,merkle,rbf_riblt,rf_riblt"}
+TRIALS=${TRIALS:-"10"}
+PROTOCOLS=${PROTOCOLS:-"riblt,merkle,rbf_riblt"}
 OUTPUT_ROOT=${OUTPUT_ROOT:-"sweep"}
 PER_TRIAL_DATASETS=${PER_TRIAL_DATASETS:-true}
+
+# Keep disk persistence off during benchmark runs so disk I/O does not
+# contaminate the measured metrics (see runtime::storage_flush_enabled).
+export DISABLE_STORAGE_FLUSH=${DISABLE_STORAGE_FLUSH:-1}
+
+# Keep logging off the measured hot path. Per-save info! logging would
+# otherwise inflate the round-duration metric and produce huge logs at scale.
+export RUST_LOG=${RUST_LOG:-warn}
 
 echo "Generating datasets for sweep..."
 python3 scripts/generate_data.py --default-matrix --sizes "$SIZES" --similarities "$SIMILARITIES"

@@ -127,6 +127,18 @@ impl BinaryMerkleTree {
         self.rebuild_tree();
     }
 
+    /// Replace the entire dataset and rebuild the tree exactly once. Used to
+    /// apply a batch of reconciliation changes with a single rebuild instead
+    /// of one rebuild per inserted item.
+    pub fn replace_all(&self, entries: Vec<(String, String)>) {
+        let _guard = self.insert_rebuild_lock.lock().unwrap();
+        {
+            let mut data = self.data.write().unwrap();
+            *data = entries.into_iter().collect();
+        }
+        self.rebuild_tree();
+    }
+
     fn rebuild_tree(&self) {
         // insert_rebuild_lock must already be held by the caller.
         let entries: Vec<(String, String)> = {
@@ -134,7 +146,7 @@ impl BinaryMerkleTree {
             data.iter().map(|(k, v)| (k.clone(), v.clone())).collect()
         };
         let new_root = Self::build_recursive(&entries);
-        let mut root = self.root.write().unwrap();
+        let mut root: std::sync::RwLockWriteGuard<'_, Option<Box<MerkleNode>>> = self.root.write().unwrap();
         *root = new_root;
     }
 

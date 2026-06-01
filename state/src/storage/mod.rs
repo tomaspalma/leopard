@@ -13,7 +13,12 @@ use item::{DataStateItem, DefaultDataStateItem};
 use dashmap::DashMap;
 
 use serde::{Serialize, de::DeserializeOwned};
+use std::time::Duration;
 use std::{path::Path, sync::Arc};
+
+/// How often the background task flushes the in-memory map to disk, instead of
+/// serialising the whole map on every save (which would be O(n) per write).
+const FLUSH_INTERVAL: Duration = Duration::from_millis(1000);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum StorageAction {
@@ -98,11 +103,37 @@ impl KeyValueDataStateStorage {
             }
         }
 
+        let memory_storage = std::sync::Arc::new(memory_storage);
+
+        // Persist on a fixed interval rather than serialising the whole map on
+        // every save. Benchmarks disable this so the measured metrics are not
+        // contaminated by disk I/O.
+        if runtime::storage_flush_enabled() {
+            Self::spawn_periodic_flush(persistent_storage.clone(), memory_storage.clone());
+        }
+
         Self {
-            memory_storage: std::sync::Arc::new(memory_storage),
+            memory_storage,
             persistent_storage,
             listeners: DashMap::new(),
         }
+    }
+
+    /// Spawn the background task that persists the in-memory map to disk every
+    /// `FLUSH_INTERVAL`. Not started when disk persistence is disabled.
+    fn spawn_periodic_flush(
+        persistent_storage: PersistentDataStorage,
+        memory_storage: Arc<DashMap<String, String>>,
+    ) {
+        spawn!({
+            let mut ticker = tokio::time::interval(FLUSH_INTERVAL);
+            loop {
+                ticker.tick().await;
+                if let Err(e) = persistent_storage.save(&*memory_storage).await {
+                    tracing::warn!("Failed to persist storage to disk: {}", e);
+                }
+            }
+        });
     }
 }
 
@@ -126,17 +157,6 @@ impl DataStateStorage for KeyValueDataStateStorage {
                 listener(item.as_ref());
             }
         }
-
-        let persistent_storage_clone = self.persistent_storage.clone();
-        let memory_storage_clone = self.memory_storage.clone();
-        spawn!({
-            if let Err(e) = persistent_storage_clone
-                .save(&*memory_storage_clone)
-                .await
-            {
-                tracing::warn!("Failed to persist storage to disk: {}", e);
-            }
-        });
     }
 
     async fn save_silent(&self, item: Box<dyn DataStateItem + Send + Sync>) {
@@ -146,17 +166,6 @@ impl DataStateStorage for KeyValueDataStateStorage {
         let value = item.value().to_string();
 
         self.memory_storage.insert(key, value);
-
-        let persistent_storage_clone = self.persistent_storage.clone();
-        let memory_storage_clone = self.memory_storage.clone();
-        spawn!({
-            if let Err(e) = persistent_storage_clone
-                .save(&*memory_storage_clone)
-                .await
-            {
-                tracing::warn!("Failed to persist storage to disk: {}", e);
-            }
-        });
     }
 
     async fn get(&self, key: &str) -> Option<Box<dyn DataStateItem + Send + Sync>> {

@@ -1,4 +1,5 @@
 import argparse
+import bisect
 import json
 import math
 import os
@@ -10,20 +11,74 @@ def random_token(rng, length):
     return "".join(rng.choices(string.ascii_lowercase + string.digits, k=length))
 
 
-def build_base_entries(total_size, rng):
+def make_length_sampler(dist, base, maximum, zipf_exponent, rng):
+    """Return a zero-arg callable yielding a value length, YCSB-style.
+
+    `dist` is one of "constant", "uniform", "zipfian". All randomness is drawn
+    from `rng` so generation stays deterministic for a given seed.
+    """
+    if dist == "constant":
+        return lambda: base
+
+    lo, hi = base, max(base, maximum)
+
+    if dist == "uniform":
+        return lambda: rng.randint(lo, hi)
+
+    if dist == "zipfian":
+        n = hi - lo + 1
+        weights = [1.0 / ((r + 1) ** zipf_exponent) for r in range(n)]
+        total = sum(weights)
+        cum = []
+        acc = 0.0
+        for w in weights:
+            acc += w / total
+            cum.append(acc)
+
+        def sample():
+            idx = bisect.bisect_left(cum, rng.random())
+            if idx >= n:
+                idx = n - 1
+            return lo + idx
+
+        return sample
+
+    raise ValueError(f"unknown value-size-dist: {dist}")
+
+
+def make_value_fn(length_sampler):
+    """Build the per-entry value generator.
+
+    When `length_sampler` is None we keep the legacy structured value
+    (`{tag}_val_{i}_{token}`) so existing seeds reproduce byte-for-byte.
+    Otherwise the value is a random token whose length follows the sampler.
+    """
+    if length_sampler is None:
+        def legacy(rng, tag, i):
+            return f"{tag}_val_{i}_{random_token(rng, 10)}"
+
+        return legacy
+
+    def realistic(rng, _tag, _i):
+        return random_token(rng, length_sampler())
+
+    return realistic
+
+
+def build_base_entries(total_size, rng, value_fn):
     entries = []
     for i in range(total_size):
         key = f"base_key_{i}_{random_token(rng, 6)}"
-        value = f"base_val_{i}_{random_token(rng, 10)}"
+        value = value_fn(rng, "base", i)
         entries.append((key, value))
     return entries
 
 
-def build_unique_entries(prefix, count, rng):
+def build_unique_entries(prefix, count, rng, value_fn):
     entries = []
     for i in range(count):
         key = f"{prefix}_key_{i}_{random_token(rng, 6)}"
-        value = f"{prefix}_val_{i}_{random_token(rng, 10)}"
+        value = value_fn(rng, prefix, i)
         entries.append((key, value))
     return entries
 
@@ -34,18 +89,35 @@ def write_node_file(path, entries):
         json.dump(data, f, indent=2, sort_keys=True)
 
 
-def create_pair(size, similarity, seed, prefix, output_dir):
+def create_pair(
+    size,
+    similarity,
+    seed,
+    prefix,
+    output_dir,
+    value_dist=None,
+    value_size=10,
+    value_size_max=100,
+    zipf_exponent=0.99,
+):
     rng = random.Random(seed)
     similarity = max(0.0, min(1.0, similarity))
+
+    length_sampler = (
+        None
+        if value_dist is None
+        else make_length_sampler(value_dist, value_size, value_size_max, zipf_exponent, rng)
+    )
+    value_fn = make_value_fn(length_sampler)
 
     intersection = int(math.floor(size * similarity))
     unique_per_node = size - intersection
 
-    shared = build_base_entries(intersection, rng)
+    shared = build_base_entries(intersection, rng, value_fn)
 
-    node1_unique = build_unique_entries(f"{prefix}_node1_u", unique_per_node, rng)
-    node2_unique = build_unique_entries(f"{prefix}_node2_u", unique_per_node, rng)
-    node3_unique = build_unique_entries(f"{prefix}_node3_u", unique_per_node, rng)
+    node1_unique = build_unique_entries(f"{prefix}_node1_u", unique_per_node, rng, value_fn)
+    node2_unique = build_unique_entries(f"{prefix}_node2_u", unique_per_node, rng, value_fn)
+    node3_unique = build_unique_entries(f"{prefix}_node3_u", unique_per_node, rng, value_fn)
 
     node1_entries = shared + node1_unique
     node2_entries = shared + node2_unique
@@ -66,6 +138,13 @@ def create_pair(size, similarity, seed, prefix, output_dir):
     union_real = len(a | b)
     symmetric_difference = len(a ^ b)
     jaccard = (intersection_real / union_real) if union_real else 1.0
+
+    print(
+        f"[{prefix}] size={size} target_sim={similarity:.2f} "
+        f"intersection={intersection_real} union={union_real} "
+        f"sym_diff={symmetric_difference} jaccard={jaccard:.4f}"
+    )
+
 
 def parse_sizes(value):
     result = []
@@ -119,6 +198,31 @@ def main():
         action="store_true",
         help="Generate matrix and compatibility aliases",
     )
+    parser.add_argument(
+        "--value-size-dist",
+        choices=["constant", "uniform", "zipfian"],
+        default=None,
+        help="Value length distribution (YCSB-style fieldlengthdistribution). "
+        "Omit for legacy structured values.",
+    )
+    parser.add_argument(
+        "--value-size",
+        type=int,
+        default=10,
+        help="Base/min value length in bytes (used by --value-size-dist)",
+    )
+    parser.add_argument(
+        "--value-size-max",
+        type=int,
+        default=100,
+        help="Max value length for uniform/zipfian distributions",
+    )
+    parser.add_argument(
+        "--zipf-exponent",
+        type=float,
+        default=0.99,
+        help="Zipfian skew for value sizes (higher = more short values)",
+    )
 
     args = parser.parse_args()
     os.makedirs(args.output_dir, exist_ok=True)
@@ -132,11 +236,30 @@ def main():
             for sim in similarities:
                 prefix = f"n{size}_sim{int(round(sim * 100)):02d}"
                 seed = random.randint(0, 10_000_000_000)
-                create_pair(size, sim, seed, prefix, args.output_dir)
+                create_pair(
+                    size,
+                    sim,
+                    seed,
+                    prefix,
+                    args.output_dir,
+                    args.value_size_dist,
+                    args.value_size,
+                    args.value_size_max,
+                    args.zipf_exponent,
+                )
 
-        create_pair(10, 0.8, random.randint(0, 10_000_000_000), "small", args.output_dir)
-        create_pair(100, 0.8, random.randint(0, 10_000_000_000), "medium", args.output_dir)
-        create_pair(1000, 0.8, random.randint(0, 10_000_000_000), "large", args.output_dir)
+        for alias_size, alias_name in ((10, "small"), (100, "medium"), (1000, "large")):
+            create_pair(
+                alias_size,
+                0.8,
+                random.randint(0, 10_000_000_000),
+                alias_name,
+                args.output_dir,
+                args.value_size_dist,
+                args.value_size,
+                args.value_size_max,
+                args.zipf_exponent,
+            )
         print("Done.")
         return
 
@@ -144,7 +267,18 @@ def main():
         parser.error("single-mode requires --size and --similarity")
 
     seed = args.seed if args.seed is not None else random.randint(0, 10_000_000_000)
-    create_pair(args.size, args.similarity, seed, args.prefix, args.output_dir)
+    create_pair(
+        args.size,
+        args.similarity,
+        seed,
+        args.prefix,
+        args.output_dir,
+        args.value_size_dist,
+        args.value_size,
+        args.value_size_max,
+        args.zipf_exponent,
+    )
+
 
 if __name__ == "__main__":
     main()

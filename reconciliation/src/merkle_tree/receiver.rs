@@ -444,6 +444,7 @@ impl ReceiveMerkleTreeMessageTask {
         let pending = self.pending.clone();
         let start_times = self.start_times.clone();
         let local_snapshots = self.local_snapshots.clone();
+        let tree = self.tree.clone();
 
         spawn!({
             if let Some(storage) = state_clone.get_storage("default".to_string()) {
@@ -462,7 +463,10 @@ impl ReceiveMerkleTreeMessageTask {
                         key_clone,
                         value_clone,
                     ));
-                    storage.store(item).await;
+                    // Store without firing the Insert listener, which would
+                    // rebuild the whole tree per item. The tree is rebuilt once
+                    // when the session completes (see below).
+                    storage.store_silent(item).await;
                 } else {
                     info!(
                         "Keeping existing value for key {:?} (conflict resolution)",
@@ -472,6 +476,17 @@ impl ReceiveMerkleTreeMessageTask {
 
                 if let Some(duration) = Self::adjust_pending(&pending, &start_times, &session_id, -1) {
                     local_snapshots.lock().unwrap().remove(&session_id);
+
+                    // Session finished: every recovered item is now in storage.
+                    // Rebuild the live tree once from the full dataset instead
+                    // of once per inserted item.
+                    let entries: Vec<(String, String)> = storage
+                        .items()
+                        .into_iter()
+                        .map(|i| (i.key().to_string(), i.value().to_string()))
+                        .collect();
+                    tree.replace_all(entries);
+
                     let context = get_context();
                     gauge!(
                         "reconciliation_round_duration_seconds",

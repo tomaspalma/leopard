@@ -43,6 +43,16 @@ where
     guard.spawn(Box::pin(future));
 }
 
+/// Whether storage backends should persist to disk. Benchmarks set
+/// `DISABLE_STORAGE_FLUSH=1` (or `true`) to keep disk I/O off the measured
+/// path, so the collected metrics reflect the protocol rather than persistence.
+pub fn storage_flush_enabled() -> bool {
+    !matches!(
+        std::env::var("DISABLE_STORAGE_FLUSH").as_deref(),
+        Ok("1") | Ok("true")
+    )
+}
+
 impl Runtime for TokioRuntime {
     fn spawn(&self, task: Pin<Box<dyn Future<Output = ()> + Send>>) {
         tokio::spawn(task);
