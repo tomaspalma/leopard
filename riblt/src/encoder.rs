@@ -156,7 +156,8 @@ pub struct Decoder<T: Symbol> {
     window: CodingWindow<T>,     // local set (subtracted from incoming symbols)
     remote: CodingWindow<T>,     // symbols decoded as remote-only
     local: CodingWindow<T>,      // symbols decoded as local-only
-    decodable: Vec<usize>,       // indices into cs that are ready to peel
+    decodable: Vec<usize>,       // indices into cs that may be ready to peel
+    resolved: Vec<bool>,         // parallel to cs: whether index has been resolved
     decoded: usize,
 }
 
@@ -168,6 +169,7 @@ impl<T: Symbol> Decoder<T> {
             remote: CodingWindow::new(),
             local: CodingWindow::new(),
             decodable: Vec::new(),
+            resolved: Vec::new(),
             decoded: 0,
         }
     }
@@ -187,6 +189,7 @@ impl<T: Symbol> Decoder<T> {
             self.decodable.push(self.cs.len());
         }
         self.cs.push(c);
+        self.resolved.push(false);
     }
 
     /// Attempt to peel all currently decodable symbols, propagating each peel
@@ -196,28 +199,44 @@ impl<T: Symbol> Decoder<T> {
         let mut i = 0;
         while i < self.decodable.len() {
             let cidx = self.decodable[i];
-            let c = self.cs[cidx].clone();
-            match c.count {
-                1 => {
-                    let symbol = T::decode_from_bytes(&c.sum);
-                    let hs = HashedSymbol { hash: c.hash, symbol };
+            i += 1;
+
+            // An index may be queued more than once, and its count may have
+            // changed (or it may already be resolved) since it was enqueued, so
+            // each entry is re-validated against the current state here rather
+            // than trusting the count it had when it was pushed.
+            if self.resolved[cidx] {
+                continue;
+            }
+
+            let count = self.cs[cidx].count;
+            if count == 1 || count == -1 {
+                // Count ±1 alone is not enough: the sum may still be a
+                // composite of several symbols. is_peelable() also checks the
+                // hash, so skip until it is a genuine single symbol.
+                if !self.cs[cidx].is_peelable() {
+                    continue;
+                }
+                let c = self.cs[cidx].clone();
+                let symbol = T::decode_from_bytes(&c.sum);
+                let hs = HashedSymbol { hash: c.hash, symbol };
+                self.resolved[cidx] = true;
+                self.decoded += 1;
+                if count == 1 {
                     let (next_idx, mapping) = self.apply_new_symbol(&hs, -1);
                     self.remote.add_hashed_symbol_at(hs, next_idx, mapping);
-                    self.decoded += 1;
-                }
-                -1 => {
-                    let symbol = T::decode_from_bytes(&c.sum);
-                    let hs = HashedSymbol { hash: c.hash, symbol };
+                } else {
                     let (next_idx, mapping) = self.apply_new_symbol(&hs, 1);
                     self.local.add_hashed_symbol_at(hs, next_idx, mapping);
-                    self.decoded += 1;
                 }
-                0 => {
-                    self.decoded += 1;
-                }
-                _ => panic!("invalid degree for decodable coded symbol: {}", c.count),
+            } else if count == 0 && self.cs[cidx].hash == 0 {
+                // Fully cancelled by peeling its constituent symbols elsewhere.
+                self.resolved[cidx] = true;
+                self.decoded += 1;
             }
-            i += 1;
+            // Otherwise |count| > 1 (or count ±1 with a hash mismatch): not
+            // decodable yet. Leave it unresolved; a later peel will re-enqueue
+            // it once it becomes a clean single symbol or cancels to zero.
         }
         self.decodable.clear();
     }
@@ -243,6 +262,7 @@ impl<T: Symbol> Decoder<T> {
         self.remote.reset();
         self.local.reset();
         self.decodable.clear();
+        self.resolved.clear();
         self.decoded = 0;
     }
 
@@ -255,7 +275,7 @@ impl<T: Symbol> Decoder<T> {
         let mut idx = mapping.next().unwrap();
         while idx < self.cs.len() {
             self.cs[idx].apply_hashed(hs, direction);
-            if self.cs[idx].is_peelable() {
+            if self.cs[idx].is_peelable() || (self.cs[idx].count == 0 && self.cs[idx].hash == 0) {
                 self.decodable.push(idx);
             }
             idx = mapping.next().unwrap();
@@ -354,5 +374,61 @@ mod tests {
             decoder.remote_symbols().iter().map(|hs| hs.symbol.clone()).collect();
         assert!(decoder.local_symbols().is_empty());
         assert_eq!(items, peeled_remote);
+    }
+
+    // Reproduces the low-similarity benchmark case that previously triggered a
+    // decoder panic ("invalid degree for decodable coded symbol"): large sets
+    // with a large symmetric difference, where peeling drives some coded
+    // symbols' counts past +-1 before their queued entry is processed.
+    #[test]
+    fn test_large_symmetric_difference() {
+        let shared = 500u64;
+        let unique_each = 1000u64;
+
+        let mut items_local: HashSet<SimpleSymbol> = HashSet::new();
+        let mut items_remote: HashSet<SimpleSymbol> = HashSet::new();
+        for v in 0..shared {
+            items_local.insert(SimpleSymbol { value: v });
+            items_remote.insert(SimpleSymbol { value: v });
+        }
+        for v in shared..(shared + unique_each) {
+            items_local.insert(SimpleSymbol { value: v });
+        }
+        for v in (shared + unique_each)..(shared + 2 * unique_each) {
+            items_remote.insert(SimpleSymbol { value: v });
+        }
+
+        let local_only: HashSet<SimpleSymbol> =
+            items_local.difference(&items_remote).cloned().collect();
+        let remote_only: HashSet<SimpleSymbol> =
+            items_remote.difference(&items_local).cloned().collect();
+        let diff = local_only.len() + remote_only.len();
+
+        let mut encoder = Encoder::new(items_remote.clone());
+        let mut decoder = Decoder::new();
+        for item in &items_local {
+            decoder.add_symbol(item.clone());
+        }
+
+        let mut decoded = false;
+        for i in 0..(diff * 3 + 100) {
+            let cs = encoder.get_coded_symbol(i);
+            decoder.add_coded_symbol(cs);
+            decoder.try_decode();
+            if decoder.decoded() {
+                decoded = true;
+                break;
+            }
+        }
+
+        assert!(decoded, "failed to decode large symmetric difference");
+
+        let peeled_remote: HashSet<SimpleSymbol> =
+            decoder.remote_symbols().iter().map(|hs| hs.symbol.clone()).collect();
+        let peeled_local: HashSet<SimpleSymbol> =
+            decoder.local_symbols().iter().map(|hs| hs.symbol.clone()).collect();
+
+        assert_eq!(remote_only, peeled_remote);
+        assert_eq!(local_only, peeled_local);
     }
 }
