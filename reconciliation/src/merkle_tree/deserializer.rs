@@ -38,13 +38,13 @@ impl ProtocolDeserializer for MerkleTreeDeserializer {
 
         let msg_type_val = match &wrapper {
             MerkleTreeMessageWrapper::SyncRoot(_) => MerkleTreeMessageTypeValues::SyncRoot,
-            MerkleTreeMessageWrapper::SyncNodeRequest(_) => {
+            MerkleTreeMessageWrapper::SyncNodeRequest(_, _) => {
                 MerkleTreeMessageTypeValues::SyncNodeRequest
             }
-            MerkleTreeMessageWrapper::SyncNodeResponse(_, _, _, _, _) => {
+            MerkleTreeMessageWrapper::SyncNodeResponse(_, _) => {
                 MerkleTreeMessageTypeValues::SyncNodeResponse
             }
-            MerkleTreeMessageWrapper::DataRequest(_) => MerkleTreeMessageTypeValues::DataRequest,
+            MerkleTreeMessageWrapper::DataRequest(_, _) => MerkleTreeMessageTypeValues::DataRequest,
             MerkleTreeMessageWrapper::DataResponse(_, _) => {
                 MerkleTreeMessageTypeValues::DataResponse
             }

@@ -47,6 +47,28 @@ impl MerkleTreeSnapshot {
         }
         Some(((*current).clone(), parent_hash))
     }
+
+    /// Return just a node's (hash, key) without cloning its subtree. `get_node`
+    /// deep-clones the whole subtree via `MerkleNode: Clone`, which is O(subtree)
+    /// per call; this walk only touches the path and copies the hash and leaf key.
+    pub fn get_node_summary(&self, path: &str) -> Option<([u8; 32], Option<String>)> {
+        let mut current = self.root.as_deref()?;
+        if path != "root" {
+            for part in path.split('-') {
+                if part == "root" {
+                    continue;
+                }
+                current = if part == "0" || part == "left" {
+                    current.left.as_deref()?
+                } else if part == "1" || part == "right" {
+                    current.right.as_deref()?
+                } else {
+                    return None;
+                };
+            }
+        }
+        Some((current.hash, current.key.clone()))
+    }
 }
 
 pub struct BinaryMerkleTree {

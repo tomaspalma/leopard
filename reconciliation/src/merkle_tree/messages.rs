@@ -4,13 +4,22 @@ use std::any::Any;
 
 use message::{impl_protocol_message, MessageType, MessageTypeValues};
 
+/// One node's fingerprint in a batched SyncNodeResponse: (node_id, hash, key).
+/// `key` is Some only for leaf nodes; a hash of all-zero means the node is
+/// absent on the responder's tree.
+pub type MerkleNodeAnswer = (String, [u8; 32], Option<String>);
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum MerkleTreeMessageWrapper {
     SyncRoot([u8; 32]),
-    SyncNodeRequest(String),
-    SyncNodeResponse(String, [u8; 32], [u8; 32], Option<[u8; 32]>, Option<String>),
-    DataRequest(String),
-    DataResponse(String, String),
+    // request_id, node-ids whose fingerprints are requested (one tree level).
+    SyncNodeRequest(u64, Vec<String>),
+    // request_id, fingerprint for each requested node-id.
+    SyncNodeResponse(u64, Vec<MerkleNodeAnswer>),
+    // request_id, keys whose values are requested.
+    DataRequest(u64, Vec<String>),
+    // request_id, (key, value) for each available key.
+    DataResponse(u64, Vec<(String, String)>),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

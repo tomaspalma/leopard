@@ -53,10 +53,15 @@ impl MerkleTreeReconciliationProtocol {
     fn setup_storage_listener(&self) {
         let tree_clone = self.tree.clone();
         if let Some(storage) = self.state.get_storage("default".to_string()) {
-            for item in storage.items() {
-                self.tree
-                    .insert(item.key().to_string(), item.value().to_string());
-            }
+            // Build the tree once from the initial dataset. Inserting item by
+            // item would rebuild the whole tree on every insert -> O(n^2) at
+            // load time, which stalls for large datasets.
+            let entries: Vec<(String, String)> = storage
+                .items()
+                .into_iter()
+                .map(|item| (item.key().to_string(), item.value().to_string()))
+                .collect();
+            self.tree.replace_all(entries);
 
             let listener: state::storage::StorageListener = Box::new(move |item| {
                 info!("Storage updated dynamically, rebuilding Merkle Tree hashes.");
