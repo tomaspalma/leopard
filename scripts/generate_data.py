@@ -110,7 +110,10 @@ def create_pair(
     )
     value_fn = make_value_fn(length_sampler)
 
-    intersection = int(math.floor(size * similarity))
+    # `similarity` is the target Jaccard index J = |A∩B| / |A∪B|. With two equal
+    # -size replicas (shared x, each holding `size` keys), J = x / (2*size - x),
+    # so the shared count needed to achieve J is x = 2*size*J / (1 + J).
+    intersection = int(math.floor(2 * size * similarity / (1 + similarity)))
     unique_per_node = size - intersection
 
     shared = build_base_entries(intersection, rng, value_fn)
@@ -140,7 +143,7 @@ def create_pair(
     jaccard = (intersection_real / union_real) if union_real else 1.0
 
     print(
-        f"[{prefix}] size={size} target_sim={similarity:.2f} "
+        f"[{prefix}] size={size} target_jaccard={similarity:.2f} "
         f"intersection={intersection_real} union={union_real} "
         f"sym_diff={symmetric_difference} jaccard={jaccard:.4f}"
     )
