@@ -50,8 +50,10 @@ pub fn process_usage_snapshot() -> Option<ProcessUsageSnapshot> {
     let prev_bits = LAST_CPU_BITS.swap(cpu_total.to_bits(), Ordering::Relaxed);
     let cpu_delta = (cpu_total - f64::from_bits(prev_bits)).max(0.0);
 
+    // Peak resident set size. On macOS/other Unix, getrusage's ru_maxrss is
+    // already the lifetime peak; on Linux we read VmHWM to match.
     #[cfg(target_os = "linux")]
-    let rss_bytes = read_current_rss_bytes().unwrap_or(0);
+    let rss_bytes = read_peak_rss_bytes().unwrap_or(0);
 
     #[cfg(target_os = "macos")]
     let rss_bytes = usage.ru_maxrss.max(0) as u64;
@@ -65,11 +67,14 @@ pub fn process_usage_snapshot() -> Option<ProcessUsageSnapshot> {
     })
 }
 
+// Peak resident set size (high-water mark over the process lifetime), so the
+// measurement captures the maximum footprint during a run rather than whatever
+// RSS happens to be at convergence. One process per run keeps the peak clean.
 #[cfg(target_os = "linux")]
-fn read_current_rss_bytes() -> Option<u64> {
+fn read_peak_rss_bytes() -> Option<u64> {
     let content = std::fs::read_to_string("/proc/self/status").ok()?;
     for line in content.lines() {
-        if line.starts_with("VmRSS:") {
+        if line.starts_with("VmHWM:") {
             let kb: u64 = line.split_whitespace().nth(1)?.parse().ok()?;
             return Some(kb * 1024);
         }
