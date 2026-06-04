@@ -140,30 +140,25 @@ pub trait NodeState {
     async fn init(&self) -> Result<(), NodeInitError>;
 }
 
+/// The concrete, type-erased socket stored by `DefaultNodeState`.
+type DefaultSocket = dyn NodeSocket<
+        RouteTask = DefaultNodeSocketTask,
+        NodeSocketTaskMetadata = DefaultNodeSocketTaskMetadata,
+        PeriodicNodeSocketTask = PeriodicDefaultNodeSocketTask,
+        PeriodTimeUnit = TokioPeriodTimeUnit,
+        RouteStorage = HashMapRouteStorage,
+        RouteId = NodeSocketRouteId,
+        ConnectionInfo = NodeAddress,
+        StreamType = Vec<u8>,
+        RequestHandlerReturn = u64,
+    > + Send
+    + Sync;
+
+/// Shared, lockable handle to a single socket.
+type DefaultSocketHandle = Arc<tokio::sync::Mutex<DefaultSocket>>;
+
 pub struct DefaultNodeState {
-    sockets: Arc<
-        tokio::sync::Mutex<
-            HashMap<
-                NodeAddress,
-                Arc<
-                    tokio::sync::Mutex<
-                        dyn NodeSocket<
-                                RouteTask = DefaultNodeSocketTask,
-                                NodeSocketTaskMetadata = DefaultNodeSocketTaskMetadata,
-                                PeriodicNodeSocketTask = PeriodicDefaultNodeSocketTask,
-                                PeriodTimeUnit = TokioPeriodTimeUnit,
-                                RouteStorage = HashMapRouteStorage,
-                                RouteId = NodeSocketRouteId,
-                                ConnectionInfo = NodeAddress,
-                                StreamType = Vec<u8>,
-                                RequestHandlerReturn = u64,
-                            > + Send
-                            + Sync,
-                    >,
-                >,
-            >,
-        >,
-    >,
+    sockets: Arc<tokio::sync::Mutex<HashMap<NodeAddress, DefaultSocketHandle>>>,
     membership: Arc<RwLock<DefaultMembership>>,
     data: DashMap<String, Arc<dyn DataState + Send + Sync>>,
     reconciliation_checker: std::sync::Mutex<Option<Arc<dyn ReconciliationChecker>>>,
@@ -245,10 +240,13 @@ impl NodeState for DefaultNodeState {
         target: Box<Self::ConnectionInfo>,
         message: Box<dyn Message + Send + Sync>,
     ) -> Result<(), String> {
-        let s = self.sockets.lock().await;
-        let socket = s.get(&port).unwrap();
-
-        socket.lock().await.send(target, message).await;
+        self.socket_handle(&port)
+            .await
+            .unwrap()
+            .lock()
+            .await
+            .send(target, message)
+            .await;
 
         Ok(())
     }
@@ -310,7 +308,7 @@ impl NodeState for DefaultNodeState {
         port: NodeAddress,
         task: Arc<PeriodicDefaultNodeSocketTask>,
     ) -> Result<(), String> {
-        match self.sockets.lock().await.get_mut(&port) {
+        match self.socket_handle(&port).await {
             Some(socket) => {
                 socket.lock().await.add_periodic_task(task).await;
                 Ok(())
@@ -453,6 +451,12 @@ impl NodeState for DefaultNodeState {
 }
 
 impl DefaultNodeState {
+    /// Look up a socket by port, cloning the handle out so the global
+    /// sockets-map lock is released before the caller locks the socket.
+    async fn socket_handle(&self, port: &NodeAddress) -> Option<DefaultSocketHandle> {
+        self.sockets.lock().await.get(port).cloned()
+    }
+
     pub fn new(
         config: Arc<
             dyn NodeConfig<
