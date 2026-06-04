@@ -179,6 +179,7 @@ def plot_cpu_by_similarity(summary, output_path):
         )
 
     plt.xlabel("Similarity (Jaccard)")
+    plt.xlim(-0.03, 1.03)
     plt.ylabel("Total CPU Time (ms)")
     plt.title("Total CPU Usage vs Similarity")
     apply_log_plain_ticks()

@@ -1,12 +1,10 @@
-pub mod bloom;
 pub mod deserializer;
 pub mod messages;
 pub mod protocols;
-pub mod rateless_bloom;
 pub mod receiver;
 pub mod scom;
 
-use bloom::BloomFilter;
+use crate::algorithms::rbf::bloom::BloomFilter;
 
 use std::sync::Arc;
 use std::{
@@ -57,6 +55,12 @@ pub struct BloomReceivingState {
 }
 
 impl BloomReceivingState {
+    /// The bloom membership partition has converged once the true-negative set
+    /// has stopped growing for `STABLE_ROUNDS_REQUIRED` consecutive slices.
+    pub fn has_stabilized(&self) -> bool {
+        self.consecutive_stable_rounds >= STABLE_ROUNDS_REQUIRED
+    }
+
     pub fn new(session_id: String, m_bits: usize) -> Self {
         Self {
             session_id,
@@ -83,8 +87,10 @@ pub struct RbfRibltProtocol {
     pub(crate) pending_value_fetch_sessions: Arc<RwLock<HashMap<NodeAddress, String>>>,
     pub(crate) last_reconciled_fingerprint: Arc<RwLock<HashMap<NodeAddress, u64>>>,
     pub(crate) reconciliation_initiated_with: Arc<RwLock<HashSet<NodeAddress>>>,
-    // Preserved from scom_receiving_states before it is removed, so handle_value_fetch_response
-    // can still compute the round duration after that state is gone.
+    // Reconciliation start timestamps, stamped when the initiator begins the bloom
+    // phase (and as a fallback when the scom decoder is seeded). Read by
+    // handle_value_fetch_response to compute the whole-reconciliation duration,
+    // and outlives the per-phase state that is torn down before the metric fires.
     pub(crate) round_start_times: Arc<RwLock<HashMap<NodeAddress, Instant>>>,
     // s_tn captured at bloom stabilization so handle_value_fetch_request can still access it
     // even after clear_session_state has wiped bloom_receiving_states.

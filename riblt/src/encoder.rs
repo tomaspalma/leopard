@@ -137,6 +137,13 @@ impl<T: Symbol> Encoder<T> {
         self.coded_symbols[index].clone()
     }
 
+    /// Produce the next coded symbol in sequence without caching it, keeping the
+    /// encoder bounded by the set size rather than the number of symbols emitted.
+    /// Consumes strictly in order; must not be mixed with `get_coded_symbol`.
+    pub fn next_coded_symbol(&mut self) -> CodedSymbol<T> {
+        self.window.apply_window(CodedSymbol::new(), 1)
+    }
+
     pub fn reset(&mut self) {
         self.window.reset();
         self.coded_symbols.clear();

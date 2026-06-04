@@ -23,10 +23,23 @@ use crate::riblt::messages::{RIBLTCodedSymbol, RIBLTSymbol};
 use crate::riblt::session::{build_decoder_blocking, process_batch_blocking};
 
 // Coded symbols carried in a single batch message.
-const CHUNK_SIZE: usize = 256;
-// Maximum coded symbols kept in flight (sent but unacknowledged). Bounds how far
-// past the ~1.35*d decode point the sender can overshoot.
-const SEND_WINDOW: usize = 4096;
+const CHUNK_SIZE: usize = 30;
+// Flow-control window: the maximum coded symbols kept in flight (sent but
+// unacknowledged) bounds how far past the ~1.35*d decode point the sender can
+// overshoot. A fixed, large window lets the sender outrun a slow decoder (which
+// must first seed all n local symbols before it can peel anything) and flood a
+// near-constant volume regardless of the real difference — at high similarity
+// that is many times the whole dataset. Instead the window starts small and
+// grows with how many symbols have already been sent: at high similarity the
+// decoder finishes inside MIN_SEND_WINDOW, so the existing stop-on-decode bounds
+// the overshoot to a handful of symbols; at low similarity the window expands
+// toward MAX_SEND_WINDOW to keep the pipeline full. Overshoot is therefore a
+// small fraction of the symbols actually needed rather than a fixed 4096.
+const MIN_SEND_WINDOW: usize = 64;
+const MAX_SEND_WINDOW: usize = 4096;
+// The in-flight allowance grows as sent / SEND_WINDOW_GROWTH_DIVISOR, capping the
+// wasted overshoot at roughly 1/divisor of the symbols genuinely transmitted.
+const SEND_WINDOW_GROWTH_DIVISOR: usize = 4;
 // Safety net so a lost acknowledgement can't wedge the sender forever.
 const ACK_TIMEOUT: Duration = Duration::from_millis(5000);
 
@@ -149,13 +162,19 @@ impl RibltStreamEngine {
                 }
             };
 
+            // Grow the allowed in-flight window with the symbols already sent so
+            // the sender stays close to the decoder when the difference is small
+            // (so stop-on-decode bounds the overshoot) but still fills the pipe
+            // when the difference is large.
+            let window = (sent / SEND_WINDOW_GROWTH_DIVISOR)
+                .clamp(MIN_SEND_WINDOW, MAX_SEND_WINDOW);
             let in_flight = sent.saturating_sub(acked);
-            if in_flight >= SEND_WINDOW {
+            if in_flight >= window {
                 let _ = timeout(ACK_TIMEOUT, resend_notify.notified()).await;
                 continue;
             }
 
-            let budget = (SEND_WINDOW - in_flight).min(CHUNK_SIZE);
+            let budget = (window - in_flight).min(CHUNK_SIZE);
             let start_index = sent;
             let mut symbols = Vec::with_capacity(budget);
             {
@@ -164,8 +183,8 @@ impl RibltStreamEngine {
                     Some(s) => s,
                     None => break,
                 };
-                for i in 0..budget {
-                    let cs = status.local_iblt.get_coded_symbol(start_index + i);
+                for _ in 0..budget {
+                    let cs = status.local_iblt.next_coded_symbol();
                     symbols.push(RIBLTCodedSymbol {
                         sum: cs.sum,
                         hash: cs.hash,

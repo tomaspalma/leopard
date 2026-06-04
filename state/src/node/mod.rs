@@ -395,17 +395,35 @@ impl NodeState for DefaultNodeState {
                     match listener.accept().await {
                         Ok((mut stream, addr)) => {
                             info!("Accepted connection from {}", addr);
+                            let _ = stream.set_nodelay(true);
 
-                            let mut buffer = Vec::new();
+                            let request_handler = request_handler.clone();
+                            let route_handler = route_handler.clone();
+                            let local_identifier = local_identifier.clone();
 
-                            match stream.read_to_end(&mut buffer).await {
-                                Ok(_size) => {
-                                    if buffer.len() < 16 {
-                                        error!("Buffer too small");
-                                        continue;
+                            spawn!({
+                                loop {
+                                    let mut len_buf = [0u8; 4];
+                                    if let Err(e) = stream.read_exact(&mut len_buf).await {
+                                        if e.kind() != std::io::ErrorKind::UnexpectedEof {
+                                            error!("Failed to read frame length from {}: {}", addr, e);
+                                        }
+                                        break;
                                     }
-                                    let protocol_id = request_handler.handle(buffer.clone());
 
+                                    let frame_len = u32::from_be_bytes(len_buf) as usize;
+                                    if frame_len < 16 {
+                                        error!("Frame from {} too small: {}", addr, frame_len);
+                                        break;
+                                    }
+
+                                    let mut buffer = vec![0u8; frame_len];
+                                    if let Err(e) = stream.read_exact(&mut buffer).await {
+                                        error!("Failed to read frame body from {}: {}", addr, e);
+                                        break;
+                                    }
+
+                                    let protocol_id = request_handler.handle(buffer.clone());
                                     let sender_port =
                                         u16::from_be_bytes(buffer[8..10].try_into().unwrap());
                                     let sender_address =
@@ -420,10 +438,7 @@ impl NodeState for DefaultNodeState {
                                         )
                                         .await;
                                 }
-                                Err(e) => {
-                                    error!("Failed to read from stream: {}", e);
-                                }
-                            }
+                            });
                         }
                         Err(e) => {
                             error!("Failed to accept connection: {}", e);

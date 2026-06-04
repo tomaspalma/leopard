@@ -118,12 +118,16 @@ impl RibltDecodeSink for RbfScomSink {
             symbols.insert(RIBLTSymbol { key, value });
         }
 
-        // Start the round clock (read later by handle_value_fetch_response) and
-        // reset the per-session remote accumulator.
+        // Fallback start stamp for the round clock (read later by
+        // handle_value_fetch_response): the initiator already stamps the
+        // reconciliation start when it begins the bloom phase, so only stamp
+        // here if no earlier start exists. Also reset the per-session remote
+        // accumulator.
         self.round_start_times
             .write()
             .await
-            .insert(neighbor.clone(), Instant::now());
+            .entry(neighbor.clone())
+            .or_insert_with(Instant::now);
         self.pending_remote
             .write()
             .await

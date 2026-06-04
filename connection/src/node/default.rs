@@ -16,8 +16,10 @@ use runtime::{
 };
 use tokio::io::AsyncWriteExt;
 use tokio::net::{TcpListener, TcpStream};
+use tokio::sync::Mutex;
 use zeromq::Socket;
 
+use std::collections::HashMap;
 use std::sync::Arc;
 
 pub struct PeriodicDefaultNodeSocketTask {
@@ -92,11 +94,14 @@ impl PeriodicNodeSocketTask<TokioPeriodTimeUnit> for PeriodicDefaultNodeSocketTa
     }
 }
 
+type PooledConnection = Arc<Mutex<Option<TcpStream>>>;
+
 pub struct DefaultNodeSocket {
     port: NodeAddress,
     listener: Option<Arc<TcpListener>>,
     request_handler: Arc<dyn RequestHandler<Vec<u8>, u64> + Send + Sync>,
     route_handler: Arc<dyn RouteHandler<RouteId = NodeSocketRouteId> + Send + Sync>,
+    connections: Arc<Mutex<HashMap<String, PooledConnection>>>,
 }
 
 impl DefaultNodeSocket {
@@ -106,7 +111,51 @@ impl DefaultNodeSocket {
             listener: None,
             request_handler: Arc::new(DefaultRequestHandler::new()),
             route_handler: Arc::new(DefaultRouteHandler::new()),
+            connections: Arc::new(Mutex::new(HashMap::new())),
         }
+    }
+
+    async fn send_with_retries(
+        &self,
+        addr: &str,
+        conn: &mut Option<TcpStream>,
+        frame_len: [u8; 4],
+        message: &[u8],
+    ) -> bool {
+        for attempt in 0..2 {
+            if conn.is_none() {
+                match TcpStream::connect(addr).await {
+                    Ok(stream) => {
+                        let _ = stream.set_nodelay(true);
+                        *conn = Some(stream);
+                    }
+                    Err(e) => {
+                        error!("Could not connect to target {}: {}", addr, e);
+                        return false;
+                    }
+                }
+            }
+
+            let stream = conn.as_mut().unwrap();
+            let write_result = async {
+                stream.write_all(&frame_len).await?;
+                stream.write_all(message).await?;
+                stream.flush().await
+            }
+            .await;
+
+            match write_result {
+                Ok(_) => return true,
+                Err(e) => {
+                    *conn = None;
+                    if attempt == 1 {
+                        error!("Failed to send data to {}: {}", addr, e);
+                    }
+                }
+            }
+        }
+
+        false
     }
 }
 
@@ -158,38 +207,40 @@ impl NodeSocket for DefaultNodeSocket {
     async fn send(&self, target: Box<NodeAddress>, message: Box<dyn Message + Send + Sync>) {
         let addr = format!("{}:{}", target.host(), target.port());
 
-        match TcpStream::connect(&addr).await {
-            Ok(mut stream) => {
-                let message_to_send = message
-                    .serialize(message.protocol(), self.port.port())
-                    .unwrap();
-
-                match stream.write_all(&message_to_send).await {
-                    Ok(_) => {
-                        let bytes_sent = message_to_send.len() as u64;
-                        let target_str = format!("{:?}", target);
-                        let context = get_context();
-                        let protocol_id = message.protocol().unwrap_or(0);
-                        let protocol_label = ProtocolIDTranslator::translate(protocol_id);
-
-                        MetricRegistry::record_counter_metric(
-                            protocol_id,
-                            bytes_sent,
-                            &target_str,
-                            &protocol_label,
-                            &context,
-                        );
-
-                        let _ = stream.flush().await;
-                    }
-                    Err(e) => {
-                        error!("Failed to send data to {}: {}", addr, e);
-                    }
-                }
+        let message_to_send = match message.serialize(message.protocol(), self.port.port()) {
+            Ok(bytes) => bytes,
+            Err(_) => {
+                error!("Failed to serialize message for {}", addr);
+                return;
             }
-            Err(e) => {
-                error!("Could not connect to target {}: {}", addr, e);
-            }
+        };
+        let frame_len = message_to_send.len() as u32;
+
+        let slot = {
+            let mut pool = self.connections.lock().await;
+            pool.entry(addr.clone())
+                .or_insert_with(|| Arc::new(Mutex::new(None)))
+                .clone()
+        };
+        let mut conn = slot.lock().await;
+
+        if self
+            .send_with_retries(&addr, &mut conn, frame_len.to_be_bytes(), &message_to_send)
+            .await
+        {
+            let bytes_sent = message_to_send.len() as u64 + 4;
+            let target_str = format!("{:?}", target);
+            let context = get_context();
+            let protocol_id = message.protocol().unwrap_or(0);
+            let protocol_label = ProtocolIDTranslator::translate(protocol_id);
+
+            MetricRegistry::record_counter_metric(
+                protocol_id,
+                bytes_sent,
+                &target_str,
+                &protocol_label,
+                &context,
+            );
         }
     }
 

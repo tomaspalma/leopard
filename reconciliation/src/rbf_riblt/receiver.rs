@@ -1,6 +1,7 @@
 use std::{
     collections::{hash_map::DefaultHasher, HashSet},
     sync::Arc,
+    time::Instant,
 };
 
 use connection::{node::port::NodeAddress, route::RouteTask};
@@ -13,8 +14,8 @@ use tracing::{error, info};
 
 use crate::riblt::{messages::RIBLTSymbol, session::store_symbols};
 
+use crate::algorithms::rbf::bloom::BloomFilter;
 use crate::rbf_riblt::{
-    bloom::BloomFilter,
     deserializer::RbfRibltDeserializer,
     messages::{
         RbfRibltBloomFilterSliceMessage, RbfRibltFetchedEntry, RbfRibltHandshakeMessage,
@@ -222,6 +223,19 @@ impl ReceiveRbfRibltMessageTask {
             .map(|item| item.key().to_string())
             .collect();
         receiving.insert(neighbor.clone(), state);
+
+        // Stamp the round clock at first bloom-slice receipt so the responder
+        // times the whole reconciliation (bloom + scom), matching the initiator's
+        // stamp at bloom-phase start. `or_insert_with` leaves the initiator's
+        // earlier stamp untouched when it later receives the reverse bloom stream,
+        // and keeps the responder's start from drifting to the scom phase.
+        self.protocol
+            .round_start_times
+            .write()
+            .await
+            .entry(neighbor.clone())
+            .or_insert_with(Instant::now);
+
         true
     }
 
@@ -257,8 +271,7 @@ impl ReceiveRbfRibltMessageTask {
         } else {
             state.consecutive_stable_rounds = 0;
         }
-        let stabilized =
-            state.consecutive_stable_rounds >= crate::rbf_riblt::STABLE_ROUNDS_REQUIRED;
+        let stabilized = state.has_stabilized();
         state.last_true_negatives = new_s_tn.len();
         state.s_com = new_s_com;
         state.s_tn = new_s_tn;

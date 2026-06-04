@@ -187,6 +187,7 @@ def plot_round_trip_summary(summary, output_dir):
         )
 
     plt.xlabel("Similarity (Jaccard)")
+    plt.xlim(-0.03, 1.03)
     plt.ylabel("Mean Reconciliation Round Trips")
     plt.title("Reconciliation Round Trips vs Similarity")
     plt.yscale("log")

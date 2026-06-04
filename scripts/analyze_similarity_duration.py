@@ -153,6 +153,7 @@ def plot_summary(summary, output_dir):
         )
 
     plt.xlabel("Similarity (Jaccard)")
+    plt.xlim(-0.03, 1.03)
     plt.ylabel("Mean Reconciliation Round Duration (seconds)")
     plt.title("Reconciliation Round Duration vs Similarity")
     plt.yscale("log")

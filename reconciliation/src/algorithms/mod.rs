@@ -1,3 +1,4 @@
+pub mod rbf;
 pub mod ribbon;
 
 pub trait SimilarityLevelDegree<D> {

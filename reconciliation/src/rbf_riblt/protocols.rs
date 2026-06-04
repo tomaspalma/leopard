@@ -1,4 +1,4 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, sync::Arc, time::Instant};
 
 use async_trait::async_trait;
 use connection::{
@@ -23,8 +23,8 @@ use runtime::spawn;
 
 use crate::{rbf_riblt::receiver::ReceiveRbfRibltMessageTask, ReconciliationProtocol};
 
+use crate::algorithms::rbf::bloom::BloomFilter;
 use super::{
-    bloom::BloomFilter,
     messages::RbfRibltBloomFilterSliceMessage,
     BloomSendingState, RbfRibltProtocol, BLOOM_HASHES, RBF_RIBLT_PROTOCOL_ID,
 };
@@ -189,6 +189,13 @@ impl RbfRibltProtocol {
                 .write()
                 .await
                 .insert(neighbor.clone());
+            // Stamp the reconciliation start here, at the very beginning of the
+            // bloom phase, so the round-duration metric covers the whole
+            // reconciliation (bloom + scom) rather than just the scom phase.
+            self.round_start_times
+                .write()
+                .await
+                .insert(neighbor.clone(), Instant::now());
 
             let state = self.state.clone();
             let bloom_sending_states = self.bloom_sending_states.clone();

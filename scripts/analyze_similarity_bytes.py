@@ -186,6 +186,7 @@ def plot_summary(summary, output_dir):
         )
 
     plt.xlabel("Similarity (Jaccard)")
+    plt.xlim(-0.03, 1.03)
     plt.ylabel("Mean Data Transmitted (MB)")
     plt.title("Reconciliation Transmitted Data vs Similarity")
     plt.yscale("log")
@@ -222,6 +223,7 @@ def _plot_ratio(summary, output_dir):
 
     plt.axhline(1.0, color="black", linewidth=0.8, linestyle="--", label="riblt (baseline)")
     plt.xlabel("Similarity (Jaccard)")
+    plt.xlim(-0.03, 1.03)
     plt.ylabel("Bytes / RIBLT bytes  (lower is better)")
     plt.title("Relative Transmitted Bytes vs RIBLT Baseline")
     plt.gca().xaxis.set_major_locator(mticker.MultipleLocator(0.05))
@@ -251,6 +253,7 @@ def _plot_overhead(summary, output_dir):
 
     plt.axhline(0, color="black", linewidth=0.8, linestyle="--")
     plt.xlabel("Similarity (Jaccard)")
+    plt.xlim(-0.03, 1.03)
     plt.ylabel("Extra bytes vs plain RIBLT")
     plt.title("Protocol Filter Overhead (bytes above RIBLT baseline)")
     plt.gca().xaxis.set_major_locator(mticker.MultipleLocator(0.05))

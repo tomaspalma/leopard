@@ -223,6 +223,7 @@ def plot_metric(summary, value_col, std_col, ylabel, title, output_path):
         )
 
     plt.xlabel("Similarity (Jaccard)")
+    plt.xlim(-0.03, 1.03)
     plt.ylabel(ylabel)
     plt.title(title)
     apply_log_plain_ticks()
