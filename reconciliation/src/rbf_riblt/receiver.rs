@@ -266,13 +266,10 @@ impl ReceiveRbfRibltMessageTask {
     ) -> Option<(bool, String)> {
         let mut receiving = self.protocol.bloom_receiving_states.write().await;
         let state = receiving.get_mut(neighbor)?;
-        if new_s_tn.len() == state.last_true_negatives {
-            state.consecutive_stable_rounds += 1;
-        } else {
-            state.consecutive_stable_rounds = 0;
-        }
-        let stabilized = state.has_stabilized();
-        state.last_true_negatives = new_s_tn.len();
+        // True negatives grow monotonically, so the increase over the previous
+        // round is how many new true negatives this slice revealed.
+        let new_true_negatives = new_s_tn.len().saturating_sub(state.s_tn.len());
+        let stabilized = state.should_stop_slicing(new_true_negatives);
         state.s_com = new_s_com;
         state.s_tn = new_s_tn;
         Some((stabilized, state.session_id.clone()))

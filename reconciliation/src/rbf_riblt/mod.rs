@@ -41,24 +41,24 @@ impl BloomSendingState {
     }
 }
 
-pub const STABLE_ROUNDS_REQUIRED: usize = 3;
-
 pub struct BloomReceivingState {
     pub session_id: String,
     pub filters: Vec<BloomFilter<String>>,
     pub m_bits: usize,
     pub s_com: Vec<String>,
     pub s_tn: Vec<String>,
-    pub last_true_negatives: usize,
-    pub consecutive_stable_rounds: usize,
     pub riblt_started: bool,
 }
 
 impl BloomReceivingState {
-    /// The bloom membership partition has converged once the true-negative set
-    /// has stopped growing for `STABLE_ROUNDS_REQUIRED` consecutive slices.
-    pub fn has_stabilized(&self) -> bool {
-        self.consecutive_stable_rounds >= STABLE_ROUNDS_REQUIRED
+    /// Cost-based stopping criterion (Gomes & Baquero): stop slicing once a new
+    /// slice reveals fewer than `m_bits / BLOOM_C_ELEM` new true negatives —
+    /// i.e. the m-bit cost of another slice exceeds the cost of reconciling the
+    /// elements it would still eliminate. Compared in integer form
+    /// (`new_true_negatives * BLOOM_C_ELEM < m_bits`) to avoid truncating the
+    /// threshold to zero for small filters.
+    pub fn should_stop_slicing(&self, new_true_negatives: usize) -> bool {
+        new_true_negatives * BLOOM_C_ELEM < self.m_bits
     }
 
     pub fn new(session_id: String, m_bits: usize) -> Self {
@@ -68,8 +68,6 @@ impl BloomReceivingState {
             m_bits,
             s_com: Vec::new(),
             s_tn: Vec::new(),
-            last_true_negatives: 0,
-            consecutive_stable_rounds: 0,
             riblt_started: false,
         }
     }
