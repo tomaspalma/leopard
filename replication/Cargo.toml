@@ -16,3 +16,6 @@ tracing = "0.1"
 async-trait = "0.1.83"
 tokio = "1.50.0"
 rkyv = "0.8.15"
+
+[lints]
+workspace = true

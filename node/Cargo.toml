@@ -16,3 +16,6 @@ errors = { path = "../errors/" }
 config = { path = "../config/" }
 message = { path = "../message/" }
 services = { path = "../services" }
+
+[lints]
+workspace = true

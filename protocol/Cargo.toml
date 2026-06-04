@@ -12,3 +12,6 @@ message = { path = "../message" }
 async-trait = "0.1.83"
 uuid = { version = "1.21.0", features = ["v4"] }
 rand = "0.10.0"
+
+[lints]
+workspace = true

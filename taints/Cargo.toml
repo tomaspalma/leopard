@@ -5,3 +5,6 @@ edition = "2024"
 
 [dependencies]
 connection = { path = "../connection/" }
+
+[lints]
+workspace = true

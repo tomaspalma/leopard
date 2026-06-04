@@ -9,3 +9,6 @@ rkyv = "0.8.15"
 rkyv_dyn = "0.7.46"
 serde = "1.0.228"
 typetag = "0.2.21"
+
+[lints]
+workspace = true

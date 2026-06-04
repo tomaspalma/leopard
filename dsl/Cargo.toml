@@ -16,3 +16,6 @@ services = { path = "../services" }
 
 tracing = "0.1"
 futures = "0.3"
+
+[lints]
+workspace = true

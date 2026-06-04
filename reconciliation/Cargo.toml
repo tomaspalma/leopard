@@ -24,3 +24,6 @@ rand = "0.10.0"
 metrics = "0.24.3"
 uuid = { version = "1.23.0", features = ["v4"] }
 bitvec = "1.0.1"
+
+[lints]
+workspace = true

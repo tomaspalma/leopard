@@ -3,6 +3,12 @@ name = "replication-engine"
 version = "0.1.0"
 edition = "2024"
 
+[lints]
+workspace = true
+
+[workspace.lints.clippy]
+await_holding_lock = "deny"
+
 [workspace]
 members = [
   "config",

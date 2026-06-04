@@ -6,3 +6,6 @@ edition = "2024"
 [dependencies]
 membership = { path = "../membership" }
 connection = { path = "../connection" }
+
+[lints]
+workspace = true
