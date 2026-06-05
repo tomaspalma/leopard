@@ -1,4 +1,4 @@
-use dsl::{NodeBuilder, ProtocolChoice};
+use dsl::{CheckerBuilder, NodeBuilder, ProtocolChoice, ServiceBuilder};
 use reconciliation::checker::ReconciliationCheckResult;
 use runtime::RUNTIME;
 
@@ -46,14 +46,11 @@ pub async fn custom_nodes(
             .port(port)
             .dataset(dataset)
             .protocol(protocol_choice.clone())
-            .service()
-            .http()
-            .port(http_port);
+            .service(ServiceBuilder::http().port(http_port));
     }
 
     let result = builder
-        .checker()
-        .local()
+        .checker(CheckerBuilder::new().local())
         .build()
         .await
         .expect("Failed to build nodes");

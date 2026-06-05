@@ -1,45 +1,50 @@
-pub trait ServiceReceiver {
-    fn push_service(&mut self, config: ServiceConfig);
-}
-
 #[derive(Clone)]
 pub enum ServiceConfig {
     Http { port: u16 },
     Ws { port: u16 },
 }
 
-pub struct ServiceEntry<B: ServiceReceiver> {
-    pub(crate) parent: B,
+enum ServiceKind {
+    Http,
+    Ws,
 }
 
-pub struct HttpServiceEntry<B: ServiceReceiver> {
-    parent: B,
+/// Builder for a single node service (HTTP / WebSocket). Construct a kind with
+/// [`ServiceBuilder::http`] or [`ServiceBuilder::ws`], set its fields, and hand
+/// it to [`crate::NodeBuilder::service`]; the node builder resolves it into a
+/// [`ServiceConfig`] via [`ServiceBuilder::build`] when the node is built.
+pub struct ServiceBuilder {
+    kind: ServiceKind,
+    port: Option<u16>,
 }
 
-pub struct WsServiceEntry<B: ServiceReceiver> {
-    parent: B,
-}
-
-impl<B: ServiceReceiver> ServiceEntry<B> {
-    pub fn http(self) -> HttpServiceEntry<B> {
-        HttpServiceEntry { parent: self.parent }
+impl ServiceBuilder {
+    pub fn http() -> Self {
+        Self {
+            kind: ServiceKind::Http,
+            port: None,
+        }
     }
 
-    pub fn ws(self) -> WsServiceEntry<B> {
-        WsServiceEntry { parent: self.parent }
+    pub fn ws() -> Self {
+        Self {
+            kind: ServiceKind::Ws,
+            port: None,
+        }
     }
-}
 
-impl<B: ServiceReceiver> HttpServiceEntry<B> {
-    pub fn port(mut self, port: u16) -> B {
-        self.parent.push_service(ServiceConfig::Http { port });
-        self.parent
+    pub fn port(mut self, port: u16) -> Self {
+        self.port = Some(port);
+        self
     }
-}
 
-impl<B: ServiceReceiver> WsServiceEntry<B> {
-    pub fn port(mut self, port: u16) -> B {
-        self.parent.push_service(ServiceConfig::Ws { port });
-        self.parent
+    pub fn build(self) -> Result<ServiceConfig, String> {
+        let port = self
+            .port
+            .ok_or_else(|| "service requires a port".to_string())?;
+        Ok(match self.kind {
+            ServiceKind::Http => ServiceConfig::Http { port },
+            ServiceKind::Ws => ServiceConfig::Ws { port },
+        })
     }
 }

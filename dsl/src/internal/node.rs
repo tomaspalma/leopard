@@ -19,8 +19,8 @@ use state::node::{DefaultNodeState, NodeState};
 use state::storage::state::{DataState, DefaultDataState};
 use tracing::{Instrument, info};
 
-use super::checker::{CheckerChoice, CheckerEntry, CheckerReceiver, build_checker};
-use super::service::{ServiceConfig, ServiceEntry, ServiceReceiver};
+use super::checker::{CheckerBuilder, build_checker};
+use super::service::{ServiceBuilder, ServiceConfig};
 
 #[derive(Clone)]
 pub enum ProtocolChoice {
@@ -41,7 +41,7 @@ struct InternalNode {
     port: Option<u16>,
     dataset: Option<String>,
     protocols: Vec<ProtocolChoice>,
-    services: Vec<ServiceConfig>,
+    services: Vec<ServiceBuilder>,
 }
 
 impl InternalNode {
@@ -58,20 +58,12 @@ impl InternalNode {
 
 pub struct NodeBuilder {
     nodes: Vec<InternalNode>,
-    checker: Option<CheckerChoice>,
+    checker: Option<CheckerBuilder>,
 }
 
-impl CheckerReceiver for NodeBuilder {
-    fn set_checker(&mut self, choice: CheckerChoice) {
-        self.checker = Some(choice);
-    }
-}
-
-impl ServiceReceiver for NodeBuilder {
-    fn push_service(&mut self, config: ServiceConfig) {
-        if let Some(node) = self.nodes.last_mut() {
-            node.services.push(config);
-        }
+impl Default for NodeBuilder {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -128,12 +120,19 @@ impl NodeBuilder {
         self
     }
 
-    pub fn service(self) -> ServiceEntry<Self> {
-        ServiceEntry { parent: self }
+    pub fn service(mut self, service: ServiceBuilder) -> Self {
+        if self.nodes.is_empty() {
+            self.nodes.push(InternalNode::new());
+        }
+        if let Some(node) = self.nodes.last_mut() {
+            node.services.push(service);
+        }
+        self
     }
 
-    pub fn checker(self) -> CheckerEntry<Self> {
-        CheckerEntry { parent: self }
+    pub fn checker(mut self, checker: CheckerBuilder) -> Self {
+        self.checker = Some(checker);
+        self
     }
 
     fn create_node_task(
@@ -244,7 +243,8 @@ impl NodeBuilder {
 
         let checker_choice = self
             .checker
-            .ok_or("no checker configured in NodeBuilder")?;
+            .ok_or("no checker configured in NodeBuilder")?
+            .build()?;
 
         let storages: Vec<Arc<dyn DataState + Send + Sync>> =
             futures::future::join_all(self.nodes.iter().map(|node| {
@@ -266,13 +266,19 @@ impl NodeBuilder {
                 return Err("missing protocol on node".to_string());
             }
 
+            let services = node
+                .services
+                .into_iter()
+                .map(ServiceBuilder::build)
+                .collect::<Result<Vec<ServiceConfig>, String>>()?;
+
             tasks.push(Self::create_node_task(
                 node.host,
                 port,
                 node.protocols,
                 storage,
                 checker.clone(),
-                node.services,
+                services,
             ));
         }
 

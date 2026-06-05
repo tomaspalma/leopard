@@ -4,23 +4,38 @@ use state::checker::ReconciliationChecker;
 use state::checker::local::LocalReconciliationChecker;
 use state::storage::state::DataState;
 
-pub trait CheckerReceiver {
-    fn set_checker(&mut self, choice: CheckerChoice);
-}
-
 #[derive(Clone)]
 pub enum CheckerChoice {
     Local,
 }
 
-pub struct CheckerEntry<B: CheckerReceiver> {
-    pub(crate) parent: B,
+/// Builder for the reconciliation checker. Select a variant (e.g.
+/// [`CheckerBuilder::local`]) and hand it to [`crate::NodeBuilder::checker`];
+/// the node builder resolves it via [`CheckerBuilder::build`] and materializes
+/// the concrete checker against the node storages at build time.
+pub struct CheckerBuilder {
+    choice: Option<CheckerChoice>,
 }
 
-impl<B: CheckerReceiver> CheckerEntry<B> {
-    pub fn local(mut self) -> B {
-        self.parent.set_checker(CheckerChoice::Local);
-        self.parent
+impl CheckerBuilder {
+    pub fn new() -> Self {
+        Self { choice: None }
+    }
+
+    pub fn local(mut self) -> Self {
+        self.choice = Some(CheckerChoice::Local);
+        self
+    }
+
+    pub fn build(self) -> Result<CheckerChoice, String> {
+        self.choice
+            .ok_or_else(|| "no checker selected in CheckerBuilder".to_string())
+    }
+}
+
+impl Default for CheckerBuilder {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
