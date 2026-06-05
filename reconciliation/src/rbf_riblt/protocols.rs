@@ -17,7 +17,16 @@ use protocol::{deserializer::ProtocolDeserializer, Protocol};
 use runtime::time::{PeriodTimeUnit, TokioPeriodTimeUnit};
 use state::node::{DefaultNodeState, NodeState};
 use tokio::sync::{Mutex, RwLock};
+use tokio::time::{timeout, Duration};
 use tracing::info;
+
+// Bloom-phase flow control. The sender keeps at most BLOOM_SEND_WINDOW slices in
+// flight (sent but unacknowledged); with a window of 1 this is stop-and-wait,
+// which bounds the receiver's per-session backlog to a single in-memory slice.
+const BLOOM_SEND_WINDOW: u64 = 1;
+// Safety net so a dropped ack can't wedge the sender forever; on expiry it
+// re-checks the session state and either resumes or observes the stop.
+const BLOOM_ACK_TIMEOUT: Duration = Duration::from_millis(5000);
 
 use runtime::spawn;
 
@@ -105,31 +114,6 @@ impl RbfRibltProtocol {
         true
     }
 
-    async fn stream_slices_to_neighbor(
-        state: Arc<DefaultNodeState>,
-        bloom_sending_states: Arc<RwLock<HashMap<NodeAddress, BloomSendingState>>>,
-        neighbor: NodeAddress,
-    ) {
-        loop {
-            let storage = match state.get_storage("default".to_string()) {
-                Some(s) => s,
-                None => break,
-            };
-
-            let keys: Vec<String> = storage
-                .items()
-                .into_iter()
-                .map(|item| item.key().to_string())
-                .collect();
-
-            if !Self::send_next_bloom_slice(&state, &bloom_sending_states, &neighbor, &keys).await {
-                break;
-            }
-
-            tokio::task::yield_now().await;
-        }
-    }
-
     pub async fn stream_fixed_slices_to_neighbor(
         state: Arc<DefaultNodeState>,
         bloom_sending_states: Arc<RwLock<HashMap<NodeAddress, BloomSendingState>>>,
@@ -137,11 +121,26 @@ impl RbfRibltProtocol {
         keys: Vec<String>,
     ) {
         loop {
+            // Park while the in-flight window is full so the sender stays in
+            // lockstep with the receiver's slice processing instead of flooding
+            // it. An ack (or the stop signal) wakes us via ack_notify.
+            let (in_flight, ack_notify) = {
+                let sending = bloom_sending_states.read().await;
+                match sending.get(&neighbor) {
+                    Some(s) => (s.next_slice_index.saturating_sub(s.acked), s.ack_notify.clone()),
+                    // Session removed (stop signal received) -> stop.
+                    None => break,
+                }
+            };
+
+            if in_flight >= BLOOM_SEND_WINDOW {
+                let _ = timeout(BLOOM_ACK_TIMEOUT, ack_notify.notified()).await;
+                continue;
+            }
+
             if !Self::send_next_bloom_slice(&state, &bloom_sending_states, &neighbor, &keys).await {
                 break;
             }
-
-            tokio::task::yield_now().await;
         }
     }
 
@@ -173,11 +172,7 @@ impl RbfRibltProtocol {
                 None => continue,
             };
 
-            let keys: Vec<String> = storage
-                .items()
-                .into_iter()
-                .map(|item| item.key().to_string())
-                .collect();
+            let keys: Vec<String> = storage.keys();
 
             let m_bits = ((keys.len().max(1)) as f64 / std::f64::consts::LN_2).ceil() as usize;
             let session_id = uuid::Uuid::new_v4().to_string();
@@ -202,9 +197,17 @@ impl RbfRibltProtocol {
 
             info!("Spawning stream slices to neighbor");
 
+            // The initiator's key set is stable for the duration of a round, so
+            // snapshot it once (above) and reuse the fixed-slice streamer rather
+            // than re-cloning the whole store on every slice.
             spawn!({
-                RbfRibltProtocol::stream_slices_to_neighbor(state, bloom_sending_states, neighbor)
-                    .await;
+                RbfRibltProtocol::stream_fixed_slices_to_neighbor(
+                    state,
+                    bloom_sending_states,
+                    neighbor,
+                    keys,
+                )
+                .await;
             });
         }
 

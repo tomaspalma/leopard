@@ -18,10 +18,11 @@ use crate::algorithms::rbf::bloom::BloomFilter;
 use crate::rbf_riblt::{
     deserializer::RbfRibltDeserializer,
     messages::{
-        RbfRibltBloomFilterSliceMessage, RbfRibltFetchedEntry, RbfRibltHandshakeMessage,
-        RbfRibltMessageTypeValues, RbfRibltRBFStopSignalMessage, RbfRibltSComDecodedAllMessage,
-        RbfRibltSComRequestMoreSymbolsMessage, RbfRibltSComSendSymbolMessage,
-        RbfRibltValueFetchRequestMessage, RbfRibltValueFetchResponseMessage,
+        RbfRibltBloomFilterSliceMessage, RbfRibltBloomSliceAckMessage, RbfRibltFetchedEntry,
+        RbfRibltHandshakeMessage, RbfRibltMessageTypeValues, RbfRibltRBFStopSignalMessage,
+        RbfRibltSComDecodedAllMessage, RbfRibltSComRequestMoreSymbolsMessage,
+        RbfRibltSComSendSymbolMessage, RbfRibltValueFetchRequestMessage,
+        RbfRibltValueFetchResponseMessage,
     },
     BloomReceivingState, BloomSendingState, RBF_RIBLT_PROTOCOL_ID,
 };
@@ -106,6 +107,24 @@ impl RbfRibltProtocol {
             .write()
             .await
             .remove(neighbor);
+    }
+
+    /// An ack advanced the receiver's processed-slice count: slide the bloom
+    /// send window and wake the streaming task.
+    pub async fn on_bloom_slice_ack(
+        &self,
+        neighbor: &NodeAddress,
+        session_id: &str,
+        processed_count: u64,
+    ) {
+        if let Some(s) = self.bloom_sending_states.write().await.get_mut(neighbor) {
+            if s.session_id == session_id {
+                if processed_count > s.acked {
+                    s.acked = processed_count;
+                }
+                s.ack_notify.notify_one();
+            }
+        }
     }
 
     pub async fn update_last_reconciled_fingerprint(&self, neighbor: &NodeAddress) {
@@ -239,39 +258,28 @@ impl ReceiveRbfRibltMessageTask {
         true
     }
 
-    fn partition_s_com(
-        s_com: &[String],
-        s_tn: &[String],
-        filter: &BloomFilter<String>,
-    ) -> (Vec<String>, Vec<String>) {
-        let mut new_s_com = Vec::new();
-        let mut new_s_tn = s_tn.to_vec();
-
-        for key in s_com {
-            if filter.contains(key) {
-                new_s_com.push(key.clone());
-            } else {
-                new_s_tn.push(key.clone());
-            }
-        }
-
-        (new_s_com, new_s_tn)
-    }
-
-    async fn apply_partition_to_state(
+    async fn partition_into_state(
         &self,
         neighbor: &NodeAddress,
-        new_s_com: Vec<String>,
-        new_s_tn: Vec<String>,
+        filter: &BloomFilter<String>,
     ) -> Option<(bool, String)> {
         let mut receiving = self.protocol.bloom_receiving_states.write().await;
         let state = receiving.get_mut(neighbor)?;
-        // True negatives grow monotonically, so the increase over the previous
-        // round is how many new true negatives this slice revealed.
-        let new_true_negatives = new_s_tn.len().saturating_sub(state.s_tn.len());
+
+        let prev_s_com = std::mem::take(&mut state.s_com);
+        let mut kept = Vec::with_capacity(prev_s_com.len());
+        let mut new_true_negatives = 0usize;
+        for key in prev_s_com {
+            if filter.contains(&key) {
+                kept.push(key);
+            } else {
+                state.s_tn.push(key);
+                new_true_negatives += 1;
+            }
+        }
+        state.s_com = kept;
+
         let stabilized = state.should_stop_slicing(new_true_negatives);
-        state.s_com = new_s_com;
-        state.s_tn = new_s_tn;
         Some((stabilized, state.session_id.clone()))
     }
 
@@ -289,6 +297,31 @@ impl ReceiveRbfRibltMessageTask {
                 Box::new(RbfRibltRBFStopSignalMessage::new(
                     Some(RBF_RIBLT_PROTOCOL_ID),
                     session_id,
+                )),
+            )
+            .await;
+    }
+
+    async fn send_slice_ack(
+        &self,
+        neighbor: NodeAddress,
+        session_id: String,
+        processed_count: u64,
+    ) {
+        let _ = self
+            .protocol
+            .state
+            .send_through_socket(
+                self.protocol
+                    .state
+                    .node_identifier()
+                    .connection_info()
+                    .clone(),
+                Box::new(neighbor),
+                Box::new(RbfRibltBloomSliceAckMessage::new(
+                    Some(RBF_RIBLT_PROTOCOL_ID),
+                    session_id,
+                    processed_count,
                 )),
             )
             .await;
@@ -401,19 +434,7 @@ impl ReceiveRbfRibltMessageTask {
         let filter =
             BloomFilter::<String>::from_raw_bits(msg.m(), msg.k(), msg.bits(), msg.seeds());
 
-        let (new_s_com, new_s_tn) = {
-            let receiving = self.protocol.bloom_receiving_states.read().await;
-            let state = match receiving.get(&neighbor) {
-                Some(s) => s,
-                None => return,
-            };
-            Self::partition_s_com(&state.s_com, &state.s_tn, &filter)
-        };
-
-        let (stabilized, session_id) = match self
-            .apply_partition_to_state(&neighbor, new_s_com, new_s_tn)
-            .await
-        {
+        let (stabilized, session_id) = match self.partition_into_state(&neighbor, &filter).await {
             Some(result) => result,
             None => return,
         };
@@ -433,6 +454,10 @@ impl ReceiveRbfRibltMessageTask {
             } else {
                 self.start_reverse_stream(neighbor).await;
             }
+        } else {
+            // Not yet stable: ack this slice so the sender releases the next one.
+            self.send_slice_ack(neighbor, session_id, msg.slice_index() + 1)
+                .await;
         }
     }
 
@@ -685,17 +710,40 @@ impl RouteTask for ReceiveRbfRibltMessageTask {
                             error!("Failed to downcast message to RbfRibltBloomFilterSliceMessage");
                         }
                     }
+                    RbfRibltMessageTypeValues::BloomSliceAck => {
+                        if let Some(msg) = deserialized_message
+                            .as_any()
+                            .downcast_ref::<RbfRibltBloomSliceAckMessage>()
+                        {
+                            this.protocol
+                                .on_bloom_slice_ack(
+                                    &neighbor,
+                                    msg.session_id(),
+                                    msg.processed_count(),
+                                )
+                                .await;
+                        } else {
+                            error!("Failed to downcast message to RbfRibltBloomSliceAckMessage");
+                        }
+                    }
                     RbfRibltMessageTypeValues::RBFStopSignal => {
                         if let Some(_msg) = deserialized_message
                             .as_any()
                             .downcast_ref::<RbfRibltRBFStopSignalMessage>()
                         {
                             info!("Received RBF-RIBLT stop signal from {:?}", neighbor);
-                            this.protocol
+                            // Wake a parked streaming task so it observes the
+                            // removal and stops instead of waiting out the ack
+                            // timeout.
+                            if let Some(s) = this
+                                .protocol
                                 .bloom_sending_states
                                 .write()
                                 .await
-                                .remove(&neighbor);
+                                .remove(&neighbor)
+                            {
+                                s.ack_notify.notify_one();
+                            }
                         } else {
                             error!("Failed to downcast message to RbfRibltRBFStopSignalMessage");
                         }

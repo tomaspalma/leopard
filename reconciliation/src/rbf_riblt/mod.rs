@@ -14,7 +14,7 @@ use std::{
 
 use connection::node::port::NodeAddress;
 use state::node::{DefaultNodeState, NodeState};
-use tokio::sync::RwLock;
+use tokio::sync::{Notify, RwLock};
 
 use crate::rbf_riblt::deserializer::RbfRibltDeserializer;
 use crate::rbf_riblt::scom::{RbfScomSink, RbfScomTransport};
@@ -29,6 +29,12 @@ pub struct BloomSendingState {
     pub session_id: String,
     pub next_slice_index: u64,
     pub m_bits: usize,
+    // Highest slice count the receiver has confirmed processing. The sender keeps
+    // at most BLOOM_SEND_WINDOW slices in flight (next_slice_index - acked) so it
+    // can't outrun the O(n)-per-slice receiver and flood it with unprocessed
+    // slices. Woken via ack_notify on each ack and on the stop signal.
+    pub acked: u64,
+    pub ack_notify: Arc<Notify>,
 }
 
 impl BloomSendingState {
@@ -37,6 +43,8 @@ impl BloomSendingState {
             session_id,
             next_slice_index: 0,
             m_bits,
+            acked: 0,
+            ack_notify: Arc::new(Notify::new()),
         }
     }
 }

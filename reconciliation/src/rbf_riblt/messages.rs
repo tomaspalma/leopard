@@ -5,6 +5,7 @@ use rkyv::{rancor::Error, Archive, Deserialize, Serialize};
 pub enum RbfRibltMessageTypeValues {
     Handshake,
     BloomFilterSlice,
+    BloomSliceAck,
     RBFStopSignal,
     SComSendSymbol,
     SComDecodedAll,
@@ -134,6 +135,36 @@ impl RbfRibltBloomFilterSliceMessage {
 
     pub fn bits(&self) -> &Vec<u8> {
         &self.bits
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Archive)]
+pub struct RbfRibltBloomSliceAckMessage {
+    _type: RbfRibltMessageType,
+    protocol_id: Option<u64>,
+    session_id: String,
+    // Number of bloom slices the receiver has processed so far; the sender's
+    // flow-control window advances `acked` to this value before releasing the
+    // next slice.
+    processed_count: u64,
+}
+
+impl RbfRibltBloomSliceAckMessage {
+    pub fn new(protocol_id: Option<u64>, session_id: String, processed_count: u64) -> Self {
+        Self {
+            _type: RbfRibltMessageType::new(RbfRibltMessageTypeValues::BloomSliceAck),
+            protocol_id,
+            session_id,
+            processed_count,
+        }
+    }
+
+    pub fn session_id(&self) -> &str {
+        &self.session_id
+    }
+
+    pub fn processed_count(&self) -> u64 {
+        self.processed_count
     }
 }
 
@@ -321,6 +352,7 @@ impl RbfRibltValueFetchResponseMessage {
 pub enum RbfRibltMessageWrapper {
     Handshake(RbfRibltHandshakeMessage),
     BloomFilterSlice(RbfRibltBloomFilterSliceMessage),
+    BloomSliceAck(RbfRibltBloomSliceAckMessage),
     RBFStopSignal(RbfRibltRBFStopSignalMessage),
     SComSendSymbol(RbfRibltSComSendSymbolMessage),
     SComDecodedAll(RbfRibltSComDecodedAllMessage),
@@ -341,6 +373,11 @@ impl_protocol_message!(RbfRibltRBFStopSignalMessage, this, {
 
 impl_protocol_message!(RbfRibltBloomFilterSliceMessage, this, {
     let wrapper = RbfRibltMessageWrapper::BloomFilterSlice(this.clone());
+    rkyv::to_bytes::<Error>(&wrapper).map_err(|_| ())?
+});
+
+impl_protocol_message!(RbfRibltBloomSliceAckMessage, this, {
+    let wrapper = RbfRibltMessageWrapper::BloomSliceAck(this.clone());
     rkyv::to_bytes::<Error>(&wrapper).map_err(|_| ())?
 });
 
