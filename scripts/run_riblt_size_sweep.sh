@@ -27,7 +27,7 @@ SIZES=${SIZES:-"1000,5000,10000,50000,100000"}
 DIFF=${DIFF:-2000}        # target symmetric difference (fixdiff mode); sizes must be >= DIFF/2
 SIM=${SIM:-0.5}           # fixed similarity (fixsim mode)
 TRIALS=${TRIALS:-5}
-OUTDIR=${OUTDIR:-"sweep_size_${MODE}"}
+OUTDIR=${OUTDIR:-"metrics_output/sweep_size_${MODE}"}
 
 export DISABLE_STORAGE_FLUSH=${DISABLE_STORAGE_FLUSH:-1}
 export RUST_LOG=${RUST_LOG:-warn}
