@@ -15,7 +15,10 @@ use connection::node::port::NodeAddress;
 use state::node::{DefaultNodeState, NodeState};
 use tokio::sync::RwLock;
 
+use runtime::metrics::experiment::get_context;
+
 use crate::riblt::messages::{RIBLTCodedSymbol, RIBLTSymbol};
+use crate::riblt::record_phase_split;
 use crate::riblt::stream::{RibltDecodeSink, RibltStreamTransport};
 
 use crate::rbf_riblt::messages::{
@@ -154,7 +157,21 @@ impl RibltDecodeSink for RbfScomSink {
         session_id: &str,
         local_only: Vec<RIBLTSymbol>,
         _round_secs: f64,
+        seed_secs: f64,
+        decode_secs: f64,
+        decoded_difference: usize,
     ) {
+        // Attribute the scom phase between seeding the decoder from s_com
+        // (O(|s_com|)) and peeling the false-positive difference (O(difference)).
+        record_phase_split(
+            "rbf_riblt",
+            neighbor,
+            &get_context(),
+            seed_secs,
+            decode_secs,
+            decoded_difference,
+        );
+
         // Keys the neighbor is missing: our local-only IBLT elements plus our s_tn
         // (keys definitely absent from their bloom filter, never seen by IBLT).
         let mut keys_for_sender: Vec<String> =

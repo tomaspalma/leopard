@@ -266,6 +266,8 @@ impl ReceiveRbfRibltMessageTask {
         let mut receiving = self.protocol.bloom_receiving_states.write().await;
         let state = receiving.get_mut(neighbor)?;
 
+        state.slices_received += 1;
+
         let prev_s_com = std::mem::take(&mut state.s_com);
         let mut kept = Vec::with_capacity(prev_s_com.len());
         let mut new_true_negatives = 0usize;
@@ -327,20 +329,49 @@ impl ReceiveRbfRibltMessageTask {
             .await;
     }
 
+    /// Records the post-bloom candidate-set size (`|s_com|`) and the number of
+    /// bloom slices applied (`S`) for this peer, tagged like every other
+    /// per-trial metric. Emitted once per session when `s_com` is finalized, so
+    /// the similarity analysis can relate both quantities to the similarity level.
+    fn record_scom_metrics(&self, neighbor: &NodeAddress, scom_size: usize, slices: usize) {
+        let context = get_context();
+        gauge!(
+            "scom_size",
+            "protocol" => "rbf_riblt",
+            "target" => format!("{:?}", neighbor),
+            "run_id" => context.run_id().to_string(),
+            "trial" => context.trial().to_string(),
+            "similarity" => context.similarity().to_string()
+        )
+        .set(scom_size as f64);
+
+        gauge!(
+            "bloom_slices",
+            "protocol" => "rbf_riblt",
+            "target" => format!("{:?}", neighbor),
+            "run_id" => context.run_id().to_string(),
+            "trial" => context.trial().to_string(),
+            "similarity" => context.similarity().to_string()
+        )
+        .set(slices as f64);
+    }
+
     async fn start_scom_phase(&self, neighbor: NodeAddress) {
         info!("Starting scom phase");
         // Atomically check+set riblt_started to prevent duplicate starts
         // from in-flight bloom slices arriving after stabilization.
-        let (s_com, s_tn) = {
+        let (s_com, s_tn, slices) = {
             let mut receiving = self.protocol.bloom_receiving_states.write().await;
             match receiving.get_mut(&neighbor) {
                 Some(state) if !state.riblt_started => {
                     state.riblt_started = true;
-                    (state.s_com.clone(), state.s_tn.clone())
+                    (state.s_com.clone(), state.s_tn.clone(), state.slices_received)
                 }
                 _ => return,
             }
         };
+
+        self.record_scom_metrics(&neighbor, s_com.len(), slices);
 
         // Capture s_tn now so handle_value_fetch_request can use it even after
         // clear_session_state wipes bloom_receiving_states.
@@ -377,13 +408,15 @@ impl ReceiveRbfRibltMessageTask {
 
     async fn start_reverse_stream(&self, neighbor: NodeAddress) {
         info!("Starting reverse stream phase");
-        let (s_com, s_tn) = {
+        let (s_com, s_tn, slices) = {
             let receiving = self.protocol.bloom_receiving_states.read().await;
             match receiving.get(&neighbor) {
-                Some(s) => (s.s_com.clone(), s.s_tn.clone()),
+                Some(s) => (s.s_com.clone(), s.s_tn.clone(), s.slices_received),
                 None => return,
             }
         };
+
+        self.record_scom_metrics(&neighbor, s_com.len(), slices);
 
         // Capture s_tn now so handle_value_fetch_request can use it even after
         // clear_session_state wipes bloom_receiving_states.

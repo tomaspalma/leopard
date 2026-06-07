@@ -56,6 +56,11 @@ pub struct BloomReceivingState {
     pub s_com: Vec<String>,
     pub s_tn: Vec<String>,
     pub riblt_started: bool,
+    // Number of bloom slices applied to this peer's stream before stabilization
+    // (the `S` in the global FPR (1/2)^S). Recorded as a metric alongside
+    // |s_com| so the analysis can relate slice count and candidate-set size to
+    // similarity.
+    pub slices_received: usize,
 }
 
 impl BloomReceivingState {
@@ -77,6 +82,7 @@ impl BloomReceivingState {
             s_com: Vec::new(),
             s_tn: Vec::new(),
             riblt_started: false,
+            slices_received: 0,
         }
     }
 }

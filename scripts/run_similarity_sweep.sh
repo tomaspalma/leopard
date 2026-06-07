@@ -5,7 +5,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT_DIR"
 
-SIZES=${SIZES:-"10000"}
+SIZES=${SIZES:-"100000"}
 SIMILARITIES=${SIMILARITIES:-"0,0.05,0.10,0.20,0.30,0.40,0.50,0.60,0.70,0.75,0.80,0.85,0.90,0.95,0.97,0.99,1"}
 TRIALS=${TRIALS:-"5"}
 PROTOCOLS=${PROTOCOLS:-"riblt,merkle,rbf_riblt"}
@@ -64,4 +64,6 @@ echo "Sweep finished. Analyzing with: python3 scripts/analyze_similarity_bytes.p
 python3 scripts/analyze_similarity_bytes.py metrics_output
 python3 scripts/analyze_similarity_resources.py metrics_output
 python3 scripts/analyze_similarity_duration.py metrics_output
+python3 scripts/analyze_similarity_scom.py metrics_output
+python3 scripts/analyze_phase_split.py metrics_output
 python3 scripts/analyze_roundtrip.py metrics_output

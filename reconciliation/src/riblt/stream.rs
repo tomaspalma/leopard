@@ -73,12 +73,21 @@ pub trait RibltDecodeSink: Send + Sync + 'static {
     );
     /// Fired once when the session fully decodes, with the local-only set and the
     /// round duration. The host records metrics and runs any follow-up here.
+    ///
+    /// `seed_secs` is the time spent seeding the decoder with the local set
+    /// (O(local set size)); `decode_secs` is the CPU time spent peeling coded
+    /// symbols (O(difference)); `decoded_difference` is the total symmetric
+    /// difference recovered (local-only + remote-only). These let the host
+    /// attribute reconciliation cost between seeding and decoding.
     async fn on_complete(
         &self,
         neighbor: &NodeAddress,
         session_id: &str,
         local_only: Vec<RIBLTSymbol>,
         round_secs: f64,
+        seed_secs: f64,
+        decode_secs: f64,
+        decoded_difference: usize,
     );
 }
 
@@ -283,8 +292,11 @@ impl RibltStreamEngine {
         start_time: Instant,
         mut rx: mpsc::UnboundedReceiver<(u64, Vec<RIBLTCodedSymbol>)>,
     ) {
+        let seed_start = Instant::now();
         let local = self.sink.seed_symbols(&neighbor).await;
         let mut decoder = build_decoder_blocking(local).await;
+        let seed_secs = seed_start.elapsed().as_secs_f64();
+        let mut decode_secs = 0f64;
         let mut stored_remote: usize = 0;
 
         // The decoder is positional: the k-th symbol fed must be encoder index k.
@@ -309,8 +321,10 @@ impl RibltStreamEngine {
             }
             let received_count = next_index;
 
+            let decode_start = Instant::now();
             let (next_decoder, peel) =
                 process_batch_blocking(decoder, batch, stored_remote).await;
+            decode_secs += decode_start.elapsed().as_secs_f64();
             decoder = next_decoder;
             stored_remote = peel.remote_total;
 
@@ -321,6 +335,7 @@ impl RibltStreamEngine {
             }
 
             if peel.successful {
+                let decoded_difference = peel.local_symbols.len() + peel.remote_total;
                 self.transport.send_finished(&neighbor, &session_id).await;
                 self.sink
                     .on_complete(
@@ -328,6 +343,9 @@ impl RibltStreamEngine {
                         &session_id,
                         peel.local_symbols,
                         start_time.elapsed().as_secs_f64(),
+                        seed_secs,
+                        decode_secs,
+                        decoded_difference,
                     )
                     .await;
                 break;

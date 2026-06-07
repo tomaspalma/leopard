@@ -32,7 +32,7 @@ cp "data/${DATASET_PREFIX}_node1.json" "$TMP1"
 cp "data/${DATASET_PREFIX}_node2.json" "$TMP2"
 trap 'rm -f "$TMP1" "$TMP2"' EXIT
 
-cargo run -- --run-id "$RUN_ID" --trial "$TRIAL" --similarity "$SIMILARITY" --exit-on-reconciliation custom-nodes --node-type "default" --protocol "$PROTOCOL" \
+cargo run --release -- --run-id "$RUN_ID" --trial "$TRIAL" --similarity "$SIMILARITY" --exit-on-reconciliation custom-nodes --node-type "default" --protocol "$PROTOCOL" \
   --nodes "127.0.0.1,9000,3000,$TMP1" \
   --nodes "127.0.0.1,9001,3001,$TMP2" \
   #--nodes "127.0.0.1,9002,3002,data/${DATASET_PREFIX}_node3.json"
