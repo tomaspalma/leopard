@@ -18,7 +18,9 @@ Usage:
   python3 scripts/make_phase_split_table.py [metrics_root]
       [--protocol rbf_riblt]
       [--similarities 0,0.10,0.30,0.50,0.70,0.85,0.95,0.99,1]
-      [--output table.tex]
+      [--output tab_rbf_phase_split.tex]
+
+Writes the LaTeX table to the --output path (default tab_rbf_phase_split.tex).
 """
 
 import argparse
@@ -72,14 +74,18 @@ def fmt_fp(fp_fraction):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("metrics_root", nargs="?", default="sweep_phase")
+    parser.add_argument("metrics_root", nargs="?", default="metrics_output/sweep_phase")
     parser.add_argument("--protocol", default="rbf_riblt")
     parser.add_argument(
         "--similarities",
         default=None,
         help="comma-separated subset of J values to keep (default: all found)",
     )
-    parser.add_argument("--output", default=None, help="write .tex here (default: stdout)")
+    parser.add_argument(
+        "--output",
+        default="tab_rbf_phase_split.tex",
+        help="path of the .tex file to write (default: tab_rbf_phase_split.tex)",
+    )
     args = parser.parse_args()
 
     summary = None
@@ -121,11 +127,8 @@ def main():
     lines += [r"      \bottomrule", r"    \end{tabular}", r"  \end{table}"]
     out = "\n".join(lines) + "\n"
 
-    if args.output:
-        Path(args.output).write_text(out)
-        print(f"Wrote {args.output}", file=sys.stderr)
-    else:
-        print(out, end="")
+    Path(args.output).write_text(out)
+    print(f"Wrote {args.output}", file=sys.stderr)
     return 0
 
 
