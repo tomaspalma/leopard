@@ -67,3 +67,6 @@ python3 scripts/analyze_similarity_duration.py metrics_output
 python3 scripts/analyze_similarity_scom.py metrics_output
 python3 scripts/analyze_phase_split.py metrics_output
 python3 scripts/analyze_roundtrip.py metrics_output
+python3 scripts/analyze_cpu_usage.py metrics_output
+python3 scripts/analyze_riblt_scaling.py metrics_output
+python3 scripts/make_phase_split_table.py metrics_output --output metrics_output/analysis/tab_rbf_phase_split.tex
