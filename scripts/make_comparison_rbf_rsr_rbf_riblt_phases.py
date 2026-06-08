@@ -4,12 +4,18 @@ Splits rbf_riblt's transmitted bytes into its two phases:
 
   RBF    bytes of the rateless Bloom filter slices, the deterministic
          2 * S * ceil(m_bits/8) (both directions, m_bits = ceil(n / ln2))
-  riblt  the coded-symbol stream sent once no slices remain, taken as
-         total_transmitted - RBF
+  riblt  the coded-symbol stream sent once no slices remain, sized from the
+         measured count of coded symbols streamed times the wire size of one
+         symbol (SYMBOL_BYTES)
+
+The `total` column is the genuine transmitted-bytes total reported by the
+protocol, so it does not in general equal RBF + riblt: the remainder is the
+handshakes, acks, stop signals, request-more control traffic and framing.
 
 All inputs are measured per-trial CSVs (the same ones the other analysis scripts
 read), so the table always reflects the current sweep:
-  rbf_riblt_bytes_sent.csv  (counter, cumulative total per node)
+  rbf_riblt_bytes_sent.csv  (counter, total transmitted bytes per node)
+  coded_symbols_sent.csv    (counter, coded symbols streamed per node)
   bloom_slices.csv          (slices applied per node)
 
 Usage:
@@ -44,6 +50,37 @@ def total_bytes_by_similarity(metrics_root, proto):
         if not m or m.group("proto") != proto:
             continue
         f = run_dir / f"{proto}_bytes_sent.csv"
+        if not f.exists():
+            continue
+        df = pd.read_csv(f)
+        node_max = defaultdict(float)
+        sim = None
+        for _, row in df.iterrows():
+            v = pd.to_numeric(row.get("value"), errors="coerce")
+            s = pd.to_numeric(row.get("similarity"), errors="coerce")
+            if pd.isna(v):
+                continue
+            if not pd.isna(s):
+                sim = float(s)
+            node_max[row.get("node")] = max(node_max[row.get("node")], float(v))
+        if sim is not None and node_max:
+            per_trial[sim].append(sum(node_max.values()))
+    return {s: sum(v) / len(v) for s, v in per_trial.items() if v}
+
+
+def symbols_by_similarity(metrics_root, proto):
+    """Mean coded symbols streamed per similarity for `proto`.
+
+    `coded_symbols_sent` is the per-node count of coded symbols put on the wire
+    during the riblt/scom phase. The per-trial total is the sum over nodes of
+    each node's final (max) value, averaged over trials per similarity level.
+    """
+    per_trial = defaultdict(list)
+    for run_dir in sorted(Path(metrics_root).iterdir()):
+        m = RUN_RE.match(run_dir.name)
+        if not m or m.group("proto") != proto:
+            continue
+        f = run_dir / "coded_symbols_sent.csv"
         if not f.exists():
             continue
         df = pd.read_csv(f)
@@ -103,6 +140,7 @@ def main():
     args = parser.parse_args()
 
     total = total_bytes_by_similarity(args.metrics_root, args.protocol)
+    symbols = symbols_by_similarity(args.metrics_root, args.protocol)
     slices, n = slices_and_n_by_similarity(args.metrics_root, args.protocol)
 
     if not total:
@@ -116,13 +154,16 @@ def main():
         sims = [s for s in sims if round(s, 4) in wanted]
 
     MB = 1024 * 1024
+    # Wire size of one coded symbol: sum[128] + hash (u64) + count (i64). See
+    # RIBLTCodedSymbol in reconciliation/src/riblt/messages.rs.
+    SYMBOL_BYTES = 128 + 8 + 8
     rows = []
     for s in sims:
         tot = total[s]
         # Slices are sent in both directions: 2 * slices * slice_bytes.
         rbf_bytes = 2 * slices.get(s, 0.0) * sb
-        # Everything sent once no slices remain is the coded-symbol stream.
-        riblt_bytes = tot - rbf_bytes
+        # Coded-symbol stream, sized from the measured count of symbols streamed.
+        riblt_bytes = symbols.get(s, 0.0) * SYMBOL_BYTES
         ratio = riblt_bytes / rbf_bytes if rbf_bytes > 0 else float("nan")
         rows.append((s, rbf_bytes / MB, riblt_bytes / MB, tot / MB, ratio))
 
