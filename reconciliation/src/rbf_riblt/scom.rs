@@ -160,6 +160,7 @@ impl RibltDecodeSink for RbfScomSink {
         seed_secs: f64,
         decode_secs: f64,
         decoded_difference: usize,
+        round_trips: u64,
     ) {
         // Attribute the scom phase between seeding the decoder from s_com
         // (O(|s_com|)) and peeling the false-positive difference (O(difference)).
@@ -170,6 +171,7 @@ impl RibltDecodeSink for RbfScomSink {
             seed_secs,
             decode_secs,
             decoded_difference,
+            round_trips,
         );
 
         // Keys the neighbor is missing: our local-only IBLT elements plus our s_tn

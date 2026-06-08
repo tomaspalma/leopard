@@ -17,6 +17,8 @@ use tokio::sync::{mpsc, Notify, RwLock};
 use tokio::time::{timeout, Duration};
 use tracing::info;
 
+use runtime::metrics::experiment::get_context;
+
 use runtime::spawn;
 
 use crate::riblt::messages::{RIBLTCodedSymbol, RIBLTSymbol};
@@ -79,6 +81,13 @@ pub trait RibltDecodeSink: Send + Sync + 'static {
     /// symbols (O(difference)); `decoded_difference` is the total symmetric
     /// difference recovered (local-only + remote-only). These let the host
     /// attribute reconciliation cost between seeding and decoding.
+    ///
+    /// `round_trips` is the number of sequential network exchanges on the
+    /// critical path: 1 for the initial symbol window the sender pushes, plus
+    /// one for every `request_more` the decoder issues when it drains that
+    /// window before peeling. It is NOT the number of `SendSymbol` messages:
+    /// symbols are pipelined in `CHUNK_SIZE` batches under the credit window, so
+    /// many batches ride a single round trip.
     async fn on_complete(
         &self,
         neighbor: &NodeAddress,
@@ -88,6 +97,7 @@ pub trait RibltDecodeSink: Send + Sync + 'static {
         seed_secs: f64,
         decode_secs: f64,
         decoded_difference: usize,
+        round_trips: u64,
     );
 }
 
@@ -209,6 +219,18 @@ impl RibltStreamEngine {
         }
 
         info!("Stopped streaming to {:?} after {} symbols", neighbor, sent);
+
+        // Record the coded symbols streamed this session so the byte-split table
+        // can size the riblt phase from a measured count instead of deriving it.
+        let context = get_context();
+        metrics::counter!(
+            "coded_symbols_sent",
+            "target" => format!("{:?}", neighbor),
+            "run_id" => context.run_id().to_string(),
+            "trial" => context.trial().to_string(),
+            "similarity" => context.similarity().to_string()
+        )
+        .increment(sent as u64);
     }
 
     /// An acknowledgement advanced the receiver's consumed count: slide the
@@ -304,6 +326,11 @@ impl RibltStreamEngine {
         // the contiguous run from `next_index`.
         let mut reorder: BTreeMap<u64, Vec<RIBLTCodedSymbol>> = BTreeMap::new();
         let mut next_index: u64 = 0;
+        // Sequential network exchanges on the critical path. Starts at 1 for the
+        // initial symbol window the sender pushes; each `request_more` below adds
+        // one more refill round trip. The many pipelined `SendSymbol` batches that
+        // arrive within a single window do not each count as a trip.
+        let mut round_trips: u64 = 1;
 
         while let Some((start, symbols)) = rx.recv().await {
             reorder.insert(start, symbols);
@@ -346,11 +373,15 @@ impl RibltStreamEngine {
                         seed_secs,
                         decode_secs,
                         decoded_difference,
+                        round_trips,
                     )
                     .await;
                 break;
             }
 
+            // Draining the window without peeling forces another refill: one more
+            // sequential exchange on the critical path.
+            round_trips += 1;
             self.transport
                 .send_request_more(&neighbor, &session_id, received_count)
                 .await;

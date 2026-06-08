@@ -117,7 +117,17 @@ pub(crate) fn record_phase_split(
     seed_secs: f64,
     decode_secs: f64,
     decoded_difference: usize,
+    round_trips: u64,
 ) {
+    gauge!(
+        "reconciliation_round_trips",
+        "protocol" => protocol,
+        "neighbor" => format!("{:?}", neighbor),
+        "run_id" => context.run_id().to_string(),
+        "trial" => context.trial().to_string(),
+        "similarity" => context.similarity().to_string()
+    )
+    .set(round_trips as f64);
     gauge!(
         "reconciliation_seed_seconds",
         "protocol" => protocol,
@@ -178,6 +188,7 @@ impl RibltDecodeSink for RibltSink {
         seed_secs: f64,
         decode_secs: f64,
         decoded_difference: usize,
+        round_trips: u64,
     ) {
         info!("Peeling successful for neighbor {:?}", neighbor);
         let context = get_context();
@@ -197,6 +208,7 @@ impl RibltDecodeSink for RibltSink {
             seed_secs,
             decode_secs,
             decoded_difference,
+            round_trips,
         );
         counter!(
             "reconciliation_completed",
