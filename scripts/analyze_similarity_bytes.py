@@ -163,6 +163,62 @@ def make_protocol_comparison(summary):
     return comparison.sort_values("similarity")
 
 
+def make_bytes_table_latex(summary, n_label="10^5"):
+    """Emit the median-transmitted-bytes-by-similarity table as LaTeX.
+
+    Built from the same ``summary`` (medians, same sweep) that feeds the
+    figure, so the table cannot drift from the plot. Every similarity level
+    present in the sweep -- including 100% -- becomes a row automatically.
+    """
+    if summary.empty:
+        return ""
+
+    bytes_per_megabyte = 1024 * 1024
+    pivot = summary.pivot_table(
+        index="similarity", columns="protocol", values="median_transmitted_bytes"
+    ).sort_index()
+
+    def fmt_mb(value):
+        if pd.isna(value):
+            return "--"
+        return f"{value / bytes_per_megabyte:.2f} MB"
+
+    def fmt_ratio(numerator, denominator):
+        if pd.isna(numerator) or pd.isna(denominator) or denominator == 0:
+            return "--"
+        return f"{numerator / denominator:.2f}"
+
+    lines = [
+        r"\begin{table}[!htbp]",
+        r"  \centering",
+        r"  \caption{Median transmitted bytes per algorithm across similarity levels",
+        rf"  ($n{{=}}{n_label}$). Ratios give the factor by which \texttt{{rbf\_riblt}} reduces",
+        r"  the transmitted volume relative to each baseline.}",
+        r"  \label{tab:transmitted_bytes_by_similarity}",
+        r"  \begin{tabular}{rrrrrr}",
+        r"  \toprule",
+        r"  S & \textit{merkle} & \textit{riblt} & \textit{rbf\_riblt} & m/rbf & r/rbf \\",
+        r"  \midrule",
+    ]
+
+    for similarity, row in pivot.iterrows():
+        percent = f"{similarity * 100:g}\\%"
+        merkle = row.get("merkle")
+        riblt = row.get("riblt")
+        rbf_riblt = row.get("rbf_riblt")
+        lines.append(
+            f"  {percent} & {fmt_mb(merkle)} & {fmt_mb(riblt)} & {fmt_mb(rbf_riblt)} "
+            f"& {fmt_ratio(merkle, rbf_riblt)} & {fmt_ratio(riblt, rbf_riblt)} \\\\"
+        )
+
+    lines += [
+        r"  \bottomrule",
+        r"  \end{tabular}",
+        r"\end{table}",
+    ]
+    return "\n".join(lines) + "\n"
+
+
 def plot_summary(summary, output_dir):
     if summary.empty:
         return
@@ -279,6 +335,16 @@ def main():
         default="metrics_output/analysis",
         help="Output directory for summary files",
     )
+    parser.add_argument(
+        "--latex-table",
+        default="tab_transmitted_bytes_by_similarity.tex",
+        help="Path of the .tex file for the median-bytes-by-similarity table",
+    )
+    parser.add_argument(
+        "--n-label",
+        default="10^5",
+        help="Value typeset as n in the table caption (LaTeX math)",
+    )
     args = parser.parse_args()
 
     frames = []
@@ -307,6 +373,12 @@ def main():
     )
 
     plot_summary(summary, args.output_dir)
+
+    table_latex = make_bytes_table_latex(summary, n_label=args.n_label)
+    if table_latex:
+        Path(args.latex_table).write_text(table_latex)
+        print(f"Wrote LaTeX table to {args.latex_table}")
+
     print(f"Wrote analysis to {args.output_dir}")
     if not summary.empty:
         print(summary.to_string(index=False))
