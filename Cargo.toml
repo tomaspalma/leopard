@@ -2,6 +2,15 @@
 name = "replication-engine"
 version = "0.1.0"
 edition = "2024"
+# Two [[bin]] targets exist (this crate + merkle_mem_profile), so `cargo run`
+# needs to know the default. The profiler stays runnable via --bin.
+default-run = "replication-engine"
+
+# Standalone experiment binary; kept out of the default `src/main.rs` bin so its
+# custom #[global_allocator] only applies to this profiler.
+[[bin]]
+name = "merkle_mem_profile"
+path = "src/experiments/merkle_mem_profile.rs"
 
 [lints]
 workspace = true
