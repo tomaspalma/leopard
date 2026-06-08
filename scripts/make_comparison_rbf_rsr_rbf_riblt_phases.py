@@ -2,7 +2,7 @@
 
 Splits rbf_riblt's transmitted bytes into its two phases:
 
-  RBF    bytes of the ribbon-filter slices, the deterministic
+  RBF    bytes of the rateless Bloom filter slices, the deterministic
          2 * S * ceil(m_bits/8) (both directions, m_bits = ceil(n / ln2))
   riblt  the coded-symbol stream sent once no slices remain, taken as
          total_transmitted - RBF
@@ -16,7 +16,7 @@ Usage:
   python3 scripts/make_comparison_rbf_rsr_rbf_riblt_phases.py [metrics_root]
       [--protocol rbf_riblt]
       [--similarities 0,0.1,0.3,0.5,0.7,0.9]
-      [--output tab_bytes_saving.tex]
+      [--output rbf_rsr_rbf_riblt_bytes.tex]
 """
 
 import argparse
@@ -97,7 +97,7 @@ def main():
     parser.add_argument("--protocol", default="rbf_riblt")
     parser.add_argument("--similarities", default=None,
                         help="comma-separated subset of J values to keep")
-    parser.add_argument("--output", default="tab_bytes_saving.tex")
+    parser.add_argument("--output", default="rbf_rsr_rbf_riblt_bytes.tex")
     args = parser.parse_args()
 
     total = total_bytes_by_similarity(args.metrics_root, args.protocol)
@@ -138,8 +138,8 @@ def main():
         r"\begin{table}[t]",
         r"    \centering",
         rf"    \caption{{Transmitted-bytes split inside {proto_tex} ($n={n}$): "
-        r"the ribbon-filter slices (RBF) against the coded-symbol stream sent "
-        r"once no slices remain (riblt). The last column is the coded-symbol "
+        r"the rateless Bloom filter slices (RBF) against the coded-symbol stream "
+        r"sent once no slices remain (riblt). The last column is the coded-symbol "
         r"stream as a multiple of the filter cost.}",
         r"    \label{tab:bytes-saving}",
         r"    \begin{tabular}{rrrrr}",
