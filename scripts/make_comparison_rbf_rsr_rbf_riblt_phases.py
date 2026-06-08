@@ -97,7 +97,9 @@ def main():
     parser.add_argument("--protocol", default="rbf_riblt")
     parser.add_argument("--similarities", default=None,
                         help="comma-separated subset of J values to keep")
-    parser.add_argument("--output", default="rbf_rsr_rbf_riblt_bytes.tex")
+    parser.add_argument(
+        "--output", default="metrics_output/analysis/rbf_rsr_rbf_riblt_bytes.tex"
+    )
     args = parser.parse_args()
 
     total = total_bytes_by_similarity(args.metrics_root, args.protocol)

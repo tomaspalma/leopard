@@ -83,8 +83,9 @@ def main():
     )
     parser.add_argument(
         "--output",
-        default="tab_rbf_phase_split.tex",
-        help="path of the .tex file to write (default: tab_rbf_phase_split.tex)",
+        default="metrics_output/analysis/tab_rbf_phase_split.tex",
+        help="path of the .tex file to write "
+        "(default: metrics_output/analysis/tab_rbf_phase_split.tex)",
     )
     args = parser.parse_args()
 

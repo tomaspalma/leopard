@@ -337,8 +337,9 @@ def main():
     )
     parser.add_argument(
         "--latex-table",
-        default="tab_transmitted_bytes_by_similarity.tex",
-        help="Path of the .tex file for the median-bytes-by-similarity table",
+        default=None,
+        help="Path of the .tex file for the median-bytes-by-similarity table "
+        "(default: <output-dir>/tab_transmitted_bytes_by_similarity.tex)",
     )
     parser.add_argument(
         "--n-label",
@@ -376,8 +377,11 @@ def main():
 
     table_latex = make_bytes_table_latex(summary, n_label=args.n_label)
     if table_latex:
-        Path(args.latex_table).write_text(table_latex)
-        print(f"Wrote LaTeX table to {args.latex_table}")
+        latex_path = args.latex_table or os.path.join(
+            args.output_dir, "tab_transmitted_bytes_by_similarity.tex"
+        )
+        Path(latex_path).write_text(table_latex)
+        print(f"Wrote LaTeX table to {latex_path}")
 
     print(f"Wrote analysis to {args.output_dir}")
     if not summary.empty:
