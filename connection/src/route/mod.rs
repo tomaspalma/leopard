@@ -28,7 +28,10 @@ pub trait RouteStorage {
     type Key: RouteId<Self::RouteIdValue>;
     type Value;
 
-    fn store(&self, key: Self::Key, value: Self::Value);
+    /// Stores a route. Fails if a route is already registered under `key`,
+    /// so a duplicate (port, protocol) registration surfaces at startup
+    /// instead of silently overwriting the earlier route.
+    fn store(&self, key: Self::Key, value: Self::Value) -> Result<(), String>;
     fn get(&self, id: Self::Key) -> Option<Self::Value>;
 }
 
@@ -43,5 +46,9 @@ pub trait RouteHandler {
         local_address: NodeAddress,
         sender_address: NodeAddress,
     );
-    fn add_route(&self, id: Self::RouteId, route: Arc<dyn Route + Send + Sync>);
+    fn add_route(
+        &self,
+        id: Self::RouteId,
+        route: Arc<dyn Route + Send + Sync>,
+    ) -> Result<(), String>;
 }

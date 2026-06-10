@@ -4,6 +4,7 @@ use tracing::info;
 
 use async_trait::async_trait;
 use dashmap::DashMap;
+use dashmap::mapref::entry::Entry;
 use runtime::spawn;
 use std::sync::Arc;
 
@@ -67,8 +68,17 @@ impl RouteStorage for HashMapRouteStorage {
     type Key = NodeSocketRouteId;
     type Value = Arc<dyn Route + Send + Sync>;
 
-    fn store(&self, key: Self::Key, value: Self::Value) {
-        self.storage.insert(key, value);
+    fn store(&self, key: Self::Key, value: Self::Value) -> Result<(), String> {
+        match self.storage.entry(key) {
+            Entry::Occupied(entry) => Err(format!(
+                "route already registered for {:?}; each (port, protocol id) pair must be unique",
+                entry.key()
+            )),
+            Entry::Vacant(entry) => {
+                entry.insert(value);
+                Ok(())
+            }
+        }
     }
 
     fn get(&self, id: Self::Key) -> Option<Self::Value> {
@@ -113,7 +123,11 @@ impl RouteHandler for DefaultRouteHandler {
         }
     }
 
-    fn add_route(&self, id: NodeSocketRouteId, route: Arc<dyn Route + Send + Sync>) {
-        self.storage.store(id, route);
+    fn add_route(
+        &self,
+        id: NodeSocketRouteId,
+        route: Arc<dyn Route + Send + Sync>,
+    ) -> Result<(), String> {
+        self.storage.store(id, route)
     }
 }

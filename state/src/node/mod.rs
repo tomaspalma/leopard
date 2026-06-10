@@ -324,9 +324,7 @@ impl NodeState for DefaultNodeState {
     ) -> Result<(), String> {
         info!("Node socket route: {:?}", id);
         self.route_handler()
-            .add_route(id, Arc::new(NodeSocketRoute::new(task)));
-
-        Ok(())
+            .add_route(id, Arc::new(NodeSocketRoute::new(task)))
     }
 
     async fn init_neighbors(&self) {
