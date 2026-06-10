@@ -31,7 +31,7 @@ use super::{
     tree::BinaryMerkleTree,
 };
 
-pub const MERKLE_TREE_PROTOCOL_ID: u64 = 2;
+pub const MERKLE_TREE_PROTOCOL_ID: u64 = protocol::ProtocolId::MerkleTree as u64;
 
 pub struct MerkleTreeReconciliationProtocol {
     state: Arc<DefaultNodeState>,

@@ -36,7 +36,7 @@ pub enum ReconciliationState {
     AwaitingConfirmation,
 }
 
-pub const RIBLT_PROTOCOL_ID: u64 = 1;
+pub const RIBLT_PROTOCOL_ID: u64 = protocol::ProtocolId::Riblt as u64;
 
 /// Wire adapter: turns engine send calls into RIBLT protocol messages.
 struct RibltTransport {

@@ -15,6 +15,21 @@ use state::node::NodeState;
 
 use crate::deserializer::ProtocolDeserializer;
 
+/// Wire identifier assigned to each protocol. The discriminant is serialized
+/// as the first 8 bytes of every message and forms part of the routing key
+/// (`NodeSocketRouteId`), so values must stay stable across versions.
+/// Keeping every ID in this enum makes the compiler reject duplicates (E0081).
+/// 0 is reserved: deserializers treat a zero tag as "no protocol".
+#[repr(u64)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ProtocolId {
+    Riblt = 1,
+    MerkleTree = 2,
+    RbfRiblt = 3,
+    RfRiblt = 4,
+    Replication = 5,
+}
+
 pub struct ProtocolIDGenerator {}
 
 impl ProtocolIDGenerator {

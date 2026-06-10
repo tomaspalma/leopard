@@ -20,7 +20,7 @@ use crate::rbf_riblt::deserializer::RbfRibltDeserializer;
 use crate::rbf_riblt::scom::{RbfScomSink, RbfScomTransport};
 use crate::riblt::stream::RibltStreamEngine;
 
-pub const RBF_RIBLT_PROTOCOL_ID: u64 = 3;
+pub const RBF_RIBLT_PROTOCOL_ID: u64 = protocol::ProtocolId::RbfRiblt as u64;
 
 pub const BLOOM_HASHES: u64 = 1;
 pub const BLOOM_C_ELEM: usize = 32;

@@ -38,7 +38,7 @@ use crate::{
 
 use std::marker::PhantomData;
 
-pub const REPLICATION_PROTOCOL_ID: u64 = 5;
+pub const REPLICATION_PROTOCOL_ID: u64 = protocol::ProtocolId::Replication as u64;
 
 pub struct HintedHandoffReplicationProtocol<S, T> {
     state: Arc<S>,

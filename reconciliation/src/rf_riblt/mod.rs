@@ -19,7 +19,7 @@ use tokio::sync::RwLock;
 use crate::rf_riblt::deserializer::RfRibltDeserializer;
 use crate::riblt::messages::RIBLTSymbol;
 
-pub const RF_RIBLT_PROTOCOL_ID: u64 = 4;
+pub const RF_RIBLT_PROTOCOL_ID: u64 = protocol::ProtocolId::RfRiblt as u64;
 
 pub const RF_FINGERPRINT_BITS: u32 = 8;
 pub const RF_RIBBON_WIDTH: u32 = 64;
