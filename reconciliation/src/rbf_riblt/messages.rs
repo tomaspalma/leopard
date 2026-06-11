@@ -7,9 +7,7 @@ pub enum RbfRibltMessageTypeValues {
     BloomFilterSlice,
     BloomSliceAck,
     RBFStopSignal,
-    SComSendSymbol,
     SComDecodedAll,
-    SComRequestMoreSymbols,
     ValueFetchRequest,
     ValueFetchResponse,
 }
@@ -168,50 +166,6 @@ impl RbfRibltBloomSliceAckMessage {
     }
 }
 
-/// Re-use the shared coded-symbol type from the rateless-IBLT core.
-pub type RbfRibltCodedSymbol = crate::riblt_core::RIBLTCodedSymbol;
-
-#[derive(Debug, Clone, Serialize, Deserialize, Archive)]
-pub struct RbfRibltSComSendSymbolMessage {
-    _type: RbfRibltMessageType,
-    protocol_id: Option<u64>,
-    symbols: Vec<RbfRibltCodedSymbol>,
-    session_id: String,
-    // Encoder index of the first symbol in this batch, so the receiver can
-    // reassemble the positional coded-symbol stream in order (batches may arrive
-    // out of order on independent connections).
-    start_index: u64,
-}
-
-impl RbfRibltSComSendSymbolMessage {
-    pub fn new(
-        protocol_id: Option<u64>,
-        symbols: Vec<RbfRibltCodedSymbol>,
-        session_id: String,
-        start_index: u64,
-    ) -> Self {
-        Self {
-            _type: RbfRibltMessageType::new(RbfRibltMessageTypeValues::SComSendSymbol),
-            protocol_id,
-            symbols,
-            session_id,
-            start_index,
-        }
-    }
-
-    pub fn symbols(&self) -> &Vec<RbfRibltCodedSymbol> {
-        &self.symbols
-    }
-
-    pub fn session_id(&self) -> &String {
-        &self.session_id
-    }
-
-    pub fn start_index(&self) -> u64 {
-        self.start_index
-    }
-}
-
 #[derive(Debug, Clone, Serialize, Deserialize, Archive)]
 pub struct RbfRibltSComDecodedAllMessage {
     _type: RbfRibltMessageType,
@@ -238,35 +192,6 @@ impl RbfRibltSComDecodedAllMessage {
 
     pub fn keys_for_sender(&self) -> &Vec<String> {
         &self.keys_for_sender
-    }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Archive)]
-pub struct RbfRibltSComRequestMoreSymbolsMessage {
-    _type: RbfRibltMessageType,
-    protocol_id: Option<u64>,
-    session_id: String,
-    // Total coded symbols the receiver has consumed so far; the engine's credit
-    // window advances `acked` to this value.
-    received_count: u64,
-}
-
-impl RbfRibltSComRequestMoreSymbolsMessage {
-    pub fn new(protocol_id: Option<u64>, session_id: String, received_count: u64) -> Self {
-        Self {
-            _type: RbfRibltMessageType::new(RbfRibltMessageTypeValues::SComRequestMoreSymbols),
-            protocol_id,
-            session_id,
-            received_count,
-        }
-    }
-
-    pub fn session_id(&self) -> &String {
-        &self.session_id
-    }
-
-    pub fn received_count(&self) -> u64 {
-        self.received_count
     }
 }
 
@@ -354,9 +279,7 @@ pub enum RbfRibltMessageWrapper {
     BloomFilterSlice(RbfRibltBloomFilterSliceMessage),
     BloomSliceAck(RbfRibltBloomSliceAckMessage),
     RBFStopSignal(RbfRibltRBFStopSignalMessage),
-    SComSendSymbol(RbfRibltSComSendSymbolMessage),
     SComDecodedAll(RbfRibltSComDecodedAllMessage),
-    SComRequestMoreSymbols(RbfRibltSComRequestMoreSymbolsMessage),
     ValueFetchRequest(RbfRibltValueFetchRequestMessage),
     ValueFetchResponse(RbfRibltValueFetchResponseMessage),
 }
@@ -381,18 +304,8 @@ impl_protocol_message!(RbfRibltBloomSliceAckMessage, this, {
     rkyv::to_bytes::<Error>(&wrapper).map_err(|_| ())?
 });
 
-impl_protocol_message!(RbfRibltSComSendSymbolMessage, this, {
-    let wrapper = RbfRibltMessageWrapper::SComSendSymbol(this.clone());
-    rkyv::to_bytes::<Error>(&wrapper).map_err(|_| ())?
-});
-
 impl_protocol_message!(RbfRibltSComDecodedAllMessage, this, {
     let wrapper = RbfRibltMessageWrapper::SComDecodedAll(this.clone());
-    rkyv::to_bytes::<Error>(&wrapper).map_err(|_| ())?
-});
-
-impl_protocol_message!(RbfRibltSComRequestMoreSymbolsMessage, this, {
-    let wrapper = RbfRibltMessageWrapper::SComRequestMoreSymbols(this.clone());
     rkyv::to_bytes::<Error>(&wrapper).map_err(|_| ())?
 });
 

@@ -30,7 +30,11 @@ const BLOOM_ACK_TIMEOUT: Duration = Duration::from_millis(5000);
 
 use runtime::spawn;
 
-use crate::{rbf_riblt::receiver::ReceiveRbfRibltMessageTask, ReconciliationProtocol};
+use crate::{
+    rbf_riblt::receiver::ReceiveRbfRibltMessageTask,
+    riblt::{receiver::ReceiveNeighborSymbolsTask, RIBLT_PROTOCOL_ID},
+    ReconciliationProtocol,
+};
 
 use crate::algorithms::rbf::bloom::BloomFilter;
 use super::{
@@ -251,6 +255,22 @@ where
             .add_socket_task_and_create(
                 NodeSocketRouteId::new(self.port.clone(), RBF_RIBLT_PROTOCOL_ID),
                 Arc::new(ReceiveRbfRibltMessageTask::new(protocol_handle.clone())),
+                Box::new(move |port: NodeAddress| {
+                    Arc::new(Mutex::new(DefaultNodeSocket::new(port)))
+                }),
+            )
+            .unwrap();
+
+        // The scom streaming phase reuses the standalone RIBLT engine route: scom
+        // symbol/credit batches are tagged with RIBLT_PROTOCOL_ID and decoded by
+        // the same shared ReceiveNeighborSymbolsTask, here wired to this protocol's
+        // scom engine. The socket already exists from the registration above, so
+        // this only adds a second route under a different protocol id on the same
+        // port.
+        self.state
+            .add_socket_task_and_create(
+                NodeSocketRouteId::new(self.port.clone(), RIBLT_PROTOCOL_ID),
+                Arc::new(ReceiveNeighborSymbolsTask::new(self.scom_engine.clone())),
                 Box::new(move |port: NodeAddress| {
                     Arc::new(Mutex::new(DefaultNodeSocket::new(port)))
                 }),

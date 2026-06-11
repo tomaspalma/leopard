@@ -21,10 +21,18 @@ use crate::riblt_core::stream::{record_phase_split, RibltDecodeSink, RibltStream
 use crate::riblt_core::{RIBLTCodedSymbol, RIBLTSymbol};
 
 use crate::rbf_riblt::messages::{
-    RbfRibltSComDecodedAllMessage, RbfRibltSComRequestMoreSymbolsMessage,
-    RbfRibltSComSendSymbolMessage, RbfRibltValueFetchRequestMessage,
+    RbfRibltSComDecodedAllMessage, RbfRibltValueFetchRequestMessage,
 };
 use crate::rbf_riblt::{BloomReceivingState, RBF_RIBLT_PROTOCOL_ID};
+// The scom streaming phase reuses the standalone RIBLT protocol's wire messages
+// and protocol id: a scom symbol/credit batch is identical to a RIBLT one, so it
+// is routed to (and decoded by) the same shared engine route (see scom doc above
+// and the RIBLT_PROTOCOL_ID route registered in `protocols.rs`).
+use crate::riblt::messages::{
+    RIBLTMessageType, RIBLTMessageTypeValues, RIBLTRequestMoreSymbolsMessage,
+    RIBLTSendSymbolMessage,
+};
+use crate::riblt::RIBLT_PROTOCOL_ID;
 
 /// Wire adapter: turns engine send calls into rbf scom messages.
 pub struct RbfScomTransport {
@@ -46,8 +54,9 @@ impl RibltStreamTransport for RbfScomTransport {
             .send_through_socket(
                 self.own_id.clone(),
                 Box::new(neighbor.clone()),
-                Box::new(RbfRibltSComSendSymbolMessage::new(
-                    Some(RBF_RIBLT_PROTOCOL_ID),
+                Box::new(RIBLTSendSymbolMessage::new(
+                    RIBLTMessageType::new(RIBLTMessageTypeValues::SendSymbol),
+                    Some(RIBLT_PROTOCOL_ID),
                     symbols,
                     session_id.to_string(),
                     start_index,
@@ -67,8 +76,9 @@ impl RibltStreamTransport for RbfScomTransport {
             .send_through_socket(
                 self.own_id.clone(),
                 Box::new(neighbor.clone()),
-                Box::new(RbfRibltSComRequestMoreSymbolsMessage::new(
-                    Some(RBF_RIBLT_PROTOCOL_ID),
+                Box::new(RIBLTRequestMoreSymbolsMessage::new(
+                    RIBLTMessageType::new(RIBLTMessageTypeValues::RequestMoreSymbols),
+                    Some(RIBLT_PROTOCOL_ID),
                     session_id.to_string(),
                     received_count,
                 )),

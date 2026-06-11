@@ -20,8 +20,7 @@ use crate::rbf_riblt::{
     messages::{
         RbfRibltBloomFilterSliceMessage, RbfRibltBloomSliceAckMessage, RbfRibltFetchedEntry,
         RbfRibltHandshakeMessage, RbfRibltMessageTypeValues, RbfRibltRBFStopSignalMessage,
-        RbfRibltSComDecodedAllMessage, RbfRibltSComRequestMoreSymbolsMessage,
-        RbfRibltSComSendSymbolMessage, RbfRibltValueFetchRequestMessage,
+        RbfRibltSComDecodedAllMessage, RbfRibltValueFetchRequestMessage,
         RbfRibltValueFetchResponseMessage,
     },
     BloomReceivingState, BloomSendingState, RBF_RIBLT_PROTOCOL_ID,
@@ -481,24 +480,6 @@ impl ReceiveRbfRibltMessageTask {
         }
     }
 
-    async fn handle_scom_send_symbols(
-        &self,
-        message: RbfRibltSComSendSymbolMessage,
-        neighbor: NodeAddress,
-    ) {
-        // The engine seeds the decoder (from s_com, via the sink), reassembles in
-        // order, decodes, and on success drives the value-fetch via on_complete.
-        self.protocol
-            .scom_engine
-            .on_symbols(
-                neighbor,
-                message.session_id().clone(),
-                message.start_index(),
-                message.symbols().clone(),
-            )
-            .await;
-    }
-
     async fn handle_scom_decoded_all(
         &self,
         message: RbfRibltSComDecodedAllMessage,
@@ -541,17 +522,6 @@ impl ReceiveRbfRibltMessageTask {
                 )
                 .await;
         }
-    }
-
-    async fn handle_scom_request_more(
-        &self,
-        message: RbfRibltSComRequestMoreSymbolsMessage,
-        neighbor: NodeAddress,
-    ) {
-        self.protocol
-            .scom_engine
-            .on_request_more(&neighbor, message.session_id(), message.received_count())
-            .await;
     }
 
     async fn handle_value_fetch_request(
@@ -768,16 +738,6 @@ impl RouteTask for ReceiveRbfRibltMessageTask {
                             error!("Failed to downcast message to RbfRibltRBFStopSignalMessage");
                         }
                     }
-                    RbfRibltMessageTypeValues::SComSendSymbol => {
-                        if let Some(msg) = deserialized_message
-                            .as_any()
-                            .downcast_ref::<RbfRibltSComSendSymbolMessage>()
-                        {
-                            this.handle_scom_send_symbols(msg.clone(), neighbor).await;
-                        } else {
-                            error!("Failed to downcast message to RbfRibltSComSendSymbolMessage");
-                        }
-                    }
                     RbfRibltMessageTypeValues::SComDecodedAll => {
                         if let Some(msg) = deserialized_message
                             .as_any()
@@ -786,18 +746,6 @@ impl RouteTask for ReceiveRbfRibltMessageTask {
                             this.handle_scom_decoded_all(msg.clone(), neighbor).await;
                         } else {
                             error!("Failed to downcast message to RbfRibltSComDecodedAllMessage");
-                        }
-                    }
-                    RbfRibltMessageTypeValues::SComRequestMoreSymbols => {
-                        if let Some(msg) = deserialized_message
-                            .as_any()
-                            .downcast_ref::<RbfRibltSComRequestMoreSymbolsMessage>()
-                        {
-                            this.handle_scom_request_more(msg.clone(), neighbor).await;
-                        } else {
-                            error!(
-                                "Failed to downcast message to RbfRibltSComRequestMoreSymbolsMessage"
-                            );
                         }
                     }
                     RbfRibltMessageTypeValues::ValueFetchRequest => {
