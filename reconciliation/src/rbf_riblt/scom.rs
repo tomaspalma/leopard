@@ -1,7 +1,7 @@
 //! rbf_riblt's host adapters for the shared riblt streaming engine.
 //!
 //! The scom phase reconciles the post-bloom `s_com` subsets with a rateless-IBLT
-//! exchange. These adapters plug that exchange into `riblt::stream`: the
+//! exchange. These adapters plug that exchange into `riblt_core::stream`: the
 //! transport builds rbf's scom wire messages, and the sink seeds the decoder
 //! from `s_com`, accumulates the decoded difference, and drives rbf's
 //! value-fetch completion (which also carries `s_tn` keys the IBLT never sees).
@@ -17,9 +17,8 @@ use tokio::sync::RwLock;
 
 use runtime::metrics::experiment::get_context;
 
-use crate::riblt::messages::{RIBLTCodedSymbol, RIBLTSymbol};
-use crate::riblt::record_phase_split;
-use crate::riblt::stream::{RibltDecodeSink, RibltStreamTransport};
+use crate::riblt_core::stream::{record_phase_split, RibltDecodeSink, RibltStreamTransport};
+use crate::riblt_core::{RIBLTCodedSymbol, RIBLTSymbol};
 
 use crate::rbf_riblt::messages::{
     RbfRibltSComDecodedAllMessage, RbfRibltSComRequestMoreSymbolsMessage,

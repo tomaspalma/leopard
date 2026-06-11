@@ -18,7 +18,7 @@ use tokio::sync::{Notify, RwLock};
 
 use crate::rbf_riblt::deserializer::RbfRibltDeserializer;
 use crate::rbf_riblt::scom::{RbfScomSink, RbfScomTransport};
-use crate::riblt::stream::RibltStreamEngine;
+use crate::riblt_core::stream::RibltStreamEngine;
 
 pub const RBF_RIBLT_PROTOCOL_ID: u64 = protocol::ProtocolId::RbfRiblt as u64;
 

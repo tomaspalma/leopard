@@ -12,17 +12,18 @@ use std::time::Instant;
 
 use async_trait::async_trait;
 use connection::node::port::NodeAddress;
+use metrics::gauge;
 use riblt::RatelessIBLT;
 use tokio::sync::{mpsc, Notify, RwLock};
 use tokio::time::{timeout, Duration};
 use tracing::info;
 
-use runtime::metrics::experiment::get_context;
+use runtime::metrics::experiment::{get_context, ExperimentContext};
 
 use runtime::spawn;
 
-use crate::riblt::messages::{RIBLTCodedSymbol, RIBLTSymbol};
-use crate::riblt::session::{build_decoder_blocking, process_batch_blocking};
+use crate::riblt_core::session::{build_decoder_blocking, process_batch_blocking};
+use crate::riblt_core::symbols::{RIBLTCodedSymbol, RIBLTSymbol};
 
 // Coded symbols carried in a single batch message.
 const CHUNK_SIZE: usize = 30;
@@ -101,6 +102,57 @@ pub trait RibltDecodeSink: Send + Sync + 'static {
     );
 }
 
+/// Emit the seed/decode/difference split for one completed IBLT session,
+/// tagged by protocol. Sinks call this from `on_complete` (riblt and
+/// rbf_riblt's scom phase both do, running through the same engine) so the
+/// per-protocol numbers are directly comparable.
+pub(crate) fn record_phase_split(
+    protocol: &'static str,
+    neighbor: &NodeAddress,
+    context: &ExperimentContext,
+    seed_secs: f64,
+    decode_secs: f64,
+    decoded_difference: usize,
+    round_trips: u64,
+) {
+    gauge!(
+        "reconciliation_round_trips",
+        "protocol" => protocol,
+        "neighbor" => format!("{:?}", neighbor),
+        "run_id" => context.run_id().to_string(),
+        "trial" => context.trial().to_string(),
+        "similarity" => context.similarity().to_string()
+    )
+    .set(round_trips as f64);
+    gauge!(
+        "reconciliation_seed_seconds",
+        "protocol" => protocol,
+        "neighbor" => format!("{:?}", neighbor),
+        "run_id" => context.run_id().to_string(),
+        "trial" => context.trial().to_string(),
+        "similarity" => context.similarity().to_string()
+    )
+    .set(seed_secs);
+    gauge!(
+        "reconciliation_decode_seconds",
+        "protocol" => protocol,
+        "neighbor" => format!("{:?}", neighbor),
+        "run_id" => context.run_id().to_string(),
+        "trial" => context.trial().to_string(),
+        "similarity" => context.similarity().to_string()
+    )
+    .set(decode_secs);
+    gauge!(
+        "reconciliation_decoded_difference",
+        "protocol" => protocol,
+        "neighbor" => format!("{:?}", neighbor),
+        "run_id" => context.run_id().to_string(),
+        "trial" => context.trial().to_string(),
+        "similarity" => context.similarity().to_string()
+    )
+    .set(decoded_difference as f64);
+}
+
 pub struct SendingState {
     pub local_iblt: RatelessIBLT<RIBLTSymbol>,
     pub start_time: Instant,
@@ -119,8 +171,8 @@ pub struct ReceivingState {
 pub struct RibltStreamEngine {
     transport: Arc<dyn RibltStreamTransport>,
     sink: Arc<dyn RibltDecodeSink>,
-    pub sending_states: Arc<RwLock<HashMap<NodeAddress, SendingState>>>,
-    pub receiving_states: Arc<RwLock<HashMap<NodeAddress, ReceivingState>>>,
+    sending_states: Arc<RwLock<HashMap<NodeAddress, SendingState>>>,
+    receiving_states: Arc<RwLock<HashMap<NodeAddress, ReceivingState>>>,
 }
 
 impl RibltStreamEngine {
@@ -138,6 +190,38 @@ impl RibltStreamEngine {
 
     pub async fn already_sending(&self, neighbor: &NodeAddress) -> bool {
         self.sending_states.read().await.contains_key(neighbor)
+    }
+
+    /// True if any session state (sending or receiving) exists for `neighbor`.
+    pub async fn has_session(&self, neighbor: &NodeAddress) -> bool {
+        self.sending_states.read().await.contains_key(neighbor)
+            || self.receiving_states.read().await.contains_key(neighbor)
+    }
+
+    /// Tear down any session with `neighbor`, regardless of session id. The
+    /// sending entry is removed and its parked sender woken (the same
+    /// remove-then-notify order as `on_finished`) so it observes the removal
+    /// immediately instead of waiting out ACK_TIMEOUT — and can't latch onto a
+    /// successor session for the same neighbor. Dropping the receiving entry
+    /// closes the decode task's channel, ending it once in-flight batches drain.
+    pub async fn clear(&self, neighbor: &NodeAddress) {
+        if let Some(status) = self.sending_states.write().await.remove(neighbor) {
+            status.resend_notify.notify_one();
+        }
+        self.receiving_states.write().await.remove(neighbor);
+    }
+
+    /// Snapshot of the active sending sessions as (neighbor, acked, session_id),
+    /// for diagnostics.
+    pub async fn sending_sessions(&self) -> Vec<(NodeAddress, usize, String)> {
+        self.sending_states
+            .read()
+            .await
+            .iter()
+            .map(|(neighbor, status)| {
+                (neighbor.clone(), status.acked, status.session_id.clone())
+            })
+            .collect()
     }
 
     /// Begin streaming `symbols` to `neighbor` under the credit window.

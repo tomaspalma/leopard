@@ -14,9 +14,9 @@ use runtime::spawn;
 use state::node::NodeState;
 use tracing::{error, info};
 
-use crate::riblt::{
-    messages::RIBLTSymbol,
+use crate::riblt_core::{
     session::{add_coded_symbols, store_symbols, try_decode_blocking},
+    RIBLTSymbol,
 };
 
 use crate::rf_riblt::{

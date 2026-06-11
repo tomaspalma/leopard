@@ -2,8 +2,6 @@ pub mod deserializer;
 pub mod messages;
 pub mod protocols;
 pub mod receiver;
-pub mod session;
-pub mod stream;
 
 pub use deserializer::RIBLTDeserializer;
 
@@ -12,7 +10,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use metrics::{counter, gauge};
-use runtime::metrics::experiment::{get_context, ExperimentContext};
+use runtime::metrics::experiment::get_context;
 use tracing::info;
 
 use state::node::{DefaultNodeState, NodeState};
@@ -22,19 +20,13 @@ use membership::Membership;
 
 use crate::riblt::messages::{
     RIBLTDecodedAllMessage, RIBLTMessageType, RIBLTMessageTypeValues, RIBLTRequestMoreSymbolsMessage,
-    RIBLTSendSymbolMessage, RIBLTSymbol,
+    RIBLTSendSymbolMessage,
 };
-use crate::riblt::messages::RIBLTCodedSymbol;
-use crate::riblt::stream::{RibltDecodeSink, RibltStreamEngine, RibltStreamTransport};
-
-/// Reconciliation phase for the bloom/filter-based protocols that reuse this
-/// enum (rf_riblt, rbf_riblt). The plain RIBLT protocol no longer uses it: it
-/// streams symbols continuously under a credit window (see `stream`).
-#[derive(Debug, Clone, PartialEq)]
-pub enum ReconciliationState {
-    SendingSymbols,
-    AwaitingConfirmation,
-}
+use crate::riblt_core::session;
+use crate::riblt_core::stream::{
+    record_phase_split, RibltDecodeSink, RibltStreamEngine, RibltStreamTransport,
+};
+use crate::riblt_core::{RIBLTCodedSymbol, RIBLTSymbol};
 
 pub const RIBLT_PROTOCOL_ID: u64 = protocol::ProtocolId::Riblt as u64;
 
@@ -105,56 +97,6 @@ impl RibltStreamTransport for RibltTransport {
             )
             .await;
     }
-}
-
-/// Emit the seed/decode/difference split for one completed IBLT session,
-/// tagged by protocol. Shared by riblt and rbf_riblt's scom phase (both run
-/// through the same streaming engine) so the two are directly comparable.
-pub(crate) fn record_phase_split(
-    protocol: &'static str,
-    neighbor: &NodeAddress,
-    context: &ExperimentContext,
-    seed_secs: f64,
-    decode_secs: f64,
-    decoded_difference: usize,
-    round_trips: u64,
-) {
-    gauge!(
-        "reconciliation_round_trips",
-        "protocol" => protocol,
-        "neighbor" => format!("{:?}", neighbor),
-        "run_id" => context.run_id().to_string(),
-        "trial" => context.trial().to_string(),
-        "similarity" => context.similarity().to_string()
-    )
-    .set(round_trips as f64);
-    gauge!(
-        "reconciliation_seed_seconds",
-        "protocol" => protocol,
-        "neighbor" => format!("{:?}", neighbor),
-        "run_id" => context.run_id().to_string(),
-        "trial" => context.trial().to_string(),
-        "similarity" => context.similarity().to_string()
-    )
-    .set(seed_secs);
-    gauge!(
-        "reconciliation_decode_seconds",
-        "protocol" => protocol,
-        "neighbor" => format!("{:?}", neighbor),
-        "run_id" => context.run_id().to_string(),
-        "trial" => context.trial().to_string(),
-        "similarity" => context.similarity().to_string()
-    )
-    .set(decode_secs);
-    gauge!(
-        "reconciliation_decoded_difference",
-        "protocol" => protocol,
-        "neighbor" => format!("{:?}", neighbor),
-        "run_id" => context.run_id().to_string(),
-        "trial" => context.trial().to_string(),
-        "similarity" => context.similarity().to_string()
-    )
-    .set(decoded_difference as f64);
 }
 
 /// Decode adapter: seeds from the full local store, persists decoded remote

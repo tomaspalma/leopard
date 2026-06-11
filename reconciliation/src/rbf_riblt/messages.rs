@@ -168,8 +168,8 @@ impl RbfRibltBloomSliceAckMessage {
     }
 }
 
-/// Re-use the identical coded-symbol type from the base RIBLT protocol.
-pub type RbfRibltCodedSymbol = crate::riblt::messages::RIBLTCodedSymbol;
+/// Re-use the shared coded-symbol type from the rateless-IBLT core.
+pub type RbfRibltCodedSymbol = crate::riblt_core::RIBLTCodedSymbol;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Archive)]
 pub struct RbfRibltSComSendSymbolMessage {

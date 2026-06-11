@@ -4,7 +4,7 @@ use riblt::{CodedSymbol, Decoder};
 use state::node::{DefaultNodeState, NodeState};
 use state::storage::item::DefaultDataStateItem;
 
-use crate::riblt::messages::{RIBLTCodedSymbol, RIBLTSymbol};
+use crate::riblt_core::symbols::{RIBLTCodedSymbol, RIBLTSymbol};
 
 pub struct IbltPeelResult {
     pub successful: bool,

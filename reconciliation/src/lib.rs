@@ -18,6 +18,7 @@ pub mod pin_sketch;
 pub mod rbf_riblt;
 pub mod rf_riblt;
 pub mod riblt;
+pub mod riblt_core;
 
 #[async_trait]
 pub trait ReconciliationProtocol<S, T, M, R, N, MN, CI, CV, PTU, PT, RHandler, RStorage>:

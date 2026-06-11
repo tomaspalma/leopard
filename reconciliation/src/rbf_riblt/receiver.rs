@@ -12,7 +12,7 @@ use runtime::spawn;
 use state::node::NodeState;
 use tracing::{error, info};
 
-use crate::riblt::{messages::RIBLTSymbol, session::store_symbols};
+use crate::riblt_core::{session::store_symbols, RIBLTSymbol};
 
 use crate::algorithms::rbf::bloom::BloomFilter;
 use crate::rbf_riblt::{
@@ -53,13 +53,7 @@ impl RbfRibltProtocol {
                 .read()
                 .await
                 .contains_key(neighbor)
-            || self.scom_engine.sending_states.read().await.contains_key(neighbor)
-            || self
-                .scom_engine
-                .receiving_states
-                .read()
-                .await
-                .contains_key(neighbor)
+            || self.scom_engine.has_session(neighbor).await
             || self
                 .pending_value_fetch_sessions
                 .read()
@@ -71,13 +65,7 @@ impl RbfRibltProtocol {
     /// or if bloom has already transitioned to scom. Used by handshake handling
     /// to allow bloom-phase resets while blocking scom/fetch-phase interference.
     pub async fn is_session_busy(&self, neighbor: &NodeAddress) -> bool {
-        self.scom_engine.sending_states.read().await.contains_key(neighbor)
-            || self
-                .scom_engine
-                .receiving_states
-                .read()
-                .await
-                .contains_key(neighbor)
+        self.scom_engine.has_session(neighbor).await
             || self
                 .pending_value_fetch_sessions
                 .read()
@@ -97,8 +85,7 @@ impl RbfRibltProtocol {
             .write()
             .await
             .remove(neighbor);
-        self.scom_engine.sending_states.write().await.remove(neighbor);
-        self.scom_engine.receiving_states.write().await.remove(neighbor);
+        self.scom_engine.clear(neighbor).await;
         self.round_start_times.write().await.remove(neighbor);
         self.bloom_sending_states.write().await.remove(neighbor);
         self.bloom_receiving_states.write().await.remove(neighbor);

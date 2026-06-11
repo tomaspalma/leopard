@@ -111,11 +111,10 @@ where
 {
     fn state(&self) {
         info!("Reconciliation States:");
-        let states = self.engine.sending_states.clone();
+        let engine = self.engine.clone();
         tokio::spawn(async move {
-            let guard = states.read().await;
-            for (k, v) in guard.iter() {
-                info!("  {:?}: acked {}, session {}", k, v.acked, v.session_id);
+            for (neighbor, acked, session_id) in engine.sending_sessions().await {
+                info!("  {:?}: acked {}, session {}", neighbor, acked, session_id);
             }
         });
     }

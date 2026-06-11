@@ -11,9 +11,9 @@ use crate::riblt::{
         RIBLTDecodedAllMessage, RIBLTMessageTypeValues, RIBLTRequestMoreSymbolsMessage,
         RIBLTSendSymbolMessage,
     },
-    stream::RibltStreamEngine,
     RIBLTDeserializer,
 };
+use crate::riblt_core::stream::RibltStreamEngine;
 
 /// Route task for the standalone RIBLT protocol: deserializes incoming messages
 /// and forwards them to the shared streaming engine.

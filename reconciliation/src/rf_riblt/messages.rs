@@ -108,7 +108,7 @@ impl RfRibltFilterDoneMessage {
     }
 }
 
-pub type RfRibltCodedSymbol = crate::riblt::messages::RIBLTCodedSymbol;
+pub type RfRibltCodedSymbol = crate::riblt_core::RIBLTCodedSymbol;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Archive)]
 pub struct RfRibltSComSendSymbolMessage {

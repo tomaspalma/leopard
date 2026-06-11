@@ -17,7 +17,7 @@ use state::node::DefaultNodeState;
 use tokio::sync::RwLock;
 
 use crate::rf_riblt::deserializer::RfRibltDeserializer;
-use crate::riblt::messages::RIBLTSymbol;
+use crate::riblt_core::RIBLTSymbol;
 
 pub const RF_RIBLT_PROTOCOL_ID: u64 = protocol::ProtocolId::RfRiblt as u64;
 
@@ -31,7 +31,14 @@ pub const RIBLT_BATCH_SIZE: usize = 5;
 pub type RfRibltHasher = BuildHasherDefault<std::collections::hash_map::DefaultHasher>;
 pub type RfRibbonFilter = RibbonFilter<RfRibltHasher>;
 
-pub type SComReconciliationState = crate::riblt::ReconciliationState;
+/// Phase of the request/response-driven scom IBLT exchange. Unlike riblt and
+/// rbf_riblt, which stream symbols continuously under a credit window (see
+/// `riblt_core::stream`), rf_riblt sends a batch and waits for confirmation.
+#[derive(Debug, Clone, PartialEq)]
+pub enum SComReconciliationState {
+    SendingSymbols,
+    AwaitingConfirmation,
+}
 
 pub struct SComSendingState {
     pub state: SComReconciliationState,
