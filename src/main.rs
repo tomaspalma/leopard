@@ -46,7 +46,9 @@ async fn main() {
 
     info!("Setting recorder");
 
-    let output_dir = format!("./metrics_output/{}", cli.run_id);
+    let metrics_base =
+        std::env::var("METRICS_OUTPUT_DIR").unwrap_or_else(|_| "./metrics_output".to_string());
+    let output_dir = format!("{}/{}", metrics_base, cli.run_id);
     let _ = set_context(ExperimentContext::new(
         cli.run_id.clone(),
         cli.trial.clone(),

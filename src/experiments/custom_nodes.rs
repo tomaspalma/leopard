@@ -134,7 +134,9 @@ pub async fn custom_nodes(
             }
         }
 
-        let output_dir = format!("./metrics_output/{}", context.run_id());
+        let metrics_base = std::env::var("METRICS_OUTPUT_DIR")
+            .unwrap_or_else(|_| "./metrics_output".to_string());
+        let output_dir = format!("{}/{}", metrics_base, context.run_id());
         runtime::metrics::csv::flush_untagged_metrics(&output_dir).await;
     } else {
         std::future::pending::<()>().await;

@@ -23,9 +23,14 @@ export RUST_LOG=${RUST_LOG:-warn}
 echo "Generating datasets for sweep..."
 python3 scripts/generate_data.py --default-matrix --sizes "$SIZES" --similarities "$SIMILARITIES"
 
-echo "Removing metrics_output folder"
-rm -rf metrics_output
-mkdir -p metrics_output
+# Keep every sweep's output under its own date-stamped folder so re-running the
+# sweep no longer overwrites previous results.
+RUN_TIMESTAMP="$(date +%Y-%m-%d_%H-%M-%S)"
+METRICS_OUTPUT_DIR="${METRICS_OUTPUT_DIR:-metrics_output/${RUN_TIMESTAMP}}"
+ANALYSIS_DIR="${METRICS_OUTPUT_DIR}/analysis"
+export METRICS_OUTPUT_DIR
+echo "Writing metrics for this sweep to ${METRICS_OUTPUT_DIR}"
+mkdir -p "$METRICS_OUTPUT_DIR"
 
 IFS=',' read -r -a similarity_values <<<"$SIMILARITIES"
 IFS=',' read -r -a protocol_values <<<"$PROTOCOLS"
@@ -59,16 +64,16 @@ for size in "${size_values[@]}"; do
   done
 done
 
-echo "Sweep finished. Analyzing with: python3 scripts/analyze_similarity_bytes.py metrics_output"
+echo "Sweep finished. Analyzing ${METRICS_OUTPUT_DIR} into ${ANALYSIS_DIR}"
 
-python3 scripts/analyze_similarity_bytes.py metrics_output
-python3 scripts/analyze_similarity_resources.py metrics_output
-python3 scripts/analyze_similarity_duration.py metrics_output
-python3 scripts/analyze_similarity_scom.py metrics_output
-python3 scripts/analyze_phase_split.py metrics_output
-python3 scripts/analyze_roundtrip.py metrics_output
-python3 scripts/analyze_cpu_usage.py metrics_output
-python3 scripts/analyze_riblt_scaling.py metrics_output
-python3 scripts/analyze_rbf_difference_reduction.py metrics_output
-python3 scripts/make_phase_split_table.py metrics_output --output metrics_output/analysis/tab_rbf_phase_split.tex
-python3 scripts/make_comparison_rbf_rsr_rbf_riblt_phases.py metrics_output --output metrics_output/analysis/rbf_rsr_rbf_riblt_bytes.tex
+python3 scripts/analyze_similarity_bytes.py "$METRICS_OUTPUT_DIR" --output-dir "$ANALYSIS_DIR"
+python3 scripts/analyze_similarity_resources.py "$METRICS_OUTPUT_DIR" --output-dir "$ANALYSIS_DIR"
+python3 scripts/analyze_similarity_duration.py "$METRICS_OUTPUT_DIR" --output-dir "$ANALYSIS_DIR"
+python3 scripts/analyze_similarity_scom.py "$METRICS_OUTPUT_DIR" --output-dir "$ANALYSIS_DIR"
+python3 scripts/analyze_phase_split.py "$METRICS_OUTPUT_DIR" --output-dir "$ANALYSIS_DIR"
+python3 scripts/analyze_roundtrip.py "$METRICS_OUTPUT_DIR" --output-dir "$ANALYSIS_DIR"
+python3 scripts/analyze_cpu_usage.py "$METRICS_OUTPUT_DIR" --output-dir "$ANALYSIS_DIR"
+python3 scripts/analyze_riblt_scaling.py "$METRICS_OUTPUT_DIR" --output-dir "$ANALYSIS_DIR"
+python3 scripts/analyze_rbf_difference_reduction.py "$METRICS_OUTPUT_DIR" --output-dir "$ANALYSIS_DIR"
+python3 scripts/make_phase_split_table.py "$METRICS_OUTPUT_DIR" --output "$ANALYSIS_DIR/tab_rbf_phase_split.tex"
+python3 scripts/make_comparison_rbf_rsr_rbf_riblt_phases.py "$METRICS_OUTPUT_DIR" --output "$ANALYSIS_DIR/rbf_rsr_rbf_riblt_bytes.tex"

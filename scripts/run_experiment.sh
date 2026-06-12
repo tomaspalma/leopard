@@ -23,8 +23,10 @@ SIMILARITY=${5:-"unknown"}
 
 echo "Running experiment with protocol=$PROTOCOL dataset=$DATASET_PREFIX run_id=$RUN_ID trial=$TRIAL similarity=$SIMILARITY"
 
-mkdir -p metrics_output
-rm -rf "metrics_output/${RUN_ID}"
+METRICS_OUTPUT_DIR="${METRICS_OUTPUT_DIR:-metrics_output}"
+export METRICS_OUTPUT_DIR
+mkdir -p "$METRICS_OUTPUT_DIR"
+rm -rf "${METRICS_OUTPUT_DIR}/${RUN_ID}"
 
 TMP1=$(mktemp "data/${DATASET_PREFIX}_node1_XXXXXX.json")
 TMP2=$(mktemp "data/${DATASET_PREFIX}_node2_XXXXXX.json")
