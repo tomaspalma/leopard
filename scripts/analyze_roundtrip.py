@@ -175,11 +175,11 @@ def plot_round_trip_summary(summary, output_dir):
     plt.figure(figsize=(10, 6))
     for protocol, group in summary.groupby("protocol"):
         group = group.sort_values("similarity")
-        mean = group["mean_round_trips"]
-        yerr = [mean - group["min_round_trips"], group["max_round_trips"] - mean]
+        median = group["median_round_trips"]
+        yerr = [median - group["min_round_trips"], group["max_round_trips"] - median]
         plt.errorbar(
             group["similarity"],
-            mean,
+            median,
             yerr=yerr,
             marker="o",
             capsize=3,
@@ -188,7 +188,7 @@ def plot_round_trip_summary(summary, output_dir):
 
     plt.xlabel("Similarity (Jaccard)")
     plt.xlim(-0.03, 1.03)
-    plt.ylabel("Mean Reconciliation Round Trips")
+    plt.ylabel("Median Reconciliation Round Trips")
     plt.title("Reconciliation Round Trips vs Similarity")
     plt.yscale("log")
     ax = plt.gca()

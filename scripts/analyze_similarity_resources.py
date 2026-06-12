@@ -205,17 +205,18 @@ def plot_metric(summary, value_col, std_col, ylabel, title, output_path):
     if summary.empty:
         return
 
-    min_col = value_col.replace("mean_", "min_")
-    max_col = value_col.replace("mean_", "max_")
+    stat_prefix = "median_" if value_col.startswith("median_") else "mean_"
+    min_col = value_col.replace(stat_prefix, "min_")
+    max_col = value_col.replace(stat_prefix, "max_")
 
     plt.figure(figsize=(10, 6))
     for protocol, group in summary.groupby("protocol"):
         group = group.sort_values("similarity")
-        mean = group[value_col]
-        yerr = [mean - group[min_col], group[max_col] - mean]
+        center = group[value_col]
+        yerr = [center - group[min_col], group[max_col] - center]
         plt.errorbar(
             group["similarity"],
-            mean,
+            center,
             yerr=yerr,
             marker="o",
             capsize=3,
@@ -293,18 +294,18 @@ def main():
 
     plot_metric(
         cpu_summary,
-        "mean_cpu_round_seconds",
+        "median_cpu_round_seconds",
         "std_cpu_round_seconds",
-        "Mean CPU Time Per Round (seconds)",
+        "Median CPU Time Per Round (seconds)",
         "CPU Time Per Round vs Similarity",
         os.path.join(args.output_dir, "cpu_vs_similarity.pdf"),
     )
 
     plot_metric(
         mem_summary,
-        "mean_rss_memory_mb",
+        "median_rss_memory_mb",
         "std_rss_memory_mb",
-        "Mean RSS Memory (MB)",
+        "Median RSS Memory (MB)",
         "RSS Memory vs Similarity",
         os.path.join(args.output_dir, "memory_vs_similarity.pdf"),
     )

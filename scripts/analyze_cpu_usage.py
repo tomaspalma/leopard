@@ -77,7 +77,7 @@ def aggregate_cpu(df):
     df["similarity_numeric"] = pd.to_numeric(df["similarity"], errors="coerce")
 
     # Sum CPU across all nodes per (run, protocol, trial, similarity, iteration),
-    # then average across trials/runs to get mean per round.
+    # then take the median across trials/runs to get the typical cost per round.
     per_round = (
         df.groupby(["run_id", "protocol", "trial", "similarity_numeric", "iteration"], as_index=False)["cpu_ms"]
         .sum()
@@ -86,6 +86,7 @@ def aggregate_cpu(df):
 
     summary = per_round.groupby(["protocol", "similarity_numeric", "iteration"], as_index=False).agg(
         mean_cpu_ms=("total_cpu_ms", "mean"),
+        median_cpu_ms=("total_cpu_ms", "median"),
         std_cpu_ms=("total_cpu_ms", "std"),
         min_cpu_ms=("total_cpu_ms", "min"),
         max_cpu_ms=("total_cpu_ms", "max"),
@@ -110,11 +111,11 @@ def plot_cpu_per_round(summary, similarity_filter, output_path):
     if similarity_filter is not None:
         subset = summary[summary["similarity_numeric"] == similarity_filter]
     else:
-        # Average across all similarity levels
+        # Aggregate across all similarity levels
         subset = (
             summary.groupby(["protocol", "iteration"], as_index=False)
             .agg(
-                mean_cpu_ms=("mean_cpu_ms", "mean"),
+                median_cpu_ms=("median_cpu_ms", "median"),
                 min_cpu_ms=("min_cpu_ms", "min"),
                 max_cpu_ms=("max_cpu_ms", "max"),
             )
@@ -126,11 +127,11 @@ def plot_cpu_per_round(summary, similarity_filter, output_path):
     plt.figure(figsize=(10, 6))
     for protocol, group in subset.groupby("protocol"):
         group = group.sort_values("iteration")
-        mean = group["mean_cpu_ms"]
-        yerr = [mean - group["min_cpu_ms"], group["max_cpu_ms"] - mean]
+        median = group["median_cpu_ms"]
+        yerr = [median - group["min_cpu_ms"], group["max_cpu_ms"] - median]
         plt.errorbar(
             group["iteration"],
-            mean,
+            median,
             yerr=yerr,
             marker="o",
             capsize=3,
@@ -157,7 +158,7 @@ def plot_cpu_by_similarity(summary, output_path):
     totals = (
         summary.groupby(["protocol", "similarity_numeric"], as_index=False)
         .agg(
-            total_mean_cpu_ms=("mean_cpu_ms", "sum"),
+            total_median_cpu_ms=("median_cpu_ms", "sum"),
             min_cpu_ms=("min_cpu_ms", "min"),
             max_cpu_ms=("max_cpu_ms", "max"),
         )
@@ -167,11 +168,11 @@ def plot_cpu_by_similarity(summary, output_path):
     plt.figure(figsize=(10, 6))
     for protocol, group in totals.groupby("protocol"):
         group = group.sort_values("similarity_numeric")
-        mean = group["total_mean_cpu_ms"]
-        yerr = [mean - group["min_cpu_ms"], group["max_cpu_ms"] - mean]
+        median = group["total_median_cpu_ms"]
+        yerr = [median - group["min_cpu_ms"], group["max_cpu_ms"] - median]
         plt.errorbar(
             group["similarity_numeric"],
-            mean,
+            median,
             yerr=yerr,
             marker="o",
             capsize=3,

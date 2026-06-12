@@ -227,14 +227,14 @@ def plot_summary(summary, output_dir):
     plt.figure(figsize=(10, 6))
     for protocol, group in summary.groupby("protocol"):
         group = group.sort_values("similarity")
-        mean = group["mean_transmitted_bytes"] / bytes_per_megabyte
+        median = group["median_transmitted_bytes"] / bytes_per_megabyte
         yerr = [
-            mean - group["min_transmitted_bytes"] / bytes_per_megabyte,
-            group["max_transmitted_bytes"] / bytes_per_megabyte - mean,
+            median - group["min_transmitted_bytes"] / bytes_per_megabyte,
+            group["max_transmitted_bytes"] / bytes_per_megabyte - median,
         ]
         plt.errorbar(
             group["similarity"],
-            mean,
+            median,
             yerr=yerr,
             marker="o",
             capsize=3,
@@ -243,7 +243,7 @@ def plot_summary(summary, output_dir):
 
     plt.xlabel("Similarity (Jaccard)")
     plt.xlim(-0.03, 1.03)
-    plt.ylabel("Mean Data Transmitted (MB)")
+    plt.ylabel("Median Data Transmitted (MB)")
     plt.title("Reconciliation Transmitted Data vs Similarity")
     plt.yscale("log")
     ax = plt.gca()
@@ -265,7 +265,7 @@ def plot_summary(summary, output_dir):
 def _plot_ratio(summary, output_dir):
     """Ratio of each protocol's bytes to riblt baseline, per similarity."""
     pivot = summary.pivot_table(
-        index="similarity", columns="protocol", values="mean_transmitted_bytes"
+        index="similarity", columns="protocol", values="median_transmitted_bytes"
     )
     if "riblt" not in pivot.columns:
         return
@@ -293,7 +293,7 @@ def _plot_ratio(summary, output_dir):
 def _plot_overhead(summary, output_dir):
     """Absolute bytes saved vs riblt, showing where filter overhead lies."""
     pivot = summary.pivot_table(
-        index="similarity", columns="protocol", values="mean_transmitted_bytes"
+        index="similarity", columns="protocol", values="median_transmitted_bytes"
     )
     if "riblt" not in pivot.columns:
         return
