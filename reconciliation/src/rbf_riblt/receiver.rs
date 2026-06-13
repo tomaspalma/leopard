@@ -20,7 +20,8 @@ use crate::rbf_riblt::{
     messages::{
         RbfRibltBloomFilterSliceMessage, RbfRibltBloomSliceAckMessage, RbfRibltFetchedEntry,
         RbfRibltHandshakeMessage, RbfRibltMessageTypeValues, RbfRibltRBFStopSignalMessage,
-        RbfRibltSComDecodedAllMessage, RbfRibltValueFetchRequestMessage,
+        RbfRibltRequestMoreSymbolsMessage, RbfRibltSComDecodedAllMessage,
+        RbfRibltSendSymbolMessage, RbfRibltValueFetchRequestMessage,
         RbfRibltValueFetchResponseMessage,
     },
     BloomReceivingState, BloomSendingState, RBF_RIBLT_PROTOCOL_ID,
@@ -736,6 +737,43 @@ impl RouteTask for ReceiveRbfRibltMessageTask {
                             }
                         } else {
                             error!("Failed to downcast message to RbfRibltRBFStopSignalMessage");
+                        }
+                    }
+                    RbfRibltMessageTypeValues::SendSymbol => {
+                        if let Some(msg) = deserialized_message
+                            .as_any()
+                            .downcast_ref::<RbfRibltSendSymbolMessage>()
+                        {
+                            this.protocol
+                                .scom_engine
+                                .on_symbols(
+                                    neighbor,
+                                    msg.session_id().clone(),
+                                    msg.start_index(),
+                                    msg.symbols().clone(),
+                                )
+                                .await;
+                        } else {
+                            error!("Failed to downcast message to RbfRibltSendSymbolMessage");
+                        }
+                    }
+                    RbfRibltMessageTypeValues::RequestMoreSymbols => {
+                        if let Some(msg) = deserialized_message
+                            .as_any()
+                            .downcast_ref::<RbfRibltRequestMoreSymbolsMessage>()
+                        {
+                            this.protocol
+                                .scom_engine
+                                .on_request_more(
+                                    &neighbor,
+                                    msg.session_id(),
+                                    msg.received_count(),
+                                )
+                                .await;
+                        } else {
+                            error!(
+                                "Failed to downcast message to RbfRibltRequestMoreSymbolsMessage"
+                            );
                         }
                     }
                     RbfRibltMessageTypeValues::SComDecodedAll => {

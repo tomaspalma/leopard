@@ -31,6 +31,8 @@ impl ProtocolDeserializer for RbfRibltDeserializer {
                 RbfRibltMessageWrapper::BloomFilterSlice(msg) => Arc::new(msg),
                 RbfRibltMessageWrapper::BloomSliceAck(msg) => Arc::new(msg),
                 RbfRibltMessageWrapper::RBFStopSignal(msg) => Arc::new(msg),
+                RbfRibltMessageWrapper::SendSymbol(msg) => Arc::new(msg),
+                RbfRibltMessageWrapper::RequestMoreSymbols(msg) => Arc::new(msg),
                 RbfRibltMessageWrapper::SComDecodedAll(msg) => Arc::new(msg),
                 RbfRibltMessageWrapper::ValueFetchRequest(msg) => Arc::new(msg),
                 RbfRibltMessageWrapper::ValueFetchResponse(msg) => Arc::new(msg),

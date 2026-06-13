@@ -20,19 +20,17 @@ use runtime::metrics::experiment::get_context;
 use crate::riblt_core::stream::{record_phase_split, RibltDecodeSink, RibltStreamTransport};
 use crate::riblt_core::{RIBLTCodedSymbol, RIBLTSymbol};
 
+// The scom streaming phase reuses the standalone RIBLT decode *engine*, but puts
+// its symbol/credit batches on rbf_riblt's own wire messages and protocol id, so
+// the bytes and round trips are attributed to rbf_riblt rather than riblt. The
+// batches are routed to (and decoded by) the engine through this protocol's own
+// route (see `protocols.rs`) and the SendSymbol/RequestMoreSymbols arms in
+// `receiver.rs`.
 use crate::rbf_riblt::messages::{
-    RbfRibltSComDecodedAllMessage, RbfRibltValueFetchRequestMessage,
+    RbfRibltRequestMoreSymbolsMessage, RbfRibltSComDecodedAllMessage,
+    RbfRibltSendSymbolMessage, RbfRibltValueFetchRequestMessage,
 };
 use crate::rbf_riblt::{BloomReceivingState, RBF_RIBLT_PROTOCOL_ID};
-// The scom streaming phase reuses the standalone RIBLT protocol's wire messages
-// and protocol id: a scom symbol/credit batch is identical to a RIBLT one, so it
-// is routed to (and decoded by) the same shared engine route (see scom doc above
-// and the RIBLT_PROTOCOL_ID route registered in `protocols.rs`).
-use crate::riblt::messages::{
-    RIBLTMessageType, RIBLTMessageTypeValues, RIBLTRequestMoreSymbolsMessage,
-    RIBLTSendSymbolMessage,
-};
-use crate::riblt::RIBLT_PROTOCOL_ID;
 
 /// Wire adapter: turns engine send calls into rbf scom messages.
 pub struct RbfScomTransport {
@@ -54,9 +52,8 @@ impl RibltStreamTransport for RbfScomTransport {
             .send_through_socket(
                 self.own_id.clone(),
                 Box::new(neighbor.clone()),
-                Box::new(RIBLTSendSymbolMessage::new(
-                    RIBLTMessageType::new(RIBLTMessageTypeValues::SendSymbol),
-                    Some(RIBLT_PROTOCOL_ID),
+                Box::new(RbfRibltSendSymbolMessage::new(
+                    Some(RBF_RIBLT_PROTOCOL_ID),
                     symbols,
                     session_id.to_string(),
                     start_index,
@@ -76,9 +73,8 @@ impl RibltStreamTransport for RbfScomTransport {
             .send_through_socket(
                 self.own_id.clone(),
                 Box::new(neighbor.clone()),
-                Box::new(RIBLTRequestMoreSymbolsMessage::new(
-                    RIBLTMessageType::new(RIBLTMessageTypeValues::RequestMoreSymbols),
-                    Some(RIBLT_PROTOCOL_ID),
+                Box::new(RbfRibltRequestMoreSymbolsMessage::new(
+                    Some(RBF_RIBLT_PROTOCOL_ID),
                     session_id.to_string(),
                     received_count,
                 )),

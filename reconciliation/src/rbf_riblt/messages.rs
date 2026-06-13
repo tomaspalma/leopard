@@ -1,12 +1,19 @@
 use message::{impl_protocol_message, MessageType, MessageTypeValues};
 use rkyv::{rancor::Error, Archive, Deserialize, Serialize};
 
+use crate::riblt_core::RIBLTCodedSymbol;
+
 #[derive(Debug, Clone, Serialize, Deserialize, Archive)]
 pub enum RbfRibltMessageTypeValues {
     Handshake,
     BloomFilterSlice,
     BloomSliceAck,
     RBFStopSignal,
+    // scom phase: the s_com reconciliation streams coded symbols through the
+    // shared riblt engine, but on rbf_riblt's own wire messages and protocol id
+    // so the bytes/round-trips are attributed to rbf_riblt, not to riblt.
+    SendSymbol,
+    RequestMoreSymbols,
     SComDecodedAll,
     ValueFetchRequest,
     ValueFetchResponse,
@@ -74,6 +81,77 @@ impl RbfRibltRBFStopSignalMessage {
 
     pub fn session_id(&self) -> &str {
         &self.session_id
+    }
+}
+
+/// scom-phase symbol batch. Identical payload to the standalone RIBLT
+/// `SendSymbol`, but carried on rbf_riblt's protocol id so its bytes meter as
+/// rbf_riblt. `start_index` lets the receiver reassemble out-of-order batches
+/// before feeding the positional decoder (see the shared streaming engine).
+#[derive(Debug, Clone, Serialize, Deserialize, Archive)]
+pub struct RbfRibltSendSymbolMessage {
+    _type: RbfRibltMessageType,
+    protocol_id: Option<u64>,
+    symbols: Vec<RIBLTCodedSymbol>,
+    session_id: String,
+    start_index: u64,
+}
+
+impl RbfRibltSendSymbolMessage {
+    pub fn new(
+        protocol_id: Option<u64>,
+        symbols: Vec<RIBLTCodedSymbol>,
+        session_id: String,
+        start_index: u64,
+    ) -> Self {
+        Self {
+            _type: RbfRibltMessageType::new(RbfRibltMessageTypeValues::SendSymbol),
+            protocol_id,
+            symbols,
+            session_id,
+            start_index,
+        }
+    }
+
+    pub fn symbols(&self) -> &Vec<RIBLTCodedSymbol> {
+        &self.symbols
+    }
+
+    pub fn session_id(&self) -> &String {
+        &self.session_id
+    }
+
+    pub fn start_index(&self) -> u64 {
+        self.start_index
+    }
+}
+
+/// scom-phase flow-control credit: the decoder acknowledges how many coded
+/// symbols it has consumed so the sender can slide its window.
+#[derive(Debug, Clone, Serialize, Deserialize, Archive)]
+pub struct RbfRibltRequestMoreSymbolsMessage {
+    _type: RbfRibltMessageType,
+    protocol_id: Option<u64>,
+    session_id: String,
+    received_count: u64,
+}
+
+impl RbfRibltRequestMoreSymbolsMessage {
+    pub fn new(protocol_id: Option<u64>, session_id: String, received_count: u64) -> Self {
+        Self {
+            _type: RbfRibltMessageType::new(RbfRibltMessageTypeValues::RequestMoreSymbols),
+            protocol_id,
+            session_id,
+            received_count,
+        }
+    }
+
+    pub fn session_id(&self) -> &String {
+        &self.session_id
+    }
+
+    pub fn received_count(&self) -> u64 {
+        self.received_count
     }
 }
 
@@ -279,6 +357,8 @@ pub enum RbfRibltMessageWrapper {
     BloomFilterSlice(RbfRibltBloomFilterSliceMessage),
     BloomSliceAck(RbfRibltBloomSliceAckMessage),
     RBFStopSignal(RbfRibltRBFStopSignalMessage),
+    SendSymbol(RbfRibltSendSymbolMessage),
+    RequestMoreSymbols(RbfRibltRequestMoreSymbolsMessage),
     SComDecodedAll(RbfRibltSComDecodedAllMessage),
     ValueFetchRequest(RbfRibltValueFetchRequestMessage),
     ValueFetchResponse(RbfRibltValueFetchResponseMessage),
@@ -301,6 +381,16 @@ impl_protocol_message!(RbfRibltBloomFilterSliceMessage, this, {
 
 impl_protocol_message!(RbfRibltBloomSliceAckMessage, this, {
     let wrapper = RbfRibltMessageWrapper::BloomSliceAck(this.clone());
+    rkyv::to_bytes::<Error>(&wrapper).map_err(|_| ())?
+});
+
+impl_protocol_message!(RbfRibltSendSymbolMessage, this, {
+    let wrapper = RbfRibltMessageWrapper::SendSymbol(this.clone());
+    rkyv::to_bytes::<Error>(&wrapper).map_err(|_| ())?
+});
+
+impl_protocol_message!(RbfRibltRequestMoreSymbolsMessage, this, {
+    let wrapper = RbfRibltMessageWrapper::RequestMoreSymbols(this.clone());
     rkyv::to_bytes::<Error>(&wrapper).map_err(|_| ())?
 });
 
