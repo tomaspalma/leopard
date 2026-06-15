@@ -15,13 +15,13 @@ SUPPORTED_PROTOCOLS = ["rbf_riblt"]
 METRICS = {
     "scom_size": (
         "scom_size",
-        "Mean |s_com| (candidate-common keys)",
+        "Median |s_com| (candidate-common keys)",
         "Post-bloom Candidate-Set Size vs Similarity",
         "scom_size_vs_similarity.pdf",
     ),
     "bloom_slices": (
         "bloom_slices",
-        "Mean bloom slices applied (S)",
+        "Median bloom slices applied (S)",
         "Bloom Slice Count vs Similarity",
         "bloom_slices_vs_similarity.pdf",
     ),
@@ -75,8 +75,8 @@ def make_summary(df, value_col):
         f"std_{value_col}",
         f"median_{value_col}",
         "samples",
-        f"max_{value_col}",
-        f"min_{value_col}",
+        f"q75_{value_col}",
+        f"q25_{value_col}",
     ]
     if df.empty:
         return pd.DataFrame(columns=summary_cols)
@@ -90,8 +90,8 @@ def make_summary(df, value_col):
             f"std_{value_col}": (value_col, "std"),
             f"median_{value_col}": (value_col, "median"),
             "samples": (value_col, "count"),
-            f"max_{value_col}": (value_col, "max"),
-            f"min_{value_col}": (value_col, "min"),
+            f"q75_{value_col}": (value_col, lambda x: x.quantile(0.75)),
+            f"q25_{value_col}": (value_col, lambda x: x.quantile(0.25)),
         }
     )
     summary[f"std_{value_col}"] = summary[f"std_{value_col}"].fillna(0)
@@ -107,14 +107,14 @@ def plot_summary(summary, value_col, ylabel, title, output_dir, filename):
     plt.figure(figsize=(10, 6))
     for protocol, group in summary.groupby("protocol"):
         group = group.sort_values("similarity")
-        mean = group[f"mean_{value_col}"]
+        median = group[f"median_{value_col}"]
         yerr = [
-            mean - group[f"min_{value_col}"],
-            group[f"max_{value_col}"] - mean,
+            median - group[f"q25_{value_col}"],
+            group[f"q75_{value_col}"] - median,
         ]
         plt.errorbar(
             group["similarity"],
-            mean,
+            median,
             yerr=yerr,
             marker="o",
             capsize=3,

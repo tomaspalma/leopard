@@ -97,8 +97,8 @@ def make_round_trip_summary(round_trips):
                 "std_round_trips",
                 "median_round_trips",
                 "trials",
-                "max_round_trips",
-                "min_round_trips",
+                "q75_round_trips",
+                "q25_round_trips",
             ]
         )
 
@@ -109,8 +109,8 @@ def make_round_trip_summary(round_trips):
         std_round_trips=("round_trips", "std"),
         median_round_trips=("round_trips", "median"),
         trials=("round_trips", "count"),
-        max_round_trips=("round_trips", "max"),
-        min_round_trips=("round_trips", "min"),
+        q75_round_trips=("round_trips", lambda x: x.quantile(0.75)),
+        q25_round_trips=("round_trips", lambda x: x.quantile(0.25)),
     )
     summary["std_round_trips"] = summary["std_round_trips"].fillna(0)
     summary = summary.rename(columns={"similarity_numeric": "similarity"})
@@ -176,7 +176,7 @@ def plot_round_trip_summary(summary, output_dir):
     for protocol, group in summary.groupby("protocol"):
         group = group.sort_values("similarity")
         median = group["median_round_trips"]
-        yerr = [median - group["min_round_trips"], group["max_round_trips"] - median]
+        yerr = [median - group["q25_round_trips"], group["q75_round_trips"] - median]
         plt.errorbar(
             group["similarity"],
             median,

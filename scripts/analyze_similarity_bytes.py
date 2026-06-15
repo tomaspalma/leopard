@@ -88,8 +88,8 @@ def make_summary(merged):
                 "std_transmitted_bytes",
                 "median_transmitted_bytes",
                 "trials",
-                "max_transmitted_bytes",
-                "min_transmitted_bytes",
+                "q75_transmitted_bytes",
+                "q25_transmitted_bytes",
             ]
         )
 
@@ -98,8 +98,8 @@ def make_summary(merged):
         std_transmitted_bytes=("transmitted_bytes", "std"),
         median_transmitted_bytes=("transmitted_bytes", "median"),
         trials=("transmitted_bytes", "count"),
-        max_transmitted_bytes=("transmitted_bytes", "max"),
-        min_transmitted_bytes=("transmitted_bytes", "min"),
+        q75_transmitted_bytes=("transmitted_bytes", lambda x: x.quantile(0.75)),
+        q25_transmitted_bytes=("transmitted_bytes", lambda x: x.quantile(0.25)),
     )
     summary["std_transmitted_bytes"] = summary["std_transmitted_bytes"].fillna(0)
     summary = summary.rename(columns={"similarity_numeric": "similarity"})
@@ -229,8 +229,8 @@ def plot_summary(summary, output_dir):
         group = group.sort_values("similarity")
         median = group["median_transmitted_bytes"] / bytes_per_megabyte
         yerr = [
-            median - group["min_transmitted_bytes"] / bytes_per_megabyte,
-            group["max_transmitted_bytes"] / bytes_per_megabyte - median,
+            median - group["q25_transmitted_bytes"] / bytes_per_megabyte,
+            group["q75_transmitted_bytes"] / bytes_per_megabyte - median,
         ]
         plt.errorbar(
             group["similarity"],

@@ -88,8 +88,8 @@ def aggregate_cpu(df):
         mean_cpu_ms=("total_cpu_ms", "mean"),
         median_cpu_ms=("total_cpu_ms", "median"),
         std_cpu_ms=("total_cpu_ms", "std"),
-        min_cpu_ms=("total_cpu_ms", "min"),
-        max_cpu_ms=("total_cpu_ms", "max"),
+        q25_cpu_ms=("total_cpu_ms", lambda x: x.quantile(0.25)),
+        q75_cpu_ms=("total_cpu_ms", lambda x: x.quantile(0.75)),
         samples=("total_cpu_ms", "count"),
     )
     summary["std_cpu_ms"] = summary["std_cpu_ms"].fillna(0)
@@ -116,8 +116,8 @@ def plot_cpu_per_round(summary, similarity_filter, output_path):
             summary.groupby(["protocol", "iteration"], as_index=False)
             .agg(
                 median_cpu_ms=("median_cpu_ms", "median"),
-                min_cpu_ms=("min_cpu_ms", "min"),
-                max_cpu_ms=("max_cpu_ms", "max"),
+                q25_cpu_ms=("q25_cpu_ms", "median"),
+                q75_cpu_ms=("q75_cpu_ms", "median"),
             )
         )
 
@@ -128,7 +128,7 @@ def plot_cpu_per_round(summary, similarity_filter, output_path):
     for protocol, group in subset.groupby("protocol"):
         group = group.sort_values("iteration")
         median = group["median_cpu_ms"]
-        yerr = [median - group["min_cpu_ms"], group["max_cpu_ms"] - median]
+        yerr = [median - group["q25_cpu_ms"], group["q75_cpu_ms"] - median]
         plt.errorbar(
             group["iteration"],
             median,
@@ -159,8 +159,8 @@ def plot_cpu_by_similarity(summary, output_path):
         summary.groupby(["protocol", "similarity_numeric"], as_index=False)
         .agg(
             total_median_cpu_ms=("median_cpu_ms", "sum"),
-            min_cpu_ms=("min_cpu_ms", "min"),
-            max_cpu_ms=("max_cpu_ms", "max"),
+            q25_cpu_ms=("q25_cpu_ms", "sum"),
+            q75_cpu_ms=("q75_cpu_ms", "sum"),
         )
         .sort_values(["protocol", "similarity_numeric"])
     )
@@ -169,7 +169,7 @@ def plot_cpu_by_similarity(summary, output_path):
     for protocol, group in totals.groupby("protocol"):
         group = group.sort_values("similarity_numeric")
         median = group["total_median_cpu_ms"]
-        yerr = [median - group["min_cpu_ms"], group["max_cpu_ms"] - median]
+        yerr = [median - group["q25_cpu_ms"], group["q75_cpu_ms"] - median]
         plt.errorbar(
             group["similarity_numeric"],
             median,

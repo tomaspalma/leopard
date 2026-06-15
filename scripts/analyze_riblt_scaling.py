@@ -84,9 +84,10 @@ def load_rows(metrics_root, label, protocol_filter):
 def aggregate(df, key):
     g = df.groupby(key, as_index=False).agg(
         mean_seconds=("round_duration_seconds", "mean"),
+        median_seconds=("round_duration_seconds", "median"),
         std_seconds=("round_duration_seconds", "std"),
-        min_seconds=("round_duration_seconds", "min"),
-        max_seconds=("round_duration_seconds", "max"),
+        q25_seconds=("round_duration_seconds", lambda x: x.quantile(0.25)),
+        q75_seconds=("round_duration_seconds", lambda x: x.quantile(0.75)),
         samples=("round_duration_seconds", "count"),
     )
     g["std_seconds"] = g["std_seconds"].fillna(0)
@@ -112,14 +113,14 @@ def plot_vs_difference(df, output_dir):
     )
 
     plt.figure(figsize=(10, 6))
-    mean = summary["mean_seconds"]
-    yerr = [mean - summary["min_seconds"], summary["max_seconds"] - mean]
+    median = summary["median_seconds"]
+    yerr = [median - summary["q25_seconds"], summary["q75_seconds"] - median]
     plt.errorbar(
-        summary["difference"], mean, yerr=yerr, marker="o", capsize=3,
+        summary["difference"], median, yerr=yerr, marker="o", capsize=3,
         label=f"riblt (n={target_size:,})",
     )
     plt.xlabel("Reconciled set difference (keys)")
-    plt.ylabel("Mean reconciliation round duration (s)")
+    plt.ylabel("Median reconciliation round duration (s)")
     plt.title("RIBLT round duration vs set difference (fixed set size)")
     plt.grid(True)
     plt.legend()
@@ -142,10 +143,10 @@ def plot_vs_size(df, output_dir):
         summary = aggregate(sub, "size").sort_values("size")
         summary.insert(0, "source", source)
         all_summaries.append(summary)
-        mean = summary["mean_seconds"]
-        yerr = [mean - summary["min_seconds"], summary["max_seconds"] - mean]
+        median = summary["median_seconds"]
+        yerr = [median - summary["q25_seconds"], summary["q75_seconds"] - median]
         plt.errorbar(
-            summary["size"], mean, yerr=yerr, marker="o", capsize=3, label=source
+            summary["size"], median, yerr=yerr, marker="o", capsize=3, label=source
         )
     if not all_summaries:
         plt.close()
@@ -154,7 +155,7 @@ def plot_vs_size(df, output_dir):
         os.path.join(output_dir, "riblt_duration_vs_size.csv"), index=False
     )
     plt.xlabel("Set size (keys per node)")
-    plt.ylabel("Mean reconciliation round duration (s)")
+    plt.ylabel("Median reconciliation round duration (s)")
     plt.title("RIBLT round duration vs set size")
     plt.xscale("log")
     ax = plt.gca()

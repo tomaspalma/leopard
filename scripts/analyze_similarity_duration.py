@@ -58,8 +58,8 @@ def make_summary(df):
                 "std_round_duration_seconds",
                 "median_round_duration_seconds",
                 "rounds",
-                "max_round_duration_seconds",
-                "min_round_duration_seconds",
+                "q75_round_duration_seconds",
+                "q25_round_duration_seconds",
             ]
         )
 
@@ -71,8 +71,8 @@ def make_summary(df):
         std_round_duration_seconds=("round_duration_seconds", "std"),
         median_round_duration_seconds=("round_duration_seconds", "median"),
         rounds=("round_duration_seconds", "count"),
-        max_round_duration_seconds=("round_duration_seconds", "max"),
-        min_round_duration_seconds=("round_duration_seconds", "min"),
+        q75_round_duration_seconds=("round_duration_seconds", lambda x: x.quantile(0.75)),
+        q25_round_duration_seconds=("round_duration_seconds", lambda x: x.quantile(0.25)),
     )
     summary["std_round_duration_seconds"] = summary["std_round_duration_seconds"].fillna(0)
     summary = summary.rename(columns={"similarity_numeric": "similarity"})
@@ -140,8 +140,8 @@ def plot_summary(summary, output_dir):
         group = group.sort_values("similarity")
         median = group["median_round_duration_seconds"]
         yerr = [
-            median - group["min_round_duration_seconds"],
-            group["max_round_duration_seconds"] - median,
+            median - group["q25_round_duration_seconds"],
+            group["q75_round_duration_seconds"] - median,
         ]
         plt.errorbar(
             group["similarity"],

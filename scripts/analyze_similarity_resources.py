@@ -121,8 +121,8 @@ def summarize_round_metric(rounds, metric_column, prefix):
                 f"std_{prefix}",
                 f"median_{prefix}",
                 "samples",
-                f"max_{prefix}",
-                f"min_{prefix}",
+                f"q75_{prefix}",
+                f"q25_{prefix}",
             ]
         )
 
@@ -132,8 +132,8 @@ def summarize_round_metric(rounds, metric_column, prefix):
             f"std_{prefix}": (metric_column, "std"),
             f"median_{prefix}": (metric_column, "median"),
             "samples": (metric_column, "count"),
-            f"max_{prefix}": (metric_column, "max"),
-            f"min_{prefix}": (metric_column, "min"),
+            f"q75_{prefix}": (metric_column, lambda x: x.quantile(0.75)),
+            f"q25_{prefix}": (metric_column, lambda x: x.quantile(0.25)),
         }
     )
     summary[f"std_{prefix}"] = summary[f"std_{prefix}"].fillna(0)
@@ -206,14 +206,14 @@ def plot_metric(summary, value_col, std_col, ylabel, title, output_path):
         return
 
     stat_prefix = "median_" if value_col.startswith("median_") else "mean_"
-    min_col = value_col.replace(stat_prefix, "min_")
-    max_col = value_col.replace(stat_prefix, "max_")
+    q25_col = value_col.replace(stat_prefix, "q25_")
+    q75_col = value_col.replace(stat_prefix, "q75_")
 
     plt.figure(figsize=(10, 6))
     for protocol, group in summary.groupby("protocol"):
         group = group.sort_values("similarity")
         center = group[value_col]
-        yerr = [center - group[min_col], group[max_col] - center]
+        yerr = [center - group[q25_col], group[q75_col] - center]
         plt.errorbar(
             group["similarity"],
             center,
