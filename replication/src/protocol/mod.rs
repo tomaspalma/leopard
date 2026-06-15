@@ -40,13 +40,13 @@ use std::marker::PhantomData;
 
 pub const REPLICATION_PROTOCOL_ID: u64 = protocol::ProtocolId::Replication as u64;
 
-pub struct HintedHandoffReplicationProtocol<S, T> {
+pub struct EagerBroadcastReplicationProtocol<S, T> {
     state: Arc<S>,
     port: NodeAddress,
     _marker: PhantomData<T>,
 }
 
-impl HintedHandoffReplicationProtocol<DefaultNodeState, DefaultNodeSocketTask> {
+impl EagerBroadcastReplicationProtocol<DefaultNodeState, DefaultNodeSocketTask> {
     pub fn new(state: Arc<DefaultNodeState>, port: NodeAddress) -> Self {
         Self {
             state,
@@ -147,7 +147,7 @@ impl
         PeriodicDefaultNodeSocketTask,
         DefaultRouteHandler,
         HashMapRouteStorage,
-    > for HintedHandoffReplicationProtocol<DefaultNodeState, DefaultNodeSocketTask>
+    > for EagerBroadcastReplicationProtocol<DefaultNodeState, DefaultNodeSocketTask>
 {
     fn deserializer(&self) -> Arc<dyn ProtocolDeserializer> {
         Arc::new(ReplicationDeserializer::new())
@@ -174,6 +174,6 @@ impl
             )
             .unwrap();
 
-        info!("HintedHandoffReplicationProtocol initialized.");
+        info!("EagerBroadcastReplicationProtocol initialized.");
     }
 }

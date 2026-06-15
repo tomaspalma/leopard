@@ -11,7 +11,7 @@ use reconciliation::merkle_tree::protocol::MerkleTreeReconciliationProtocol;
 use reconciliation::rbf_riblt::RbfRibltProtocol;
 use reconciliation::rf_riblt::RfRibltProtocol;
 use reconciliation::riblt::RIBLT;
-use replication::protocol::HintedHandoffReplicationProtocol;
+use replication::protocol::EagerBroadcastReplicationProtocol;
 use runtime::Task;
 use services::http::NodeHTTPService;
 use state::checker::ReconciliationChecker;
@@ -204,7 +204,7 @@ impl NodeBuilder {
                                     RfRibltProtocol::new(node_state.clone(), address.clone()),
                                 )),
                                 ProtocolChoice::Replication => node.add_protocol(Box::new(
-                                    HintedHandoffReplicationProtocol::new(
+                                    EagerBroadcastReplicationProtocol::new(
                                         node_state.clone(),
                                         address.clone(),
                                     ),
