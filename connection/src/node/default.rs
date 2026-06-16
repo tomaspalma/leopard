@@ -197,7 +197,8 @@ impl NodeSocket for DefaultNodeSocket {
     async fn bind(&mut self) -> Result<(), std::io::Error> {
         let _socket = zeromq::RepSocket::new();
 
-        let listener = TcpListener::bind(format!("127.0.0.1:{}", self.port.port())).await?;
+        let listener =
+            TcpListener::bind(format!("{}:{}", self.port.host(), self.port.port())).await?;
 
         self.listener = Some(Arc::new(listener));
 
