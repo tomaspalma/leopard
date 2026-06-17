@@ -23,10 +23,9 @@ export RUST_LOG=${RUST_LOG:-warn}
 echo "Generating datasets for sweep..."
 python3 scripts/generate_data.py --default-matrix --sizes "$SIZES" --similarities "$SIMILARITIES"
 
-# Keep every sweep's output under its own date-stamped folder so re-running the
-# sweep no longer overwrites previous results.
-RUN_TIMESTAMP="$(date +%Y-%m-%d_%H-%M-%S)"
-METRICS_OUTPUT_DIR="${METRICS_OUTPUT_DIR:-metrics_output/${RUN_TIMESTAMP}}"
+# Sweep output goes under a fixed "sweep" folder. Re-running the sweep reuses
+# the same directory rather than creating date-stamped folders.
+METRICS_OUTPUT_DIR="${METRICS_OUTPUT_DIR:-metrics_output/sweep}"
 ANALYSIS_DIR="${METRICS_OUTPUT_DIR}/analysis"
 export METRICS_OUTPUT_DIR
 echo "Writing metrics for this sweep to ${METRICS_OUTPUT_DIR}"

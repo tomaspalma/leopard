@@ -35,8 +35,7 @@ PROFILE_ROWS=(
 # Optional subset selection: PROFILES="baseline wan50" picks just those rows.
 SELECTED="${PROFILES:-}"
 
-RUN_TIMESTAMP="$(date +%Y-%m-%d_%H-%M-%S)"
-NETSWEEP_ROOT="${NETSWEEP_ROOT:-metrics_output/netsweep_${RUN_TIMESTAMP}}"
+NETSWEEP_ROOT="${NETSWEEP_ROOT:-metrics_output/network_speed}"
 mkdir -p "$NETSWEEP_ROOT"
 
 clear_netem() {
