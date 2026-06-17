@@ -1,0 +1,30 @@
+\begin{table}[!htbp]
+  \centering
+  \caption{Median transmitted bytes per algorithm across similarity levels
+  ($n{=}10^5$). Ratios give the factor by which \texttt{rbf\_riblt} reduces
+  the transmitted volume relative to each baseline.}
+  \label{tab:transmitted_bytes_by_similarity}
+  \begin{tabular}{rrrrrr}
+  \toprule
+  S & \textit{merkle} & \textit{riblt} & \textit{rbf\_riblt} & m/rbf & r/rbf \\
+  \midrule
+  0\% & 126.43 MB & 81.90 MB & 30.25 MB & 4.18 & 2.71 \\
+  5\% & 114.68 MB & 74.22 MB & 27.23 MB & 4.21 & 2.73 \\
+  10\% & 103.58 MB & 67.17 MB & 24.98 MB & 4.15 & 2.69 \\
+  20\% & 84.53 MB & 54.97 MB & 21.09 MB & 4.01 & 2.61 \\
+  30\% & 68.35 MB & 44.63 MB & 17.27 MB & 3.96 & 2.58 \\
+  40\% & 54.47 MB & 35.80 MB & 13.84 MB & 3.94 & 2.59 \\
+  50\% & 42.41 MB & 28.02 MB & 11.61 MB & 3.65 & 2.41 \\
+  60\% & 31.78 MB & 21.35 MB & 9.20 MB & 3.45 & 2.32 \\
+  70\% & 22.42 MB & 15.44 MB & 7.07 MB & 3.17 & 2.18 \\
+  75\% & 18.14 MB & 12.69 MB & 6.27 MB & 2.90 & 2.03 \\
+  80\% & 14.11 MB & 10.14 MB & 4.89 MB & 2.88 & 2.07 \\
+  85\% & 10.31 MB & 7.64 MB & 4.74 MB & 2.18 & 1.61 \\
+  90\% & 6.72 MB & 5.23 MB & 3.09 MB & 2.18 & 1.69 \\
+  95\% & 3.29 MB & 2.51 MB & 1.53 MB & 2.15 & 1.64 \\
+  97\% & 1.94 MB & 1.48 MB & 0.91 MB & 2.13 & 1.62 \\
+  99\% & 0.66 MB & 0.51 MB & 0.32 MB & 2.03 & 1.57 \\
+  100\% & 0.00 MB & 0.02 MB & 0.05 MB & 0.00 & 0.43 \\
+  \bottomrule
+  \end{tabular}
+\end{table}

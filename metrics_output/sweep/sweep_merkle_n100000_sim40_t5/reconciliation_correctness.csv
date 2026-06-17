@@ -1,0 +1,2 @@
+iteration,timestamp,value,node,protocol,run_id,trial,similarity,labels
+1,0,1,"","merkle","sweep_merkle_n100000_sim40_t5","5","0.40",""

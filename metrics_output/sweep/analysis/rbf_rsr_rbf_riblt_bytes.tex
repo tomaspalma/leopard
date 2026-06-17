@@ -1,0 +1,28 @@
+\begin{table}[t]
+    \centering
+    \caption{Transmitted-bytes split inside rbf\_riblt ($n=100000$): the rateless Bloom filter slices (RBF) against the coded-symbol stream sent once no slices remain (riblt). The last column is the coded-symbol stream as a multiple of the filter cost.}
+    \label{tab:bytes-saving}
+    \begin{tabular}{rrrrr}
+      \toprule
+      $J$ & \makecell{RBF\\(MB)} & \makecell{riblt\\(MB)} & \makecell{total\\(MB)} & \makecell{riblt\\$\div$ RBF} \\
+      \midrule
+      0.00 & 0.258 & 0.7 & 29.6 & 3$\times$ \\
+      0.05 & 0.224 & 0.8 & 26.9 & 3$\times$ \\
+      0.10 & 0.206 & 0.7 & 24.4 & 4$\times$ \\
+      0.20 & 0.172 & 1.2 & 20.7 & 7$\times$ \\
+      0.30 & 0.155 & 1.1 & 16.9 & 7$\times$ \\
+      0.40 & 0.141 & 1.2 & 13.8 & 9$\times$ \\
+      0.50 & 0.120 & 1.5 & 11.3 & 12$\times$ \\
+      0.60 & 0.103 & 1.5 & 9.0 & 14$\times$ \\
+      0.70 & 0.086 & 1.5 & 6.9 & 18$\times$ \\
+      0.75 & 0.069 & 1.7 & 6.1 & 24$\times$ \\
+      0.80 & 0.069 & 1.3 & 4.8 & 19$\times$ \\
+      0.85 & 0.034 & 1.9 & 4.6 & 56$\times$ \\
+      0.90 & 0.034 & 1.2 & 3.0 & 35$\times$ \\
+      0.95 & 0.034 & 0.6 & 1.5 & 17$\times$ \\
+      0.97 & 0.034 & 0.4 & 0.9 & 10$\times$ \\
+      0.99 & 0.034 & 0.1 & 0.3 & 3$\times$ \\
+      1.00 & 0.034 & 0.0 & 0.0 & 0$\times$ \\
+      \bottomrule
+    \end{tabular}
+\end{table}

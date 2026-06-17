@@ -1,0 +1,2 @@
+iteration,timestamp,value,node,protocol,run_id,trial,similarity,labels
+1,3799,0.089366547,"127.0.0.1:9000","rbf_riblt","sweep_rbf_riblt_n100000_sim40_t26","26","0.40","127.0.0.1:9000"

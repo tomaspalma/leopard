@@ -1,0 +1,2 @@
+iteration,timestamp,value,node,protocol,run_id,trial,similarity,labels
+1,6521,273672,"127.0.0.1:9000","","sweep_riblt_n100000_sim00_t21","21","0","127.0.0.1:9000"
